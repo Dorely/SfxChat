@@ -1,0 +1,53 @@
+# Dependencies and build output
+node_modules/
+dist/
+build/
+out/
+release/
+coverage/
+.cache/
+.tmp/
+*.tsbuildinfo
+*.log
+__pycache__/
+
+# Local credentials and configuration
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+*.pem
+*.key
+*.pfx
+*.p12
+auth.json
+
+# Local app data and generated media
+data/
+app-data/
+library/
+libraries/
+generated/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.opus
+*.m4a
+*.aac
+*.aiff
+*.pcm
+
+# Machine-local editor/OS files
+.idea/
+.vs/
+.DS_Store
+Thumbs.db
+Desktop.ini

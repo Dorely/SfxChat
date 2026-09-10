@@ -1,0 +1,6 @@
+* text=auto
+*.md text eol=lf
+/.gitignore text eol=lf
+/.gitattributes text eol=lf
+# Preserve the exact upstream skill snapshot, including its license.
+/.agents/skills/elevenlabs-sound-effects/** -text
