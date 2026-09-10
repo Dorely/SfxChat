@@ -38,3 +38,42 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 @media (max-width: 1100px) { .workspace-panel { padding-left: 23px; padding-right: 23px; }.topbar, .workspace-tabs { padding-left: 23px; padding-right: 23px; }.generation-options { flex-wrap: wrap; }.influence-option { min-width: 180px; }.generate-button { margin-left: 0; } }
 
 .brand-row, .sidebar-heading, .sidebar-footer, .chat-composer, .topbar, .workspace-tabs { flex-shrink: 0; }
+
+.trim-modal { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 22px; background: rgba(4,6,5,.76); }
+.trim-editor { display: flex; flex-direction: column; width: min(760px, 94vw); max-height: min(840px, 94vh); overflow: hidden; border: 1px solid #526047; border-radius: 10px; background: #1b201c; box-shadow: 0 24px 90px rgba(0,0,0,.55); }
+.trim-editor-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 21px 24px 16px; border-bottom: 1px solid var(--line); }
+.trim-editor-header h2 { margin: 0; font-size: 18px; letter-spacing: -.03em; }
+.trim-editor-scroll { overflow: auto; padding: 19px 24px 22px; }
+.trim-waveform-heading, .trim-selection-summary, .trim-time-labels, .trim-zoom-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.trim-waveform-heading { margin-bottom: 8px; }
+.trim-decoder { color: var(--quiet); font: 9px 'DM Mono', monospace; }
+.trim-waveform-wrap { position: relative; height: 180px; overflow: hidden; border: 1px solid #43503e; border-radius: 6px; background: #141814; }
+.trim-waveform { display: block; width: 100%; height: 100%; }
+.trim-waveform-axis { stroke: #3b4739; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.trim-waveform-bar { stroke: #b7ca84; stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.trim-waveform-rms { fill: rgba(146,168,94,.28); }
+.trim-selection { fill: rgba(173,206,101,.14); stroke: rgba(196,230,119,.8); stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.trim-range-inputs { position: absolute; inset: 0; pointer-events: none; }
+.trim-range-inputs input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; appearance: none; pointer-events: none; background: transparent; }
+.trim-range-inputs input::-webkit-slider-thumb { width: 12px; height: 32px; appearance: none; border: 1px solid #d1ee93; border-radius: 3px; background: var(--lime); box-shadow: 0 0 0 2px rgba(16,20,16,.8); pointer-events: auto; cursor: ew-resize; }
+.trim-range-inputs input::-moz-range-thumb { width: 12px; height: 32px; border: 1px solid #d1ee93; border-radius: 3px; background: var(--lime); box-shadow: 0 0 0 2px rgba(16,20,16,.8); pointer-events: auto; cursor: ew-resize; }
+.trim-range-inputs input:focus-visible::-webkit-slider-thumb { outline: 2px solid #fff; outline-offset: 2px; }
+.trim-range-inputs input:focus-visible::-moz-range-thumb { outline: 2px solid #fff; outline-offset: 2px; }
+.trim-time-labels { margin: 6px 1px 12px; color: var(--quiet); font: 9px 'DM Mono', monospace; }
+.trim-zoom-controls { justify-content: center; margin-bottom: 16px; }
+.trim-selection-summary { justify-content: flex-start; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); font: 9px 'DM Mono', monospace; }
+.trim-selection-summary span + span { padding-left: 10px; border-left: 1px solid var(--line); }
+.trim-selection-summary strong { color: var(--lime); font-weight: 500; }
+.trim-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.trim-fields label, .trim-name-field { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 10px; }
+.trim-fields input, .trim-name-field input { width: 100%; padding: 9px 10px; border: 1px solid #3c453c; border-radius: 5px; outline: 0; color: var(--cream); background: #20241f; font: 11px 'DM Mono', monospace; }
+.trim-fields input:focus, .trim-name-field input:focus { border-color: var(--lime-dark); }
+.trim-name-field { margin-top: 14px; }
+.trim-name-field input { font-family: 'Manrope', sans-serif; }
+.trim-analysis-note { margin: 11px 0 0; }
+.trim-error { margin: 14px 0 0; color: var(--red); font-size: 10px; }
+.trim-preview { display: flex; flex-direction: column; gap: 7px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.trim-preview audio { width: 100%; height: 34px; }
+.trim-editor-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 24px; border-top: 1px solid var(--line); background: #1d221e; }
+.trim-action { display: flex; justify-content: flex-end; padding-top: 14px; }
+@media (max-width: 620px) { .trim-editor { width: 100%; }.trim-fields { grid-template-columns: 1fr; }.trim-zoom-controls { flex-wrap: wrap; }.trim-editor-footer { flex-wrap: wrap; }.trim-editor-footer button { flex: 1; } }

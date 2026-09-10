@@ -38,6 +38,47 @@ and refuses existing destinations. Playback gain never changes files.
 The `sfx-media://asset/<uuid>` protocol resolves only known assets and supports byte
 ranges. The UI never supplies arbitrary local paths for media access.
 
+## Local trimming and audio evidence
+
+`WorkbenchService.analyzeAudio`, `previewTrim`, and `trimAsset` own audio editing;
+validated IPC and assistant `analyze_audio`/`trim_asset` tools use those operations.
+The renderer owns selection, zoom, draft fades, and exclusive audition state.
+Analysis, rendered previews, and final trims use the same decoded PCM timeline.
+There is no provider invocation for editing and no new credential requirement.
+
+`MediaLibrary` serializes audio operations, verifies source SHA-256 on every request,
+and caches at most one decoded asset. `audio.ts` decodes MP3 with pinned
+`mpg123-decoder` (gapless enabled), or RIFF PCM 8/16/24/32-bit and IEEE float
+32/64-bit WAV locally. Decode errors fail rather than permit edits across gaps.
+Source bytes and decoded float samples are bounded to 64 MiB; processing yields
+between blocks. Shutdown waits for pending edits and analysis; edits cannot commit
+after the service closes. Original import/export support is independent of these
+editing bounds and encoding restrictions.
+If shutdown or a transaction failure races a completed trim file write, the operation
+removes its own unregistered derivative; a hard crash can still leave an orphan.
+
+Analysis returns versioned absolute second/frame intervals, sample rate, channels,
+decoded duration, source hash, and 1–512 min/max/peak/RMS bins (96 default). Smaller
+requested windows measure the samples again at finer resolution. Amplitudes are
+linear full-scale values without normalization; extrema span all channels and RMS
+counts each channel independently, avoiding cancellation from downmixing. No event
+labels, perceptual-silence claims, or hearing are inferred. The assistant is instructed
+to inspect an overview, zoom near boundaries, and ask for timing hints if semantic
+identity is needed. See the [research note](research/agentic-audio-editing.md).
+
+Trims retain a half-open interval `[startFrame,endFrame)` after rounding seconds to
+nearest frames. Optional linear fade lengths round to frames and cannot overlap.
+The shared renderer writes float32 WAV with a fact chunk. A preview returns its
+bytes through fixed IPC without registering an asset. Saving retains a new file,
+then atomically registers the derivative, current Playground membership, activity,
+and (for tools) durable result. Replayed tool IDs do not create another derivative.
+New assets have `source: edited`, unreviewed status, parent ID, source hash, requested
+parameters, actual sample/fade frames, decoder version, and output encoding. Original
+generation records remain on the parent; the original prompt is retained for search.
+Older JSON asset records without `edit` remain readable without a schema migration.
+Float32 conversion can reduce precision of imported 32-bit integer/64-bit float WAV;
+MP3 always requires decoding. Originals remain byte-identical for export.
+
 ## Jobs and turns
 
 Each candidate is a durable job persisted before sequential dispatch. Requests run

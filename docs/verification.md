@@ -64,3 +64,34 @@ isolated Electron check with 60 long messages and incremental text updates confi
 following at the bottom, preservation of a manual wheel-scroll position, resuming
 after scrolling back down, and jumping to the latest content on send. The outer
 document stayed at scroll position zero; the temporary app/profile were cleaned up.
+
+## Trimming and assistant audio evidence (2026-09-10)
+
+- `npm run typecheck`: passed.
+- `npm test`: 64 tests across 9 files passed, including 10 new audio-editing tests.
+  These cover per-channel amplitude/RMS measurements and sample-level zoom,
+  exact retained PCM, identical preview/saved bytes, optional fades, MP3 decoding,
+  PCM bit depths, extensible WAV layouts, malformed inputs, immutable originals,
+  chained provenance, assistant tool replay, and shutdown cleanup.
+- `npm run test:e2e`: both Electron workflows passed. The trim workflow imports
+  the synthetic MP3, checks measured waveform/zoom, numeric and keyboard range
+  controls, Blob WAV readiness/playback, preview invalidation after fade changes,
+  derived asset selection/lineage, and persistence after reopening. The existing
+  creative workbench and renderer-isolation workflow also passed.
+- Visually reviewed editor screenshots at normal and 1000×650 viewport sizes.
+  Waveform, selected range, times, and save/preview actions fit; smaller windows
+  scroll fields inside the modal while keeping its footer visible.
+- `npm run package`: Windows NSIS installer built. The packaged decoder loaded
+  through the app's ASAR using Electron's Node runtime and decoded the synthetic
+  MP3 to 6,615 sample frames at 22,050 Hz without decoder errors. This exercises
+  packaged dependency resolution, not a fresh installed-app end-to-end trim.
+  Unpacked decoder replacement files, notices, license text, and corresponding
+  source archives were verified in the package. Nothing was published/installed.
+- Local links in changed documentation were validated. Research findings and
+  source provenance are under [research](research/agentic-audio-editing.md).
+
+No paid generation or audio-analysis provider was invoked. Assistant tools were
+exercised with local/synthetic calls; live hosted-model tool selection remains a
+user acceptance check. Playback state and PCM checks do not establish perceptual
+quality, and no listener judgment is claimed. Temporary test apps/profiles were
+closed/removed. Existing user audio and credentials were not read for this work.

@@ -86,6 +86,8 @@ else {
       sendMessage: (id, text) => service!.sendMessage(id, text), cancelTurn: id => service!.cancelTurn(id),
       generate: (id, input) => service!.generate(id, input).then(() => undefined), cancelJob: id => service!.cancelJob(id),
       updateAsset: (id, patch, conversationId) => service!.updateAsset(id, patch, conversationId),
+      analyzeAudio: (id, input) => service!.analyzeAudio(id, input), trimAsset: (conversationId, id, input) => service!.trimAsset(conversationId, id, input),
+      previewTrim: (id, input) => service!.previewTrim(id, input),
       setPlayground: (id, ids) => { store.setPlayground(id, ids); store.addMessage(id, 'tool', 'Updated the comparison playground.'); },
       searchAssets: query => store.search(query),
       importAudio: async id => {

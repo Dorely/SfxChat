@@ -1,10 +1,11 @@
 import { Store } from './store';
 import { MediaLibrary, generatedFields } from './media';
-import { generationSchema, patchSchema } from './validation';
+import { analysisSchema, generationSchema, patchSchema, trimSchema } from './validation';
 import { instructions, tools, toolSchemas } from './assistant';
-import type { AssetPatch, GenerationInput, SettingsStatus, Snapshot } from '../shared/types';
+import type { AssetPatch, AudioAnalysisInput, GenerationInput, SettingsStatus, Snapshot, TrimInput } from '../shared/types';
 import type { DiagnosticLog } from './diagnostics';
 import { diagnosticError } from './providers/errors';
+import { unlink } from 'node:fs/promises';
 
 export interface ChatResult { output: unknown[]; calls: { id: string; name: string; arguments: string }[]; usage?: unknown; requestId?: string | null }
 export interface ServicePorts {
@@ -18,6 +19,7 @@ export class WorkbenchService {
   private activeJob: { id: string; controller: AbortController } | null = null;
   private pumpPromise: Promise<void> | null = null;
   private turnPromises = new Set<Promise<void>>();
+  private editPromises = new Set<Promise<unknown>>();
   private stopped = false;
   constructor(readonly store: Store, readonly media: MediaLibrary, private ports: ServicePorts, private changed: () => void, private diagnostics?: Pick<DiagnosticLog, 'record'>) {}
   private requireOpen() { if (this.stopped) throw new Error('SfxChat is closing.'); }
@@ -100,6 +102,50 @@ export class WorkbenchService {
       this.store.addMessage(conversationId, 'tool', `Imported “${asset.name}”.`);
     }
   }
+  analyzeAudio(id: string, raw: AudioAnalysisInput) {
+    this.requireOpen();
+    return this.media.analyze(this.store.asset(id), analysisSchema.parse(raw));
+  }
+  async previewTrim(id: string, raw: TrimInput) {
+    this.requireOpen();
+    return new Uint8Array((await this.media.renderTrim(this.store.asset(id), trimSchema.parse(raw))).bytes);
+  }
+  trimAsset(conversationId: string, id: string, raw: TrimInput, callId?: string, signal?: AbortSignal) {
+    this.requireOpen();
+    const input = trimSchema.parse(raw), source = this.store.asset(id);
+    this.store.requireConversation(conversationId);
+    const pending = (async () => {
+      const rendered = await this.media.renderTrim(source, input);
+      this.requireOpen();
+      signal?.throwIfAborted();
+      const asset = await this.media.save(rendered.bytes, 'wav', {
+        source: 'edited', name: input.name ?? `${source.name} (trim)`, description: source.description,
+        tags: [...source.tags], collections: [...source.collections], parentId: source.id, edit: rendered.edit,
+        // Generation provenance remains on the immutable parent; no new provider request occurred.
+        prompt: source.prompt
+      });
+      try {
+        this.requireOpen();
+        signal?.throwIfAborted();
+        this.store.db.transaction(() => {
+          this.store.insertAsset(asset);
+          this.store.addToPlayground(conversationId, [asset.id]);
+          this.store.addMessage(conversationId, 'tool', `Trimmed “${source.name}” to ${rendered.edit.startFrame / rendered.edit.sampleRate}–${rendered.edit.endFrame / rendered.edit.sampleRate}s as “${asset.name}”. Original preserved.`);
+          // Registration and durable tool result commit together: replay cannot create a second derivative.
+          if (callId) this.store.finishTool(callId, JSON.stringify(asset));
+        })();
+      } catch (error) {
+        // This UUID file was created by this operation and never registered. A deliberate
+        // cancellation/transaction failure should not leave an orphaned derivative.
+        await unlink(this.media.path(asset)).catch(() => this.diagnostics?.record('trim.cleanup_failed', { assetId: asset.id }));
+        throw error;
+      }
+      return asset;
+    })();
+    this.editPromises.add(pending);
+    void pending.finally(() => this.editPromises.delete(pending)).catch(() => undefined);
+    return pending;
+  }
   async sendMessage(conversationId: string, text: string) {
     this.requireOpen();
     this.store.requireConversation(conversationId);
@@ -172,6 +218,8 @@ export class WorkbenchService {
         }
         case 'search_assets': result = this.store.search((args as { query: string }).query); break;
         case 'inspect_asset': result = this.store.asset((args as { id: string }).id); break;
+        case 'analyze_audio': { const { id, ...input } = args as AudioAnalysisInput & { id: string }; result = await this.analyzeAudio(id, input); break; }
+        case 'trim_asset': { const { id, ...input } = args as TrimInput & { id: string }; result = await this.trimAsset(conversationId, id, input, call.id, signal); break; }
         case 'update_asset': { const { id, patch } = args as { id: string; patch: AssetPatch }; result = this.store.updateAsset(id, patch, conversationId); break; }
         case 'set_playground': this.store.setPlayground(conversationId, (args as { assetIds: string[] }).assetIds); this.store.addMessage(conversationId, 'tool', 'Updated the comparison playground.'); result = { updated: true }; break;
         case 'inspect_jobs': result = this.store.jobs().filter(j => j.conversationId === conversationId); break;
@@ -184,7 +232,7 @@ export class WorkbenchService {
       this.store.addMessage(conversationId, 'tool', `Could not ${call.name.replaceAll('_', ' ')}: ${this.ports.safeError(error)}`, 'failed'); return output;
     }
   }
-  async idle() { await this.pumpPromise; await Promise.all([...this.turnPromises]); }
+  async idle() { await this.pumpPromise; await Promise.all([...this.turnPromises]); await Promise.allSettled([...this.editPromises]); await this.media.idle(); }
   async shutdown() {
     this.stopped = true; for (const controller of this.turns.values()) controller.abort(); this.activeJob?.controller.abort();
     await this.idle();

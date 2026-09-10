@@ -4,10 +4,25 @@ export interface Conversation { id: string; title: string; createdAt: string }
 export interface Message { id: string; conversationId: string; role: 'user' | 'assistant' | 'tool'; text: string; status: 'running' | 'completed' | 'failed' | 'cancelled'; createdAt: string }
 export interface Asset {
   id: string; name: string; description: string; tags: string[]; collections: string[];
-  review: Review; feedback: string; source: 'generated' | 'imported';
+  review: Review; feedback: string; source: 'generated' | 'imported' | 'edited';
   format: 'mp3' | 'wav'; hash: string; bytes: number; duration: number | null;
   prompt: string; provider: string | null; model: string | null; requestId: string | null;
   request: GenerationInput | null; usage: string | null; parentId: string | null; createdAt: string;
+  edit?: TrimEdit;
+}
+export interface TrimInput { startSeconds: number; endSeconds: number; fadeInMs?: number; fadeOutMs?: number; name?: string }
+export interface TrimEdit {
+  kind: 'trim'; version: 1; sourceHash: string; sampleRate: number;
+  startFrame: number; endFrame: number; fadeInFrames: number; fadeOutFrames: number;
+  requested: TrimInput; decoder: string; outputEncoding: 'float32-wav';
+}
+export interface AudioAnalysisInput { startSeconds?: number; endSeconds?: number; bins?: number }
+export interface AudioAnalysis {
+  version: 1; assetId: string; sourceHash: string; sampleRate: number; channels: number;
+  totalFrames: number; duration: number; startFrame: number; endFrame: number;
+  startSeconds: number; endSeconds: number; decoder: string;
+  bins: { startFrame: number; endFrame: number; startSeconds: number; endSeconds: number; min: number; max: number; peak: number; rms: number }[];
+  note: string;
 }
 export interface GenerationInput {
   prompt: string; count?: number; duration?: number | null; loop?: boolean;
@@ -26,6 +41,9 @@ export interface SfxApi {
   generate(conversationId: string, input: GenerationInput): Promise<void>;
   cancelJob(id: string): Promise<void>;
   updateAsset(id: string, patch: AssetPatch, conversationId?: string): Promise<void>;
+  analyzeAudio(id: string, input: AudioAnalysisInput): Promise<AudioAnalysis>;
+  trimAsset(conversationId: string, id: string, input: TrimInput): Promise<Asset>;
+  previewTrim(id: string, input: TrimInput): Promise<Uint8Array>;
   setPlayground(conversationId: string, assetIds: string[]): Promise<void>;
   importAudio(conversationId: string): Promise<void>;
   exportAsset(id: string): Promise<void>;

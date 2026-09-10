@@ -8,6 +8,15 @@ Dependencies retain their licenses in their installed packages. Electron include
 its Chromium and third-party license notices. No sibling-app binaries, databases,
 or credentials are distributed.
 
+`mpg123-decoder` 1.0.3 is used for local MP3-to-PCM decoding. Its JavaScript/WASM
+wrapper is MIT licensed; its embedded libmpg123 code is LGPL-2.1. The pinned
+attribution, source links, decoder caveats, and packaging details are recorded
+in [third-party/mpg123-decoder.NOTICE.txt](third-party/mpg123-decoder.NOTICE.txt)
+and [docs/research/audio-decoding.md](docs/research/audio-decoding.md). The
+LGPL text and exact wrapper/mpg123 source archives are under
+[third-party](third-party/) and ship under `resources/app.asar.unpacked/third-party/`.
+The decoder is unpacked separately for replacement with a compatible rebuilt version.
+
 `tests/fixtures/tone.mp3` is a synthetic 440 Hz sine tone, 0.3 seconds, generated
 locally with FFmpeg, mono 22050 Hz MP3 at 32 kbps. It contains no recorded or
 provider-generated media and is excluded from the installer.

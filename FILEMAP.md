@@ -25,6 +25,9 @@ is recorded in [verification](docs/verification.md).
 | [docs/verification.md](docs/verification.md) | Actual automated/platform checks and live acceptance status. |
 | [docs/implementation-plan.md](docs/implementation-plan.md) | Accepted v0.1 scope, delivery sequence, and verification requirements. |
 | [docs/sources.md](docs/sources.md) | Source locations, revision/date/hash provenance, copy policy, and original documentation links. |
+| [docs/research/agentic-audio-editing.md](docs/research/agentic-audio-editing.md) | Dated primary-source research, timing/representation limitations, and trimming design decisions. |
+| [docs/research/audio-decoding.md](docs/research/audio-decoding.md) | Pinned MP3 decoder behavior, source revisions, licenses, and rebuild materials. |
+| [third-party/](third-party/) | Decoder attribution, LGPL text, and corresponding upstream source/build archives shipped with the app. |
 | [docs/knowledge/README.md](docs/knowledge/README.md) | API bundle navigation, historical-status caveats, and research boundaries. |
 | [docs/knowledge/elevenlabs.md](docs/knowledge/elevenlabs.md) | Inherited SFX API request/prompt, output, provenance, and bounded-generation lessons. |
 | [docs/knowledge/gemini-audio.md](docs/knowledge/gemini-audio.md) | Inherited audio-input, response, usage, and calibration lessons. |
@@ -48,7 +51,8 @@ is recorded in [verification](docs/verification.md).
 | [scripts/smoke-installed.mjs](scripts/smoke-installed.mjs) | Installed-app startup, native SQLite, secure-storage availability, and packaged-mode isolation checks. |
 | [src/shared/types.ts](src/shared/types.ts) | Renderer/preload/application operation and snapshot contracts. |
 | [src/main/store.ts](src/main/store.ts) | SQLite schema migration, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
-| [src/main/media.ts](src/main/media.ts) | Original audio storage, probing, import, hashing, and exact-byte export. |
+| [src/main/media.ts](src/main/media.ts) | Original storage/import/export, integrity checks, serialized editing/analysis, and bounded decoded cache. |
+| [src/main/audio.ts](src/main/audio.ts) | Bounded MP3/WAV decode, timestamped amplitude windows, exact sample-frame trims, fades, and float32 WAV rendering. |
 | [src/main/validation.ts](src/main/validation.ts) | Runtime validation of privileged operations and generation inputs. |
 | [src/main/service.ts](src/main/service.ts) | Shared library operations, sequential generation jobs, chat turns, and tool execution. |
 | [src/main/diagnostics.ts](src/main/diagnostics.ts) | Rotating local JSONL records, diagnostic references, and credential redaction. |
@@ -66,6 +70,9 @@ is recorded in [verification](docs/verification.md).
 | [tests/providers.test.ts](tests/providers.test.ts) | Secure-store, OAuth, streamed chat/tool, and SFX transport tests. |
 | [src/renderer/index.html](src/renderer/index.html), [src/renderer/main.tsx](src/renderer/main.tsx) | Renderer entrypoint and content security policy. |
 | [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Chat, Library, Playground, audition, inspector, settings, and styling. |
+| [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Waveform trim selection, fine-window zoom, fades, exact rendered preview, and derived-asset saving. |
+| [tests/audio-editing.test.ts](tests/audio-editing.test.ts) | Sample/channel correctness, analysis zoom, fades, provenance/replay, source integrity, MP3 decode, and shutdown. |
+| [tests/trim-editor.spec.ts](tests/trim-editor.spec.ts) | Electron trimming workflow, preview, waveform zoom, preserved originals, and persisted derivatives. |
 | [playwright.config.ts](playwright.config.ts), [tests/workbench.spec.ts](tests/workbench.spec.ts) | Mocked Electron workflow, playback, persistence, and Windows secure-storage checks. |
 | [tests/lifecycle.test.ts](tests/lifecycle.test.ts) | Shutdown, tool recovery, conversation attribution, and chat round-trip regressions. |
 | [tests/diagnostics.test.ts](tests/diagnostics.test.ts), [tests/provider-errors.test.ts](tests/provider-errors.test.ts) | Log persistence/rotation, redaction, provider error details, and body-read bounds. |

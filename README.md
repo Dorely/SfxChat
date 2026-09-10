@@ -18,7 +18,7 @@ Lorekeeper and PixelChat references. There is no CLI prerequisite. Source and mo
 tests alone do not establish that a particular account can log in or use a model;
 see [verification](docs/verification.md) for actual evidence and live acceptance.
 
-Music, Gemini analysis, editing/mixing, cloud sync, multiple libraries, automatic
+Music, Gemini analysis, mixing and edits beyond trimming/fades, cloud sync, multiple libraries, automatic
 updates, signed installers, and other platform packages are deferred.
 
 ## Development on Windows x64
@@ -58,6 +58,28 @@ only one running instance.
    original prompts, hashes, requests, and files.
 5. Export original audio through the inspector. Choose a new destination filename;
    v0.1 refuses to overwrite an existing file.
+
+## Trim sounds
+
+Open a sound's inspector and choose **Trim as new asset**. Set the in/out points,
+zoom into the selection to refine its edges, optionally add short fades, and preview
+the result. **Save as new asset** creates a WAV in the library and current Playground.
+The source is retained, and the new asset records its parent, exact sample-frame
+interval, fades, source hash, and decoder. Export the derivative through its inspector.
+
+The assistant can use `analyze_audio` to examine timestamped amplitude measurements,
+zoom into smaller intervals, and call `trim_asset` to keep a focused section. These
+local operations need no audio-provider key or paid generation. The assistant can
+locate activity from measurements; it cannot identify an event by hearing it. Give
+timing hints when the desired event is ambiguous, and audition the result.
+
+Editing supports MP3 and RIFF PCM/float WAV, up to 64 MiB each for source bytes and
+decoded float samples. Unsupported WAV encodings remain available for original-file
+playback/export. Edits use decoded duration (which can differ from MP3 metadata),
+round endpoints to nearest sample frames, and save float32 WAV without another lossy
+encode. Zero fades preserve retained decoded samples; optional fades change only
+their edge samples. Preview gain does not affect saved audio. Research findings and
+source links are recorded under [docs/research](docs/research/agentic-audio-editing.md).
 
 The initial configurable chat model is `gpt-5.6-sol`, following Lorekeeper. SFX uses
 `eleven_text_to_sound_v2`, `mp3_44100_128`, optional 0.5–30 second duration, looping,

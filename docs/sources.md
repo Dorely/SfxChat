@@ -74,6 +74,12 @@ output; the original HTTP error body was not available.
 
 ## Historical source-file fingerprints
 
+Trimming research and implementation evidence (2026-09-10) is documented separately
+in [agentic audio editing](research/agentic-audio-editing.md) and
+[local decoding](research/audio-decoding.md). Those Markdown notes record findings,
+primary-source links, limitations, selected representations, pinned decoder/source
+revisions, and corresponding license/source material under `third-party/`.
+
 SHA-256 values below were computed during extraction. Paths are relative to the named source root above. For vendored files the destination bytes match the installed source bytes; other files are attribution for summarized material, not copied payloads.
 
 | Source | Relative path | SHA-256 |

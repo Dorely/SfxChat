@@ -7,6 +7,8 @@ const api: SfxApi = {
   sendMessage: (id, text) => call('sendMessage', id, text), cancelTurn: id => call('cancelTurn', id),
   generate: (id, input) => call('generate', id, input), cancelJob: id => call('cancelJob', id),
   updateAsset: (id, patch, conversationId) => call('updateAsset', id, patch, conversationId), setPlayground: (id, ids) => call('setPlayground', id, ids),
+  analyzeAudio: (id, input) => call('analyzeAudio', id, input), trimAsset: (conversationId, id, input) => call('trimAsset', conversationId, id, input),
+  previewTrim: (id, input) => call('previewTrim', id, input),
   importAudio: id => call('importAudio', id), exportAsset: id => call('exportAsset', id), searchAssets: query => call('searchAssets', query),
   startLogin: () => call('startLogin'), cancelLogin: () => call('cancelLogin'), logout: () => call('logout'),
   saveElevenLabsKey: key => call('saveElevenLabsKey', key), saveModel: model => call('saveModel', model),

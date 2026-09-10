@@ -1,0 +1,26 @@
+mpg123-decoder 1.0.3
+Copyright (c) Ethan Halsall and contributors.
+
+The JavaScript/WASM wrapper is distributed under the MIT License. Package source
+revision: 8f2428c1cd96b54dab74836c8471ff75fe35cbee.
+Source: https://github.com/eshaz/wasm-audio-decoders/tree/8f2428c1cd96b54dab74836c8471ff75fe35cbee/src/mpg123-decoder
+The pinned source snapshot has no standalone LICENSE file; the reproduced MIT
+terms are in `mpg123-decoder-MIT.txt`, with canonical text at
+https://opensource.org/license/mit.
+
+The distributed bundle embeds a WebAssembly build of libmpg123. mpg123 is
+copyright Michael Hipp and others and is licensed under the GNU Lesser General
+Public License, version 2.1 (LGPL-2.1). Complete license and attribution:
+https://github.com/madebr/mpg123/blob/master/COPYING
+
+For this pinned build, the exact embedded-library source is preserved in
+`source/mpg123-08247b317163175e62035893af3ff9e71a5dfefd.zip` (submodule commit
+`08247b317163175e62035893af3ff9e71a5dfefd`, SHA-256
+`B624F4A779202BF0B5FC0BA5C3C89C85C8B64FC71FBAB8754D600961F91052C4`). The
+wrapper sources and build files at the npm git head are preserved in
+`source/wasm-audio-decoders-8f2428c1-source.zip` (SHA-256
+`783A7163FA7EB7067BB8D8CE08E35A84DB1D5865CD714C3AB6BE6E50A13BF55C`).
+
+If the packaged binary is redistributed, retain this notice and provide the
+applicable LGPL text and corresponding source materials required for the exact
+distribution form. This notice is not legal advice.
