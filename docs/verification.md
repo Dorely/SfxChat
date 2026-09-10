@@ -50,3 +50,11 @@ Pending: live follow-up after this fix, token persistence after reopening, and
 packaged-app playback. No additional paid generation was made while debugging.
 No sibling-app credentials were read or copied. No actual listener judgment has
 been recorded; decoding, waveform display, and hashes do not establish creative quality.
+
+## Window-height layout check (2026-09-10)
+
+After the conversation overflow fix, `npm run build` passed. An isolated Electron
+layout check injected 200 long messages, 30 conversation rows, and tall workspace
+content. At 1440×940 and 1000×650 content sizes, document height matched window
+height, message history scrolled internally, and the composer remained visible.
+The temporary app and profile were closed and removed after validation.

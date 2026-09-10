@@ -14,6 +14,9 @@ and verifies the requesting main frame. The renderer has no Node integration or
 general filesystem/shell tool. UI and assistant tools share `WorkbenchService`
 and `Store`; provider-specific transports sit behind service ports.
 
+The shell is constrained to the window height. Conversation history and workspace
+content scroll inside their panels, keeping the chat composer and headers visible.
+
 ## Persistence and originals
 
 SQLite uses WAL, foreign keys, transactional migrations, and FTS5 search. Schema v1
