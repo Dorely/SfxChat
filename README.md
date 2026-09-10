@@ -40,6 +40,11 @@ changing Electron/native dependencies. The unsigned installer is written to
 `release/`; packaging does not publish it. Windows CI runs credential-free checks
 and retains the installer as a build artifact.
 
+For interactive debugging in VS Code, select `Debug SfxChat` in Run and Debug and
+press F5. This launches the development app with source-mapped main-process and
+renderer debugging. Close any existing SfxChat window first because the app allows
+only one running instance.
+
 ## Connect and create
 
 1. Open Settings and connect Codex in the system browser. The temporary callback

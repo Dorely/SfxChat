@@ -15,6 +15,7 @@ is recorded in [verification](docs/verification.md).
 | [FILEMAP.md](FILEMAP.md) | This map of actual project files. |
 | [.gitignore](.gitignore) | Excludes credentials, local data, generated media, dependencies, and build artifacts. |
 | [.gitattributes](.gitattributes) | LF conventions for authored text and byte-preserving vendored skill handling. |
+| [.vscode/launch.json](.vscode/launch.json) | VS Code F5 launch configuration for source-mapped Electron main and renderer debugging. |
 
 ## Documentation and API knowledge
 
