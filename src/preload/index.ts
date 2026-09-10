@@ -3,6 +3,7 @@ import type { SfxApi } from '../shared/types';
 const call = (method: string, ...args: unknown[]) => ipcRenderer.invoke('sfx:call', method, args);
 const api: SfxApi = {
   snapshot: () => call('snapshot'), createConversation: () => call('createConversation'),
+  openLogs: () => call('openLogs'),
   sendMessage: (id, text) => call('sendMessage', id, text), cancelTurn: id => call('cancelTurn', id),
   generate: (id, input) => call('generate', id, input), cancelJob: id => call('cancelJob', id),
   updateAsset: (id, patch, conversationId) => call('updateAsset', id, patch, conversationId), setPlayground: (id, ids) => call('setPlayground', id, ids),

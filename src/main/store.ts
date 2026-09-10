@@ -123,6 +123,47 @@ export class Store {
     return { fresh: true, result: null };
   }
   finishTool(id: string, result: string) { this.db.prepare('UPDATE tool_calls SET status=?,result=? WHERE id=?').run('completed', result, id); }
+  repairToolHistory(conversationId: string, input: unknown[]): { input: unknown[]; restoredCallIds: string[] } {
+    this.requireConversation(conversationId);
+    const repaired: unknown[] = [];
+    const seenCalls = new Set<string>();
+    const seenOutputs = new Set<string>();
+    const restoredCallIds: string[] = [];
+    const ledger = this.db.prepare('SELECT name,args,status,result FROM tool_calls WHERE conversation_id=? AND id=?');
+
+    for (const item of input) {
+      if (!item || typeof item !== 'object') { repaired.push(item); continue; }
+      const record = item as Record<string, unknown>;
+      if (record.type === 'function_call') {
+        const callId = record.call_id;
+        if (typeof callId !== 'string' || !callId) throw new Error(`Cannot repair tool history for conversation ${conversationId}: function_call is missing call_id.`);
+        if (seenCalls.has(callId)) throw new Error(`Cannot repair tool history for conversation ${conversationId}: duplicate function_call ${callId}.`);
+        seenCalls.add(callId);
+        repaired.push(item);
+        continue;
+      }
+      if (record.type === 'function_call_output') {
+        const callId = record.call_id;
+        if (typeof callId !== 'string' || !callId) throw new Error(`Cannot repair tool history for conversation ${conversationId}: function_call_output is missing call_id.`);
+        if (seenOutputs.has(callId)) throw new Error(`Cannot repair tool history for conversation ${conversationId}: duplicate function_call_output ${callId}.`);
+        seenOutputs.add(callId);
+        if (!seenCalls.has(callId)) {
+          const row = ledger.get(conversationId, callId) as { name: string; args: string; status: string; result: string | null } | undefined;
+          if (!row) throw new Error(`Cannot repair tool history for conversation ${conversationId}: no durable tool call ledger entry exists for ${callId}. Restore the original tool call record before requesting a provider response.`);
+          if (typeof row.name !== 'string' || typeof row.args !== 'string' || row.status !== 'completed' || row.result === null) {
+            throw new Error(`Cannot repair tool history for conversation ${conversationId}: durable tool call ${callId} is incomplete or not completed. Resolve its ledger record before requesting a provider response.`);
+          }
+          repaired.push({ type: 'function_call', call_id: callId, name: row.name, arguments: row.args });
+          restoredCallIds.push(callId);
+          seenCalls.add(callId);
+        }
+        repaired.push(item);
+        continue;
+      }
+      repaired.push(item);
+    }
+    return { input: repaired, restoredCallIds };
+  }
   setTurn(conversationId: string, status: string) { this.db.prepare('INSERT INTO turns VALUES (?,?) ON CONFLICT(conversation_id) DO UPDATE SET status=excluded.status').run(conversationId, status); this.changed(); }
   recover() {
     this.db.transaction(() => {

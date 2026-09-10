@@ -8,6 +8,7 @@ export const generationSchema = z.object({
 export const patchSchema = z.object({ name: z.string().trim().min(1).optional(), description: z.string().optional(), tags: z.array(z.string().trim().min(1)).optional(), collections: z.array(z.string().trim().min(1)).optional(), review: z.enum(['unreviewed','accepted','rejected']).optional(), feedback: z.string().optional() }).strict();
 export const commandSchemas = {
   snapshot: z.tuple([]), createConversation: z.tuple([]),
+  openLogs: z.tuple([]),
   sendMessage: z.tuple([idSchema, z.string().trim().min(1)]), cancelTurn: z.tuple([idSchema]),
   generate: z.tuple([idSchema, generationSchema]), cancelJob: z.tuple([idSchema]),
   updateAsset: z.tuple([idSchema, patchSchema, idSchema.optional()]), setPlayground: z.tuple([idSchema, z.array(idSchema)]),

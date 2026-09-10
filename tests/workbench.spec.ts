@@ -154,6 +154,17 @@ test('complete creative workbench flow persists assets and protects the renderer
     expect(secureStorage.available).toBe(true)
     expect(secureStorage.roundTrip).toBe('sfxchat-e2e-secret')
     expect(secureStorage.cipherHasPlaintext).toBe(false)
+
+    await running.app.evaluate(({ shell }) => {
+      shell.openPath = async path => { (shell as any).__openedLogPath = path; return '' }
+    })
+    await reopened.getByRole('button', { name: 'Open settings' }).first().click()
+    await reopened.getByRole('button', { name: 'Open diagnostic logs' }).click()
+    expect(await running.app.evaluate(({ shell }) => (shell as any).__openedLogPath)).toBe(join(profile, 'logs'))
+    const diagnostics = await readFile(join(profile, 'logs', 'diagnostics.jsonl'), 'utf8')
+    expect(diagnostics).toContain('generation.completed')
+    expect(diagnostics).toContain('chat.request_completed')
+    expect(diagnostics).not.toContain('Generate two UI chimes')
   } finally {
     await running.app.close().catch(() => undefined)
     await rm(profile, { recursive: true, force: true })

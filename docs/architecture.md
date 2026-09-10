@@ -52,6 +52,13 @@ Its initial job IDs are recorded atomically with creation. Duplicate tool calls
 return durable results; conflicting IDs are rejected. Stopping a turn stops its wait;
 jobs have separate cancellation controls.
 
+Codex merges streamed output items with terminal output by item/call identity;
+an empty or partial terminal output never erases observed messages or calls.
+Before a new turn, older orphaned function-call outputs are paired with calls from
+the same conversation's completed tool ledger. The repaired history is persisted;
+this repair performs no tool execution or generation. Missing or inconsistent
+ledger records fail locally with a diagnostic instead of sending invalid history.
+
 On restart, running jobs become uncertain, running messages become interrupted,
 and undispatched jobs remain eligible. Interrupted tools are not re-executed.
 Closing the app aborts active work and closes the database after shutdown. There is
@@ -72,6 +79,23 @@ or diagnostics. Key entry is transient. Sibling-app auth caches are never import
 ElevenLabs resolves its key at dispatch and preserves the SFX HTTP response as MP3.
 HTTP status failures and uncertain transport outcomes are distinct. Production
 provider requests have a three-minute timeout. Music and Gemini are deferred.
+
+## Diagnostics
+
+The main process writes best-effort JSONL diagnostics under the profile's `logs/`,
+rotating a 2 MB file with three archives. Records correlate conversation, assistant
+message, tool call, job, asset, and provider request IDs. Request logs describe item
+types/IDs rather than bodies or prompts. Errors include bounded, allowlisted provider
+message/code/type/parameter and HTTP status. Error-body reads have a 32 KB cap and
+a two-second total deadline. HTML error pages are not dumped into logs or chat.
+
+Provider boundaries redact the actual request credential before returning errors;
+the logger also redacts secret fields and token patterns. Full request/response
+bodies, tool arguments/results, credentials, and audio are not logged. Provider
+error messages may quote user content. Failed chat messages retain readable details
+and a diagnostic reference only after a successful log write. Logging failures never
+replace the original error. The fixed `openLogs` IPC operation opens only the
+profile's logs directory. There is no arbitrary-path or log-reading renderer API.
 
 ## Verification boundaries
 

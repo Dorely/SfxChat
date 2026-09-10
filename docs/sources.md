@@ -62,6 +62,16 @@ Build sources: [electron-vite guide](https://electron-vite.org/guide/),
 [security](https://www.electronjs.org/docs/latest/tutorial/security). Dependencies
 are pinned in the lockfile; Vite 7 is used to satisfy electron-vite 5's peer range.
 
+## Follow-up debugging (2026-09-10)
+
+Re-read PixelChat's
+`OpenAIAccountChatClient.cs` function-call/result reconstruction and Lorekeeper's
+`CodexChatClient.cs` streaming handling. Inspected only the shape of SfxChat's own
+persisted wire history and job states to diagnose the reported HTTP 400. No real
+conversation payloads or generated audio were copied into tests or source control.
+The synthetic regression covers streamed items followed by an empty terminal
+output; the original HTTP error body was not available.
+
 ## Historical source-file fingerprints
 
 SHA-256 values below were computed during extraction. Paths are relative to the named source root above. For vendored files the destination bytes match the installed source bytes; other files are attribution for summarized material, not copied payloads.

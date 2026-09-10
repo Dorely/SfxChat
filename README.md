@@ -75,6 +75,21 @@ On restart, undispatched jobs can run, while interrupted dispatched requests bec
 uncertain and are never automatically replayed. Cancellation may occur after billing.
 Invalid returned audio is retained with a failed job. Export checks original hashes.
 
+## Troubleshooting
+
+Settings → **Open diagnostic logs** opens `%APPDATA%/SfxChat/logs`. Logs record chat
+requests, tool activity, generation outcomes, and errors with conversation/job IDs,
+HTTP status, provider error details, and request IDs when supplied. Failed chat
+messages include a diagnostic reference that matches the saved record. Logs rotate
+at 2 MB with three archives. Credentials are redacted; request bodies, chat text,
+tool arguments/results, and audio are not routinely logged. A provider's error
+message can quote submitted content, so review diagnostics before sharing them.
+
+If a chat follow-up fails after generation, the completed sound remains available.
+Continuing the conversation reuses saved tool outcomes. Older histories affected
+by the empty-terminal-output bug restore missing calls from the durable tool ledger
+before contacting Codex; the repair does not generate audio again.
+
 ## Project references
 
 - [VISION](VISION.md): product intent, not implementation status.

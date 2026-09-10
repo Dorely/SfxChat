@@ -51,6 +51,8 @@ is recorded in [verification](docs/verification.md).
 | [src/main/media.ts](src/main/media.ts) | Original audio storage, probing, import, hashing, and exact-byte export. |
 | [src/main/validation.ts](src/main/validation.ts) | Runtime validation of privileged operations and generation inputs. |
 | [src/main/service.ts](src/main/service.ts) | Shared library operations, sequential generation jobs, chat turns, and tool execution. |
+| [src/main/diagnostics.ts](src/main/diagnostics.ts) | Rotating local JSONL records, diagnostic references, and credential redaction. |
+| [src/main/providers/errors.ts](src/main/providers/errors.ts) | Bounded provider error parsing, request IDs, readable failures, and safe diagnostic fields. |
 | [src/main/assistant.ts](src/main/assistant.ts) | Runtime sound-design instructions and assistant tool definitions. |
 | [tests/runtime.test.ts](tests/runtime.test.ts) | Persistence, search, provenance, jobs, tool replay, import/export, and recovery tests. |
 | [tests/fixtures/tone.mp3](tests/fixtures/tone.mp3) | Synthetic 440 Hz test tone, generated locally with FFmpeg; no provider-generated media. |
@@ -66,4 +68,6 @@ is recorded in [verification](docs/verification.md).
 | [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Chat, Library, Playground, audition, inspector, settings, and styling. |
 | [playwright.config.ts](playwright.config.ts), [tests/workbench.spec.ts](tests/workbench.spec.ts) | Mocked Electron workflow, playback, persistence, and Windows secure-storage checks. |
 | [tests/lifecycle.test.ts](tests/lifecycle.test.ts) | Shutdown, tool recovery, conversation attribution, and chat round-trip regressions. |
+| [tests/diagnostics.test.ts](tests/diagnostics.test.ts), [tests/provider-errors.test.ts](tests/provider-errors.test.ts) | Log persistence/rotation, redaction, provider error details, and body-read bounds. |
+| [tests/codex-history.test.ts](tests/codex-history.test.ts), [tests/history-repair.test.ts](tests/history-repair.test.ts), [tests/chat-diagnostics.test.ts](tests/chat-diagnostics.test.ts) | Streamed history preservation, ledger-based repair, follow-up errors, and generation without replay. |
 | [.github/workflows/windows.yml](.github/workflows/windows.yml) | Credential-free Windows tests and installer artifact build. |

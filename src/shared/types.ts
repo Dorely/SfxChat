@@ -19,6 +19,7 @@ export interface Snapshot { conversations: Conversation[]; messages: Message[]; 
 export interface AssetPatch { name?: string; description?: string; tags?: string[]; collections?: string[]; review?: Review; feedback?: string }
 export interface SfxApi {
   snapshot(): Promise<Snapshot>;
+  openLogs(): Promise<void>;
   createConversation(): Promise<string>;
   sendMessage(conversationId: string, text: string): Promise<void>;
   cancelTurn(conversationId: string): Promise<void>;

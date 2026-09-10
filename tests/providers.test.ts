@@ -185,7 +185,7 @@ describe('Codex transport', () => {
     const fetcher = vi.fn(async () => new Response(sse([{ type: 'response.output_text.delta', delta: 'partial' }]), { status: 200 }));
     await expect(streamChat({ token: jwtWithAccount(), input: [] }, { fetch: fetcher })).rejects.toThrow(/before completion/i);
     const failed = async () => new Response(sse([{ type: 'response.failed', response: { error: { message: 'synthetic failure' } } }]), { status: 200 });
-    await expect(streamChat({ token: jwtWithAccount(), input: [] }, { fetch: failed })).rejects.toThrow(/response failed/i);
+    await expect(streamChat({ token: jwtWithAccount(), input: [] }, { fetch: failed })).rejects.toThrow(/synthetic failure/i);
     expect(fetcher).toHaveBeenCalledTimes(1);
     await expect(streamChat({ token: jwtWithAccount(), input: [] }, { fetch: async () => new Response(sse([
       { type: 'response.output_item.added', item: { type: 'function_call', id: 'item', call_id: 'call', name: 'tool' } },

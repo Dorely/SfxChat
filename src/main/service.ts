@@ -3,8 +3,10 @@ import { MediaLibrary, generatedFields } from './media';
 import { generationSchema, patchSchema } from './validation';
 import { instructions, tools, toolSchemas } from './assistant';
 import type { AssetPatch, GenerationInput, SettingsStatus, Snapshot } from '../shared/types';
+import type { DiagnosticLog } from './diagnostics';
+import { diagnosticError } from './providers/errors';
 
-export interface ChatResult { output: unknown[]; calls: { id: string; name: string; arguments: string }[]; usage?: unknown }
+export interface ChatResult { output: unknown[]; calls: { id: string; name: string; arguments: string }[]; usage?: unknown; requestId?: string | null }
 export interface ServicePorts {
   settings(): Promise<SettingsStatus>;
   chat(options: { model: string; input: unknown[]; instructions: string; tools: unknown[]; signal: AbortSignal; onText: (text: string) => void }): Promise<ChatResult>;
@@ -17,7 +19,7 @@ export class WorkbenchService {
   private pumpPromise: Promise<void> | null = null;
   private turnPromises = new Set<Promise<void>>();
   private stopped = false;
-  constructor(readonly store: Store, readonly media: MediaLibrary, private ports: ServicePorts, private changed: () => void) {}
+  constructor(readonly store: Store, readonly media: MediaLibrary, private ports: ServicePorts, private changed: () => void, private diagnostics?: Pick<DiagnosticLog, 'record'>) {}
   private requireOpen() { if (this.stopped) throw new Error('SfxChat is closing.'); }
   async snapshot(): Promise<Snapshot> {
     return { conversations: this.store.conversations(), messages: this.store.messages(), assets: this.store.assets(), jobs: this.store.jobs(), playground: this.store.playground(), settings: await this.ports.settings(), activeTurns: [...this.turns.keys()] };
@@ -53,6 +55,7 @@ export class WorkbenchService {
       const job = this.store.jobs().find(j => j.status === 'queued'); if (!job) break;
       const controller = new AbortController(); this.activeJob = { id: job.id, controller };
       job.status = 'running'; this.store.updateJob(job);
+      this.diagnostics?.record('generation.started', { conversationId: job.conversationId, jobId: job.id, provider: 'ElevenLabs' });
       try {
         const result = await this.ports.generate(job.input, controller.signal);
         const asset = await this.media.save(result.bytes, 'mp3', { ...generatedFields(job.input), provider: 'ElevenLabs', model: result.model, requestId: result.requestId, usage: result.usage });
@@ -60,16 +63,21 @@ export class WorkbenchService {
           this.store.insertAsset(asset);
           this.store.updateJob({ ...job, status: 'failed', assetId: asset.id, error: 'Returned audio could not be validated. Original bytes were retained; no retry was made.' });
           this.store.addMessage(job.conversationId, 'tool', 'The returned audio could not be validated. Its original bytes are retained in the library.', 'failed');
+          this.diagnostics?.record('generation.invalid_audio', { conversationId: job.conversationId, jobId: job.id, assetId: asset.id, requestId: result.requestId });
           continue;
         }
         // A complete response that races cancellation is retained as a completed
         // original. Cancellation cannot unspend or unreceive a provider result.
         this.store.completeJob(job, asset);
+        this.diagnostics?.record('generation.completed', { conversationId: job.conversationId, jobId: job.id, assetId: asset.id, requestId: result.requestId, bytes: asset.bytes, hash: asset.hash });
         this.store.addMessage(job.conversationId, 'tool', `Ready: ${asset.name}${asset.duration === null ? ' (audio metadata could not be read; audition before use)' : ''}`);
       } catch (error) {
         const knownFailure = !!error && typeof error === 'object' && ('status' in error || 'statusCode' in error);
         const stopped = controller.signal.aborted;
-        this.store.updateJob({ ...job, status: stopped ? 'uncertain' : knownFailure ? 'failed' : 'uncertain', error: stopped ? 'Stopped after dispatch; provider completion/billing is uncertain. No automatic retry.' : this.ports.safeError(error) });
+        const reference = this.diagnostics?.record('generation.failed', { conversationId: job.conversationId, jobId: job.id, cancelled: stopped, error: diagnosticError(error) });
+        const detail = (stopped ? 'Stopped after dispatch; provider completion/billing is uncertain. No automatic retry.' : this.ports.safeError(error)) + logReference(reference);
+        this.store.updateJob({ ...job, status: stopped ? 'uncertain' : knownFailure ? 'failed' : 'uncertain', error: detail });
+        this.store.addMessage(job.conversationId, 'tool', `Generation failed: ${detail}`, 'failed');
       } finally { this.activeJob = null; }
     }
   }
@@ -104,15 +112,21 @@ export class WorkbenchService {
   cancelTurn(conversationId: string) { this.turns.get(conversationId)?.abort(); }
   private async runTurn(conversationId: string, text: string, controller: AbortController) {
     const historyKey = `history/${conversationId}`;
-    const input: unknown[] = JSON.parse(this.store.setting(historyKey, '[]'));
-    input.push({ role: 'user', content: [{ type: 'input_text', text }] });
-    this.store.setSetting(historyKey, JSON.stringify(input));
     let message = this.store.addMessage(conversationId, 'assistant', '', 'running');
+    let round = 0;
     try {
+      const repaired = this.store.repairToolHistory(conversationId, JSON.parse(this.store.setting(historyKey, '[]')));
+      const input = repaired.input;
+      if (repaired.restoredCallIds.length) this.diagnostics?.record('chat.history_repaired', { conversationId, callIds: repaired.restoredCallIds });
+      input.push({ role: 'user', content: [{ type: 'input_text', text }] });
+      this.store.setSetting(historyKey, JSON.stringify(input));
       while (!controller.signal.aborted) {
+        round++;
         const settings = await this.ports.settings();
         const context = `\nCurrent comparison board: ${JSON.stringify(this.store.playground()[conversationId] ?? [])}\nCurrent generation jobs: ${JSON.stringify(this.store.jobs().filter(j => j.conversationId === conversationId).map(j => ({ id: j.id, status: j.status, assetId: j.assetId })))}`;
+        this.diagnostics?.record('chat.request_started', { conversationId, messageId: message.id, round, model: settings.model, input: inputSummary(input) });
         const response = await this.ports.chat({ model: settings.model, input, instructions: instructions + context, tools, signal: controller.signal, onText: text => { message.text += text; this.store.updateMessage(message); } });
+        this.diagnostics?.record('chat.request_completed', { conversationId, messageId: message.id, round, requestId: response.requestId, callIds: response.calls.map(call => call.id), output: inputSummary(response.output) });
         message.status = 'completed'; this.store.updateMessage(message);
         input.push(...response.output);
         for (const call of response.calls) {
@@ -130,14 +144,17 @@ export class WorkbenchService {
       this.store.setTurn(conversationId, controller.signal.aborted ? 'cancelled' : 'completed');
     } catch (error) {
       message.status = controller.signal.aborted ? 'cancelled' : 'failed';
-      message.text += `\n${controller.signal.aborted ? 'Response stopped.' : this.ports.safeError(error)}`;
+      const reference = this.diagnostics?.record(controller.signal.aborted ? 'chat.cancelled' : 'chat.failed', { conversationId, messageId: message.id, round, error: diagnosticError(error) });
+      const detail = round > 1 ? 'Assistant follow-up failed. Completed sounds remain in your library; they have not been regenerated.' : 'Chat request failed.';
+      message.text += `\n${controller.signal.aborted ? 'Response stopped.' : `${detail}\n${this.ports.safeError(error)}${logReference(reference)}`}`;
       this.store.updateMessage(message); this.store.setTurn(conversationId, message.status);
     }
   }
   async executeTool(conversationId: string, call: { id: string; name: string; arguments: string }, signal?: AbortSignal): Promise<string> {
     this.requireOpen();
     const recorded = this.store.beginTool(call.id, conversationId, call.name, call.arguments);
-    if (!recorded.fresh) return recorded.result ?? JSON.stringify({ error: 'Tool outcome is uncertain; not replayed.' });
+    if (!recorded.fresh) { this.diagnostics?.record('tool.restored', { conversationId, callId: call.id, name: call.name }); return recorded.result ?? JSON.stringify({ error: 'Tool outcome is uncertain; not replayed.' }); }
+    this.diagnostics?.record('tool.started', { conversationId, callId: call.id, name: call.name });
     try {
       const schema = toolSchemas[call.name as keyof typeof toolSchemas];
       if (!schema) throw new Error('Unknown assistant tool.');
@@ -159,8 +176,10 @@ export class WorkbenchService {
         case 'set_playground': this.store.setPlayground(conversationId, (args as { assetIds: string[] }).assetIds); this.store.addMessage(conversationId, 'tool', 'Updated the comparison playground.'); result = { updated: true }; break;
         case 'inspect_jobs': result = this.store.jobs().filter(j => j.conversationId === conversationId); break;
       }
-      const output = JSON.stringify(result); this.store.finishTool(call.id, output); return output;
+      const output = JSON.stringify(result); this.store.finishTool(call.id, output);
+      this.diagnostics?.record('tool.completed', { conversationId, callId: call.id, name: call.name }); return output;
     } catch (error) {
+      this.diagnostics?.record('tool.failed', { conversationId, callId: call.id, name: call.name, error: diagnosticError(error) });
       const output = JSON.stringify({ error: this.ports.safeError(error) }); this.store.finishTool(call.id, output);
       this.store.addMessage(conversationId, 'tool', `Could not ${call.name.replaceAll('_', ' ')}: ${this.ports.safeError(error)}`, 'failed'); return output;
     }
@@ -170,4 +189,16 @@ export class WorkbenchService {
     this.stopped = true; for (const controller of this.turns.values()) controller.abort(); this.activeJob?.controller.abort();
     await this.idle();
   }
+}
+
+function logReference(reference: string | null | undefined): string {
+  return reference ? `\nDiagnostic reference: ${reference}. Open Settings → Open diagnostic logs for details.` : '';
+}
+
+function inputSummary(input: unknown[]) {
+  return { count: input.length, items: input.slice(-200).map(item => {
+    if (!item || typeof item !== 'object') return { type: 'invalid' };
+    const value = item as Record<string, unknown>;
+    return { type: value.type, role: value.role, callId: value.call_id };
+  }) };
 }

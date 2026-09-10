@@ -32,11 +32,21 @@ and live-provider acceptance are recorded separately.
 
 ## Live acceptance
 
-Pending: real account login and persisted tokens after reopening, account/model
-access, chat/tool execution, a user-requested ElevenLabs generation, and playback
-in the installed app. The installed app is available for the user to connect their
-accounts. These checks are not inferred from builds or synthetic tests.
+On 2026-09-10 the user reported successful live chat and a first ElevenLabs sound,
+followed by a Codex HTTP 400 during the assistant follow-up. A read-only inspection
+of this app's library confirmed one completed job and an orphaned function-call
+output in wire history. The original provider error body was discarded by the old
+adapter and cannot be recovered retrospectively.
 
-No sibling-app credentials were read or copied, and no paid provider call has been
-made in this implementation session. No actual listener judgment has been recorded;
-valid decoding, waveform display, and hashes do not establish creative quality.
+The follow-up fix preserves streamed calls when terminal output is empty/partial,
+repairs affected histories from the completed tool ledger, and saves diagnostics.
+Validation: type checking, 54 unit tests, and the Electron workflow test passed.
+Regression tests use the actual Codex adapter with synthetic responses and confirm
+matching calls/results, one generation, persisted history, detailed HTTP errors,
+redaction, log references, and repair without generation. The Electron test also
+checks opening the logs folder and written diagnostics.
+
+Pending: live follow-up after this fix, token persistence after reopening, and
+packaged-app playback. No additional paid generation was made while debugging.
+No sibling-app credentials were read or copied. No actual listener judgment has
+been recorded; decoding, waveform display, and hashes do not establish creative quality.
