@@ -58,3 +58,9 @@ layout check injected 200 long messages, 30 conversation rows, and tall workspac
 content. At 1440×940 and 1000×650 content sizes, document height matched window
 height, message history scrolled internally, and the composer remained visible.
 The temporary app and profile were closed and removed after validation.
+
+Chat auto-scroll validation: type checking and the production build passed. An
+isolated Electron check with 60 long messages and incremental text updates confirmed
+following at the bottom, preservation of a manual wheel-scroll position, resuming
+after scrolling back down, and jumping to the latest content on send. The outer
+document stayed at scroll position zero; the temporary app/profile were cleaned up.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Asset, AssetPatch, GenerationInput, Job, Review, Snapshot } from '../shared/types'
 
 type Tab = 'library' | 'playground'
@@ -113,9 +113,26 @@ function AudioCard({ asset, onSelect, selected, onPlay, playerKey, isPlaying, co
 
 function ChatSidebar({ snapshot, selectedId, onSelect, onNew, onSend, onStop, onSettings }: { snapshot: Snapshot; selectedId: string | null; onSelect: (id: string) => void; onNew: () => void; onSend: (text: string) => Promise<boolean>; onStop: () => void; onSettings: () => void }) {
   const [text, setText] = useState('')
+  const historyRef = useRef<HTMLDivElement>(null)
+  const followOutput = useRef(true)
+  const previousConversation = useRef(selectedId)
   const messages = snapshot.messages.filter(message => message.conversationId === selectedId)
   const active = selectedId ? snapshot.activeTurns.includes(selectedId) : false
-  const submit = async () => { if (!text.trim() || active) return; const draft = text.trim(); if (await onSend(draft)) setText('') }
+  useLayoutEffect(() => {
+    if (previousConversation.current !== selectedId) {
+      previousConversation.current = selectedId
+      followOutput.current = true
+    }
+    const history = historyRef.current
+    if (history && followOutput.current) history.scrollTop = history.scrollHeight
+  }, [selectedId, snapshot.messages, active])
+  const submit = async () => {
+    if (!text.trim() || active) return
+    const draft = text.trim()
+    followOutput.current = true
+    if (historyRef.current) historyRef.current.scrollTop = historyRef.current.scrollHeight
+    if (await onSend(draft)) setText('')
+  }
   return <aside className="chat-sidebar">
     <div className="brand-row"><div className="brand-mark"><Icon name="spark" /></div><div><strong>SFXCHAT</strong><span>sound workbench</span></div><span className="live-indicator" title="Local workbench ready" /></div>
     <div className="sidebar-heading"><span>Conversations</span><button className="icon-button" onClick={onNew} aria-label="New conversation"><Icon name="plus" /></button></div>
@@ -124,7 +141,10 @@ function ChatSidebar({ snapshot, selectedId, onSelect, onNew, onSend, onStop, on
     </div>
     <div className="sidebar-chat">
       {selectedId ? <>
-        <div className="chat-history" aria-live="polite">
+        <div className="chat-history" ref={historyRef} aria-live="polite" onScroll={event => {
+          const history = event.currentTarget
+          followOutput.current = history.scrollHeight - history.scrollTop - history.clientHeight <= 24
+        }}>
           {messages.length === 0 && <div className="chat-welcome"><Icon name="spark" /><p>Describe a sound and I’ll help shape it into a usable brief.</p></div>}
           {messages.map(message => <div key={message.id} className={`message message-${message.role}`}><span className="message-role">{message.role === 'user' ? 'You' : message.role === 'tool' ? 'Activity' : 'SfxChat'}</span><p>{message.text}</p>{message.status !== 'completed' && <span className={`message-status message-${message.status}`}>{message.status}</span>}</div>)}
           {active && <div className="typing-row"><span className="typing-dots"><i /><i /><i /></span> Working on it…</div>}

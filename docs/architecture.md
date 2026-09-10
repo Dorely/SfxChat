@@ -16,6 +16,9 @@ and `Store`; provider-specific transports sit behind service ports.
 
 The shell is constrained to the window height. Conversation history and workspace
 content scroll inside their panels, keeping the chat composer and headers visible.
+Chat follows streamed output while the reader is at the bottom. Scrolling up pauses
+following; returning to the bottom, sending a message, or selecting a conversation
+returns to the latest content. This follow state belongs only to the renderer.
 
 ## Persistence and originals
 
