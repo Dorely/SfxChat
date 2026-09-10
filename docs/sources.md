@@ -34,8 +34,6 @@ These links were present in the inherited material. They were not fetched or ver
 - ElevenLabs [terms](https://elevenlabs.io/terms-of-use) and [use policy](https://elevenlabs.io/use-policy): generated-output rights are distinct from the skill's MIT license. Do not infer media redistribution rights from copied code licensing.
 - Google [Gemini audio input](https://ai.google.dev/gemini-api/docs/audio), [thinking controls](https://ai.google.dev/gemini-api/docs/thinking), and [pricing](https://ai.google.dev/gemini-api/docs/pricing).
 
-## Exact source-file fingerprints
-
 ## v0.1 implementation verification (2026-09-10 UTC)
 
 The user selected the local Lorekeeper/PixelChat implementations as technical
@@ -64,7 +62,7 @@ Build sources: [electron-vite guide](https://electron-vite.org/guide/),
 [security](https://www.electronjs.org/docs/latest/tutorial/security). Dependencies
 are pinned in the lockfile; Vite 7 is used to satisfy electron-vite 5's peer range.
 
-### Historical fingerprints
+## Historical source-file fingerprints
 
 SHA-256 values below were computed during extraction. Paths are relative to the named source root above. For vendored files the destination bytes match the installed source bytes; other files are attribution for summarized material, not copied payloads.
 

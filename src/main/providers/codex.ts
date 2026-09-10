@@ -84,6 +84,7 @@ export class CodexClient {
         case 'response.output_item.done': { const item = event.item; if (item?.type === 'function_call') { const call = upsertCall(item); if (call) { if (typeof item.arguments === 'string') call.arguments = item.arguments; call.done = true; } } break; }
         case 'response.completed': case 'response.done':
           if (event.status === 'failed' || event.response?.status === 'failed' || event.error || event.response?.error) throw new Error('Codex response failed.');
+          if (['incomplete', 'cancelled'].includes(event.status ?? event.response?.status)) throw new Error('Codex response was incomplete.');
           completed = true;
           usage = event.response?.usage ?? event.usage;
           if (Array.isArray(event.response?.output)) responseOutput = event.response.output;
@@ -117,7 +118,20 @@ export class CodexClient {
     if (!completed) throw new Error('Codex response stream ended before completion.');
     const finishedCalls = orderedCalls;
     if (finishedCalls.some(call => !call.done)) throw new Error('Codex response stream ended during a tool call.');
-    if (responseOutput) output.push(...responseOutput);
+    if (responseOutput) {
+      // Like the reference apps, retain message/tool content rather than opaque
+      // reasoning item IDs that cannot be retrieved when store=false.
+      for (const item of responseOutput) {
+        if (item.type === 'message') {
+          const content = (item.content ?? []).flatMap((part: any) => part.type === 'output_text' ? [{ type: 'output_text', text: part.text }] : part.type === 'refusal' ? [{ type: 'output_text', text: part.refusal }] : []);
+          if (content.length) output.push({ type: 'message', role: 'assistant', content });
+        } else if (item.type === 'function_call') output.push({ type: 'function_call', call_id: item.call_id, name: item.name, arguments: item.arguments });
+      }
+      if (!text) {
+        const finalText = output.filter(item => item.type === 'message').flatMap(item => item.content.map((part: any) => part.text)).join('');
+        if (finalText) await args.onText?.(finalText);
+      }
+    }
     else {
       for (const entry of sequence) {
         if (entry.kind === 'text') output.push({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] });

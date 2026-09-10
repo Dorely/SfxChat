@@ -29,7 +29,18 @@ export class WorkbenchService {
     const settings = await this.ports.settings();
     this.requireOpen();
     if (!settings.elevenLabsReady) throw new Error('Add your ElevenLabs API key in Settings first.');
-    const jobs = this.store.createJobs(conversationId, input, callId);
+    const jobs: ReturnType<Store['createJobs']> = [];
+    const requested = input.count ?? 1;
+    if (requested > 128) this.store.addMessage(conversationId, 'tool', `Preparing ${requested} requested candidates. If the app closes during preparation, only already queued candidates will run.`);
+    for (let remaining = requested; remaining > 0;) {
+      this.requireOpen();
+      const count = Math.min(128, remaining);
+      jobs.push(...this.store.createJobs(conversationId, { ...input, count }, callId));
+      remaining -= count;
+      // Yield between transactions so even large explicit requests leave the UI
+      // and shutdown responsive. This is an admission chunk, not a count limit.
+      if (remaining) await new Promise<void>(resolve => setImmediate(resolve));
+    }
     this.store.addMessage(conversationId, 'tool', `Queued ${jobs.length} sound${jobs.length === 1 ? '' : 's'}: ${input.prompt}`);
     this.pump(); return { jobIds: jobs.map(j => j.id) };
   }

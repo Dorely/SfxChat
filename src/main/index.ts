@@ -12,6 +12,8 @@ import { commandSchemas, idSchema } from './validation';
 import { mockPorts } from './testing';
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'sfx-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
+app.setName('SfxChat');
+app.setPath('userData', join(app.getPath('appData'), 'SfxChat'));
 const testMode = !app.isPackaged && process.env.SFXCHAT_TEST_MODE === '1';
 if (testMode && process.env.SFXCHAT_TEST_DATA) app.setPath('userData', process.env.SFXCHAT_TEST_DATA);
 let window: BrowserWindow | null = null;

@@ -1,52 +1,82 @@
-# SfxChat architecture direction
+# SfxChat architecture
 
-## Status and provisional stack
+## Runtime and ownership
 
-Only documentation and inherited API knowledge exist. No runtime, public API, schema, authentication implementation, or storage backend has been created.
+v0.1 uses Electron, React/TypeScript, electron-vite, and electron-builder with a
+Windows x64 NSIS target. Exact versions live in the lockfile. This document describes
+implementation; [verification](verification.md) records actual checks.
+[VISION](../VISION.md) remains product intent.
 
-Electron with React/TypeScript is the likely desktop stack, subject to confirmation at implementation kickoff. A .NET host and Blazor UI are not planned. No bundler, application framework, dependency versions, packaging matrix, database engine, or IPC protocol is selected by this foundation.
+The main process owns persistence, media, providers, credentials, jobs, and turns.
+React owns presentation, selection, forms, and audition controls. The sandboxed,
+isolated preload exposes fixed typed operations. Every IPC call validates arguments
+and verifies the requesting main frame. The renderer has no Node integration or
+general filesystem/shell tool. UI and assistant tools share `WorkbenchService`
+and `Store`; provider-specific transports sit behind service ports.
 
-The first feature session should choose those concrete runtime details and update this document with the resulting implementation and verified commands. These deferred implementation choices do not block this documentation milestone.
+## Persistence and originals
 
-## Intended ownership and data flow
+SQLite uses WAL, foreign keys, transactional migrations, and FTS5 search. Schema v1
+stores conversations, messages, assets, jobs, Playground ordering, settings/wire
+history, turn state, and a tool-call ledger. Newer schema versions are rejected.
+Search covers names, descriptions, tags, collections, prompts, reviews, and feedback.
 
-The UI and the assistant should request operations through shared application services. Those services own library changes, generation workflows, and revisions; provider adapters own external transport; persistence owns durable records and media references. Visible status and results flow back to both chat and the workbench.
+Original files live at `originals/<asset-id>.<format>`. Unique temporary writes are
+renamed before database registration. Provenance includes SHA-256, bytes, probed
+duration, exact prompt/settings, request ID/usage when returned, and revision parent.
+Invalid returned audio remains preserved but fails its job. A crash between file
+write and database commit can leave an unreferenced original; startup does not delete
+it or regenerate. Imports validate WAV/MP3 before copying. Export verifies hashes
+and refuses existing destinations. Playback gain never changes files.
 
-- **UI:** conversation, provider settings, library browsing/search, playback, comparison, and manual corrections. Keep authoritative workflow behavior outside presentation components.
-- **Assistant:** specialist guidance, tool orchestration, task context, and progress. Library management tools should perform the same operations available through manual controls.
-- **Providers:** separate Codex chat authentication from ElevenLabs/Gemini audio capabilities. Resolve available models/capabilities through the owning adapter. Do not assume interchangeable payloads or that audio understanding implies music generation.
-- **Background work:** own generation jobs and active assistant turns outside renderer lifetimes. Future implementation must account for cancellation, renderer reload, interrupted jobs, and uncertain provider outcomes without accidental duplicate billing.
-- **Libraries:** preserve audio files and durable searchable metadata, including names, collections, traits/tags, original prompts, provider/model/request information, source hashes, derived versions, and review notes. Choose physical file layout, indexing, and persistence only when building this capability.
-- **Knowledge:** the current Markdown bundle is developer/agent-accessible. Later runtime prompt composition or retrieval must deliberately load relevant expert guidance; copying documents alone does not make a runtime assistant knowledgeable.
+The `sfx-media://asset/<uuid>` protocol resolves only known assets and supports byte
+ranges. The UI never supplies arbitrary local paths for media access.
 
-## Credential and desktop boundaries
+## Jobs and turns
 
-API keys should be entered through app settings and persisted using an OS-backed secure storage facility. OAuth tokens need the same protection. Keep secret resolution and external requests in privileged application code behind narrow operations; expose only readiness/masked status to normal UI reads and assistant tools. Credential entry is a transient save operation, not a reason to keep a key in browser storage.
+Each candidate is a durable job persisted before sequential dispatch. Requests run
+without extra spending approvals or app-imposed count limits. Cancelling queued work
+prevents dispatch. Cancellation after dispatch or interrupted transport means an
+uncertain outcome; no billed request is silently retried. A fully received result
+is retained even if cancellation races it.
 
-Do not use plaintext SQLite rows, browser local storage, logs, manifests, or committed settings as the credential store. If OS-backed protection is unavailable, report the configuration problem instead of silently falling back to plaintext. Select and verify the actual platform mechanism when implementing settings.
+Large explicit requests are admitted in transactions of up to 128 jobs, yielding
+between transactions to keep shutdown responsive. This is not a candidate limit.
+If the app closes during preparation, only candidates already queued are retained;
+the activity message explains this before admission begins.
 
-If Electron is adopted, define a restricted preload/IPC boundary and renderer isolation when scaffolding it. Shell execution or unrestricted filesystem access is not an implied assistant capability.
+Chat runs outside renderer lifetimes and persists streamed messages/activity.
+Runtime instructions and tool definitions deliberately provide sound-design guidance.
+The generation tool waits for results so the assistant can organize returned assets.
+Its initial job IDs are recorded atomically with creation. Duplicate tool calls
+return durable results; conflicting IDs are rejected. Stopping a turn stops its wait;
+jobs have separate cancellation controls.
 
-## Reference applications
+On restart, running jobs become uncertain, running messages become interrupted,
+and undispatched jobs remain eligible. Interrupted tools are not re-executed.
+Closing the app aborts active work and closes the database after shutdown. There is
+no installed background service or tray process.
 
-These are inspected precedents, not dependencies. Their local source locations and snapshot revisions are recorded in [sources](sources.md).
+## Providers and credentials
 
-| Reference | Useful lessons | Boundary for reuse |
-| --- | --- | --- |
-| Lorekeeper | App-process chat turns, provider transport separation, streamed tool operations, operation-owned persistence, background jobs and recovery. | Learn the ownership and lifecycle patterns; do not copy its book domain, .NET host, or entire framework. |
-| PixelChat | Creative asset workflows, generation provenance, review decisions, reusable guidance, and shared actions for UI and assistant tools. | Adapt the creative workflow to audio; avoid importing image editors, sprite models, or Blazor components. |
-| Shellmate | Focused specialist chat, visible tool progress, and a turn runtime that survives UI navigation. | Use as a secondary comparison; shell/terminal access is not part of SfxChat's foundation. |
+Codex directly adapts Lorekeeper/PixelChat OAuth PKCE and Responses SSE, with no CLI.
+The adapter owns account headers/claims, message/tool events, refresh rotation, and
+safe errors. A temporary localhost 1455 callback validates state and expiry.
+Account and model access require real integration verification.
 
-The inspected reference apps persist credential/token values in local database storage; their implementations do not establish OS-backed encryption. SfxChat must meet its secure-storage requirement independently.
+`SecureStore` encrypts values with Electron `safeStorage` before atomic writes under
+the profile's `secrets/`. Windows protection is OS-backed; unavailable encryption
+fails explicitly. Plaintext credentials do not enter SQLite, settings reads, tools,
+or diagnostics. Key entry is transient. Sibling-app auth caches are never imported.
 
-Lorekeeper's inspected Codex integration uses account OAuth/PKCE and a Codex Responses transport. Record this as local implementation evidence, not an assurance that its endpoint/client configuration is a supported contract for a new app. Verify current authentication guidance before selecting SfxChat's integration; never copy an existing account's tokens or database.
+ElevenLabs resolves its key at dispatch and preserves the SFX HTTP response as MP3.
+HTTP status failures and uncertain transport outcomes are distinct. Production
+provider requests have a three-minute timeout. Music and Gemini are deferred.
 
-## API handoff and next implementation work
+## Verification boundaries
 
-The [knowledge index](knowledge/README.md) contains ElevenLabs SFX request/prompt handling and Gemini audio-input lessons. Music generation, broader expert sound-design knowledge, and up-to-date provider capability research remain future work.
-
-Next: confirm the desktop runtime, establish an empty app with clear boundaries, then define a small vertical slice covering authenticated chat, securely configured provider access, one audio-generation workflow, audition, and searchable persisted results. This is a suggested sequence, not an authorization to implement it as part of the foundation.
-
-## Verification now
-
-For this milestone, check document links, file-map coverage, attribution, exact copies of the vendored skill/license, secret exclusion, and consistent status wording. There are no application build or runtime checks to run. Future integration claims require testing the actual provider and target platform; compilation alone will not prove login or secure storage.
+Unit tests run inside Electron's Node for SQLite ABI compatibility. Playwright runs
+the actual shell with temporary profiles and deterministic provider ports; packaged
+builds refuse mock mode. The fixture is a synthetic tone, not a quality sample.
+Windows CI builds an unsigned installer without credentials. Signing, updates, and
+other-platform packaging are deferred.

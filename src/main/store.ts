@@ -99,7 +99,11 @@ export class Store {
         const job: Job = { id: randomUUID(), conversationId, status: 'queued', input: { ...input, count: 1 }, assetId: null, error: null, createdAt: now() };
         this.db.prepare('INSERT INTO jobs VALUES (?,?,?,?)').run(job.id, conversationId, job.status, JSON.stringify(job)); jobs.push(job);
       }
-      if (toolCallId) this.db.prepare('UPDATE tool_calls SET status=?,result=? WHERE id=?').run('waiting', JSON.stringify({ jobIds: jobs.map(j => j.id) }), toolCallId);
+      if (toolCallId) {
+        const row = this.db.prepare('SELECT result FROM tool_calls WHERE id=?').get(toolCallId) as { result: string | null } | undefined;
+        const earlier = row?.result ? JSON.parse(row.result).jobIds ?? [] : [];
+        this.db.prepare('UPDATE tool_calls SET status=?,result=? WHERE id=?').run('waiting', JSON.stringify({ jobIds: [...earlier, ...jobs.map(j => j.id)] }), toolCallId);
+      }
     })();
     this.changed(); return jobs;
   }

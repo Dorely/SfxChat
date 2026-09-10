@@ -1,7 +1,7 @@
 # SfxChat file map
 
-Current state: v0.1 implementation in progress. The application foundation includes
-typed operations, durable chat/jobs/library storage, and provider-independent services.
+Current state: v0.1 Windows desktop application. Actual platform/provider evidence
+is recorded in [verification](docs/verification.md).
 
 ## Root
 
@@ -11,6 +11,7 @@ typed operations, durable chat/jobs/library storage, and provider-independent se
 | [VISION.md](VISION.md) | Product intent for specialist chat, audio creation/review, and assistant-managed libraries. |
 | [README.md](README.md) | Current status and entry point for the next development session. |
 | [LICENSE](LICENSE) | MIT license for SfxChat. |
+| [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | Dependency, vendored-skill, fixture, and audio-license notices. |
 | [FILEMAP.md](FILEMAP.md) | This map of actual project files. |
 | [.gitignore](.gitignore) | Excludes credentials, local data, generated media, dependencies, and build artifacts. |
 | [.gitattributes](.gitattributes) | LF conventions for authored text and byte-preserving vendored skill handling. |
@@ -19,7 +20,8 @@ typed operations, durable chat/jobs/library storage, and provider-independent se
 
 | File | Responsibility |
 | --- | --- |
-| [docs/architecture.md](docs/architecture.md) | Provisional Electron/React direction, ownership boundaries, security requirements, and reference-app lessons. |
+| [docs/architecture.md](docs/architecture.md) | Implemented runtime ownership, persistence, providers, and recovery. |
+| [docs/verification.md](docs/verification.md) | Actual automated/platform checks and live acceptance status. |
 | [docs/implementation-plan.md](docs/implementation-plan.md) | Accepted v0.1 scope, delivery sequence, and verification requirements. |
 | [docs/sources.md](docs/sources.md) | Source locations, revision/date/hash provenance, copy policy, and original documentation links. |
 | [docs/knowledge/README.md](docs/knowledge/README.md) | API bundle navigation, historical-status caveats, and research boundaries. |
@@ -42,6 +44,7 @@ typed operations, durable chat/jobs/library storage, and provider-independent se
 | [tsconfig.json](tsconfig.json) | Strict TypeScript configuration. |
 | [electron.vite.config.ts](electron.vite.config.ts), [electron-builder.yml](electron-builder.yml) | Desktop builds and unsigned Windows NSIS packaging. |
 | [vitest.config.ts](vitest.config.ts), [scripts/test.mjs](scripts/test.mjs) | Unit tests using Electron's Node runtime and native-module ABI. |
+| [scripts/smoke-installed.mjs](scripts/smoke-installed.mjs) | Installed-app startup, native SQLite, secure-storage availability, and packaged-mode isolation checks. |
 | [src/shared/types.ts](src/shared/types.ts) | Renderer/preload/application operation and snapshot contracts. |
 | [src/main/store.ts](src/main/store.ts) | SQLite schema migration, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
 | [src/main/media.ts](src/main/media.ts) | Original audio storage, probing, import, hashing, and exact-byte export. |
@@ -58,3 +61,8 @@ typed operations, durable chat/jobs/library storage, and provider-independent se
 | [src/main/providers/secrets.ts](src/main/providers/secrets.ts) | Atomic encrypted credential storage using injected OS protection. |
 | [src/main/testing.ts](src/main/testing.ts) | Deterministic development-only provider ports for Electron tests. |
 | [tests/providers.test.ts](tests/providers.test.ts) | Secure-store, OAuth, streamed chat/tool, and SFX transport tests. |
+| [src/renderer/index.html](src/renderer/index.html), [src/renderer/main.tsx](src/renderer/main.tsx) | Renderer entrypoint and content security policy. |
+| [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Chat, Library, Playground, audition, inspector, settings, and styling. |
+| [playwright.config.ts](playwright.config.ts), [tests/workbench.spec.ts](tests/workbench.spec.ts) | Mocked Electron workflow, playback, persistence, and Windows secure-storage checks. |
+| [tests/lifecycle.test.ts](tests/lifecycle.test.ts) | Shutdown, tool recovery, conversation attribution, and chat round-trip regressions. |
+| [.github/workflows/windows.yml](.github/workflows/windows.yml) | Credential-free Windows tests and installer artifact build. |

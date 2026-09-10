@@ -27,6 +27,13 @@ describe('SecureStore', () => {
     const store = new SecureStore({ directory, isAvailable: () => false, encrypt: value => value, decrypt: bytes => bytes.toString() });
     await expect(store.set('x', 'secret')).rejects.toThrow(/unavailable/i);
   });
+
+  it('does not write plaintext when encryption fails', async () => {
+    const directory = await fs.mkdtemp(join(tmpdir(), 'sfxchat-secrets-')); cleanup.push(directory);
+    const store = new SecureStore({ directory, isAvailable: () => true, encrypt: () => { throw new Error('synthetic encryption failure'); }, decrypt: bytes => bytes.toString() });
+    await expect(store.set('codex', 'must-not-leak')).rejects.toThrow(/encryption/i);
+    expect(await fs.readdir(directory)).toEqual([]);
+  });
 });
 
 describe('CodexAuth', () => {
@@ -62,6 +69,69 @@ describe('CodexAuth', () => {
     await expect(auth.getAccessToken()).rejects.toThrow(/signed in/i);
   });
 
+  it('shares one refresh request between concurrent callers', async () => {
+    let resolveRefresh!: (response: Response) => void;
+    const store = memoryStore(JSON.stringify({ accessToken: 'expired', refreshToken: 'refresh.concurrent', expiresAt: 0 }));
+    const fetcher = vi.fn(() => new Promise<Response>(resolve => { resolveRefresh = resolve; }));
+    const auth = new CodexAuth({ store, openExternal: () => undefined, fetch: fetcher });
+    const first = auth.getAccessToken(); const second = auth.getAccessToken();
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    resolveRefresh(new Response(JSON.stringify({ access_token: 'access.concurrent', expires_in: 3600 }), { status: 200 }));
+    await expect(Promise.all([first, second])).resolves.toEqual(['access.concurrent', 'access.concurrent']);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves an omitted refresh token and uses rotated tokens on the next expiry', async () => {
+    let clock = 1_000_000; const requests: string[] = [];
+    const store = memoryStore(JSON.stringify({ accessToken: 'expired', refreshToken: 'refresh.original', expiresAt: 0 }));
+    const responses = [
+      new Response(JSON.stringify({ access_token: 'access.one', expires_in: 10 }), { status: 200 }),
+      new Response(JSON.stringify({ access_token: 'access.two', expires_in: 3600 }), { status: 200 }),
+    ];
+    const fetcher: typeof fetch = vi.fn(async (_input, init) => { requests.push(String(init?.body)); return responses.shift()!; });
+    const auth = new CodexAuth({ store, openExternal: () => undefined, fetch: fetcher, now: () => clock });
+    await expect(auth.getAccessToken()).resolves.toBe('access.one');
+    clock += 3_600_001;
+    await expect(auth.getAccessToken()).resolves.toBe('access.two');
+    expect(requests[0]).toContain('refresh_token=refresh.original');
+    expect(requests[1]).toContain('refresh_token=refresh.original');
+
+    clock = 2_000_000; const rotatedStore = memoryStore(JSON.stringify({ accessToken: 'expired', refreshToken: 'refresh.before', expiresAt: 0 }));
+    const rotatedRequests: string[] = [];
+    const rotatedResponses = [
+      new Response(JSON.stringify({ access_token: 'access.rotated', refresh_token: 'refresh.after', expires_in: 10 }), { status: 200 }),
+      new Response(JSON.stringify({ access_token: 'access.after-rotation', expires_in: 3600 }), { status: 200 }),
+    ];
+    const rotatedFetch: typeof fetch = vi.fn(async (_input, init) => { rotatedRequests.push(String(init?.body)); return rotatedResponses.shift()!; });
+    const rotatedAuth = new CodexAuth({ store: rotatedStore, openExternal: () => undefined, fetch: rotatedFetch, now: () => clock });
+    await rotatedAuth.getAccessToken(); clock += 3_600_001; await rotatedAuth.getAccessToken();
+    expect(rotatedRequests[1]).toContain('refresh_token=refresh.after');
+  });
+
+  it('does not exchange a wrong or replayed OAuth state', async () => {
+    let opened = ''; const exchange = vi.fn(async () => new Response('{}', { status: 200 }));
+    const auth = new CodexAuth({ store: memoryStore(), openExternal: url => { opened = url; }, fetch: exchange });
+    await auth.startLogin(); const state = new URL(opened).searchParams.get('state')!;
+    await auth.handleCallback('synthetic-code', 'wrong-state');
+    await auth.handleCallback('synthetic-code', state);
+    expect(exchange).not.toHaveBeenCalled();
+    expect(auth.status.error).toMatch(/expired|cancelled/i);
+  });
+
+  it('cannot persist a token when cancellation races a deferred exchange', async () => {
+    let opened = ''; let stored: string | null = null; let resolveExchange!: (response: Response) => void;
+    const set = vi.fn(async (_name: string, value: string) => { stored = value; });
+    const store = { available: async () => true, get: async () => stored, set, delete: async () => { stored = null; } } as unknown as SecureStore;
+    const auth = new CodexAuth({ store, openExternal: url => { opened = url; }, fetch: () => new Promise(resolve => { resolveExchange = resolve; }) });
+    await auth.startLogin(); const state = new URL(opened).searchParams.get('state')!;
+    const exchange = auth.handleCallback('synthetic-code', state);
+    await vi.waitFor(() => expect(resolveExchange).toBeTypeOf('function'));
+    await auth.cancelLogin();
+    resolveExchange(new Response(JSON.stringify({ access_token: 'stale', refresh_token: 'stale-refresh', expires_in: 3600 }), { status: 200 }));
+    await exchange;
+    expect(set).not.toHaveBeenCalled(); expect(stored).toBeNull();
+  });
+
   it('rejects an expired OAuth state and clears the loopback listener', async () => {
     const store = memoryStore(); let opened = ''; let clock = Date.now();
     const auth = new CodexAuth({ store, openExternal: url => { opened = url; }, now: () => clock, fetch: async () => new Response('{}', { status: 500 }) });
@@ -83,6 +153,10 @@ function sse(events: unknown[]): ReadableStream<Uint8Array> {
   const text = events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('');
   const bytes = new TextEncoder().encode(text);
   return new ReadableStream({ start(controller) { controller.enqueue(bytes.slice(0, 13)); controller.enqueue(bytes.slice(13)); controller.close(); } });
+}
+function rawSse(events: string[], onCancel?: () => void): ReadableStream<Uint8Array> {
+  const bytes = new TextEncoder().encode(events.map(event => `data: ${event}\n\n`).join(''));
+  return new ReadableStream({ start(controller) { controller.enqueue(bytes); if (!onCancel) controller.close(); }, cancel() { onCancel?.(); } });
 }
 
 describe('Codex transport', () => {
@@ -118,6 +192,18 @@ describe('Codex transport', () => {
       { type: 'response.function_call_arguments.delta', item_id: 'item', delta: '{"x":' },
       { type: 'response.completed' },
     ]), { status: 200 }) })).rejects.toThrow(/tool call/i);
+  });
+
+  it('requires an explicit completed event', async () => {
+    await expect(streamChat({ token: jwtWithAccount(), input: [] }, { fetch: async () => new Response(rawSse(['[DONE]']), { status: 200 }) })).rejects.toThrow(/before completion/i);
+    await expect(streamChat({ token: jwtWithAccount(), input: [] }, { fetch: async () => new Response(rawSse([JSON.stringify({ type: 'response.done', response: { status: 'incomplete' } })]), { status: 200 }) })).rejects.toThrow(/incomplete/i);
+  });
+
+  it('cancels a stream that stays open after completion', async () => {
+    let cancelled = false;
+    const stream = rawSse([JSON.stringify({ type: 'response.completed', response: { status: 'completed', output: [] } })], () => { cancelled = true; });
+    await expect(streamChat({ token: jwtWithAccount(), input: [] }, { fetch: async () => new Response(stream, { status: 200 }) })).resolves.toMatchObject({ output: [], calls: [] });
+    expect(cancelled).toBe(true);
   });
 });
 

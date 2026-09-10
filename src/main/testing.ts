@@ -18,7 +18,7 @@ export function mockPorts(audioPath: string, model: () => string): ServicePorts 
         const call = { id: `mock-${randomUUID()}`, name: 'generate_sounds', arguments: JSON.stringify({ prompt: 'A short bright UI confirmation chime', count: 2, duration: 1 }) };
         return { calls: [call], output: [{ type: 'function_call', call_id: call.id, name: call.name, arguments: call.arguments }] };
       }
-      const text = last?.type === 'function_call_output' ? 'Two candidates are queued. Audition them in the playground and tell me which direction fits.' : 'Describe a sound, and we can create and compare a few ideas.';
+      const text = last?.type === 'function_call_output' ? 'Two candidates are ready. Audition them in the playground and tell me which direction fits.' : 'Describe a sound, and we can create and compare a few ideas.';
       onText(text);
       return { calls: [], output: [{ role: 'assistant', content: [{ type: 'output_text', text }] }] };
     }
