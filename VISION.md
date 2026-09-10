@@ -9,6 +9,7 @@ Its assistant should combine sound-design knowledge with skill in prompting AI a
 - Start from a description, a reference, an imported sound, or an existing library item.
 - Help translate intent into a clear brief and effective provider-specific prompts. Use small, informative sets of alternatives and preserve useful feedback between iterations.
 - Generate and refine sound effects and music through suitable provider capabilities. Let the assistant select and switch between configured services according to the task, available capabilities, and authorized spending.
+- A request to create sounds should lead directly to generation, without separate spending approvals or app-imposed generation allowances.
 - Make audition and comparison central: playback, repeated-use testing, useful technical checks, and listener decisions should inform revisions.
 - Preserve originals, derived versions, exact generation prompts, provenance, and feedback so users can understand how a result was made and repeat useful workflows.
 
@@ -30,10 +31,6 @@ Users should be able to search by traits, tags, descriptions, and initial genera
 
 SfxChat is a focused creative tool for building, testing, and managing audio. It should make iteration approachable while retaining enough provenance and control for serious production work. Library management is a core assistant responsibility.
 
+Chat lives alongside the audio workspace: a resizable left sidebar takes roughly one third of the window, while the right side switches between the library and a playground for comparing sounds. Users and the assistant can arrange candidates in the playground and carry useful feedback into the next iteration.
+
 PixelChat provides a useful precedent for creative iteration and asset review. Lorekeeper provides technical lessons for persistent chat, tool execution, and background work. Their product domains and .NET/Blazor implementations are not SfxChat requirements.
-
-## Current phase
-
-This repository contains project documents and inherited API knowledge only. No application, login, providers, playback, libraries, or secure credential store is implemented.
-
-Electron with React/TypeScript is the likely desktop direction, explicitly provisional. The next phase should confirm the runtime foundation, research current authentication/provider contracts, and define a small end-to-end feature slice. Broader sound-design and AI music prompting research belongs to that later phase.
