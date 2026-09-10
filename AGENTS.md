@@ -14,13 +14,6 @@
 - Preserve unrelated user changes. Do not discard work, rewrite history, publish, or create remotes without authorization.
 - Finish each coherent task with a reviewed, focused commit and verify a clean working tree.
 
-## Cost-conscious delegation in Codex
-
-- Use `gpt-5.6-luna` subagents for bounded development, documentation, and inspection work they can reasonably complete. This is a Codex cost preference, not a requirement for other harnesses.
-- Provide relevant context, boundaries, expected output, and verification criteria. Assign separate file ownership for concurrent edits.
-- The main agent owns integration, review, and commits. Keep difficult architecture, troubleshooting, and perceptual audio judgments with the main agent unless a specific bounded assignment supports delegation.
-- Avoid coordination overhead for trivial work.
-
 ## Implementation practices
 
 - Inspect callers and downstream effects before editing. Use `rg` for file and text discovery.
