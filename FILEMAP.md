@@ -1,6 +1,7 @@
 # SfxChat file map
 
-Current state: documentation and API knowledge only. No application source, runtime interfaces, migrations, tests, or build outputs exist.
+Current state: v0.1 implementation in progress. The application foundation includes
+typed operations, durable chat/jobs/library storage, and provider-independent services.
 
 ## Root
 
@@ -33,4 +34,19 @@ Current state: documentation and API knowledge only. No application source, runt
 | [.agents/skills/elevenlabs-sound-effects/references/installation.md](.agents/skills/elevenlabs-sound-effects/references/installation.md) | Exact upstream CLI/SDK installation and authentication examples; no packages are installed by this copy. |
 | [.agents/skills/elevenlabs-sound-effects/LICENSE](.agents/skills/elevenlabs-sound-effects/LICENSE) | Original ElevenLabs MIT license for the copied skill material. |
 
-Future application files belong here only after they are created. Intended capabilities and unresolved runtime choices live in VISION and architecture.
+## Application foundation
+
+| File | Responsibility |
+| --- | --- |
+| [package.json](package.json), [package-lock.json](package-lock.json) | Pinned runtime/development dependencies and build/test/package commands. |
+| [tsconfig.json](tsconfig.json) | Strict TypeScript configuration. |
+| [electron.vite.config.ts](electron.vite.config.ts), [electron-builder.yml](electron-builder.yml) | Desktop builds and unsigned Windows NSIS packaging. |
+| [vitest.config.ts](vitest.config.ts), [scripts/test.mjs](scripts/test.mjs) | Unit tests using Electron's Node runtime and native-module ABI. |
+| [src/shared/types.ts](src/shared/types.ts) | Renderer/preload/application operation and snapshot contracts. |
+| [src/main/store.ts](src/main/store.ts) | SQLite schema migration, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
+| [src/main/media.ts](src/main/media.ts) | Original audio storage, probing, import, hashing, and exact-byte export. |
+| [src/main/validation.ts](src/main/validation.ts) | Runtime validation of privileged operations and generation inputs. |
+| [src/main/service.ts](src/main/service.ts) | Shared library operations, sequential generation jobs, chat turns, and tool execution. |
+| [src/main/assistant.ts](src/main/assistant.ts) | Runtime sound-design instructions and assistant tool definitions. |
+| [tests/runtime.test.ts](tests/runtime.test.ts) | Persistence, search, provenance, jobs, tool replay, import/export, and recovery tests. |
+| [tests/fixtures/tone.mp3](tests/fixtures/tone.mp3) | Synthetic 440 Hz test tone, generated locally with FFmpeg; no provider-generated media. |

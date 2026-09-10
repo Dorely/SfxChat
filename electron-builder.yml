@@ -1,0 +1,20 @@
+appId: com.dorely.sfxchat
+productName: SfxChat
+directories:
+  output: release
+files:
+  - out/**/*
+  - package.json
+  - LICENSE
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+win:
+  target: nsis
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  license: LICENSE
+npmRebuild: true

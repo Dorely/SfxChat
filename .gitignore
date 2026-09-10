@@ -44,6 +44,9 @@ generated/
 *.aac
 *.aiff
 *.pcm
+!tests/fixtures/*.mp3
+test-results/
+playwright-report/
 
 # Machine-local editor/OS files
 .idea/
