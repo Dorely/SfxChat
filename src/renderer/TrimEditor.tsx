@@ -86,8 +86,14 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
   useEffect(() => {
     const audio = previewAudioRef.current
     if (!audio) return
-    if (playingKey === previewKey) void audio.play().catch(() => onPlay(previewKey, false))
+    let cancelled = false
+    if (playingKey === previewKey) void audio.play().catch(reason => {
+      if (cancelled) return
+      setError(reason instanceof Error ? reason.message : 'Unable to play the selection.')
+      onPlay(previewKey, false)
+    })
     else audio.pause()
+    return () => { cancelled = true }
   }, [playingKey, previewKey, onPlay, previewUrl])
   useEffect(() => {
     if (previewUrl || playingKey === previewKey) onPlay(previewKey, false)
@@ -109,7 +115,20 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
   const commitEndDraft = () => { if (endDraft === seconds(end)) return; const value = Number(endDraft); const next = clamp(Number.isFinite(value) ? value : end, Math.min(fullEnd, start + 0.001), fullEnd); setEnd(next); setEndDraft(seconds(next)) }
 
   const handlePreview = async () => {
+    const audio = previewAudioRef.current
+    if (playingKey === previewKey) {
+      audio?.pause()
+      if (audio) audio.currentTime = 0
+      onPlay(previewKey, false)
+      return
+    }
     if (!validSelection || previewLoading) return
+    setError(null)
+    if (previewUrl && audio) {
+      audio.currentTime = 0
+      onPlay(previewKey, true)
+      return
+    }
     const previewRequest = ++previewRequestRef.current
     setError(null); setPreviewLoading(true); onPlay(previewKey, false)
     try {
@@ -117,6 +136,7 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
       const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'audio/wav' }))
       if (previewRequest !== previewRequestRef.current) { URL.revokeObjectURL(url); return }
       setPreviewUrl(previous => { if (previous) URL.revokeObjectURL(previous); return url })
+      onPlay(previewKey, true)
     } catch (reason) { if (previewRequest === previewRequestRef.current) setError(reason instanceof Error ? reason.message : 'Unable to render the preview.')
     } finally { if (previewRequest === previewRequestRef.current) setPreviewLoading(false) }
   }
@@ -160,7 +180,7 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
         <div className="trim-fields"><label>Fade in (ms)<input type="number" min="0" max="10000" step="1" value={fadeInMs} onChange={event => setFadeInMs(Math.max(0, Number(event.target.value) || 0))} disabled={saving || !analysis} /></label><label>Fade out (ms)<input type="number" min="0" max="10000" step="1" value={fadeOutMs} onChange={event => setFadeOutMs(Math.max(0, Number(event.target.value) || 0))} disabled={saving || !analysis} /></label></div>
         <label className="trim-name-field">New asset name<input maxLength={200} value={name} onChange={event => setName(event.target.value)} disabled={saving || !analysis} /></label><p className="field-hint trim-analysis-note">Times use decoded audio. Original preserved.</p>{error && <p className="trim-error" role="alert">{error}</p>}{previewUrl && <div className="trim-preview"><span className="field-label">Preview</span><audio ref={previewAudioRef} src={previewUrl} controls onPlay={() => onPlay(previewKey, true)} onPause={() => { if (playingKey === previewKey) onPlay(previewKey, false) }} onEnded={() => { if (playingKey === previewKey) onPlay(previewKey, false) }} /></div>}
       </div>
-      <div className="trim-editor-footer"><button className="secondary-button" onClick={handlePreview} disabled={!validSelection || previewLoading || saving}>{previewLoading ? 'Rendering…' : 'Preview selection'}</button><button className="primary-button" onClick={() => void handleSave()} disabled={!validSelection || loading || saving}>{saving ? 'Saving…' : 'Save as new asset'}</button></div>
+      <div className="trim-editor-footer"><button className="secondary-button" onClick={handlePreview} disabled={!validSelection || previewLoading || saving}><span aria-hidden="true">{playingKey === previewKey ? '■' : '▶'}</span>{previewLoading ? 'Preparing…' : playingKey === previewKey ? 'Stop selection' : 'Play selection'}</button><button className="primary-button" onClick={() => void handleSave()} disabled={!validSelection || loading || saving}>{saving ? 'Saving…' : 'Save as new asset'}</button></div>
     </div>
   </div>
 }

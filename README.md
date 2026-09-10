@@ -62,8 +62,10 @@ only one running instance.
 ## Trim sounds
 
 Open a sound's inspector and choose **Trim as new asset**. Set the in/out points,
-zoom into the selection to refine its edges, optionally add short fades, and preview
-the result. **Save as new asset** creates a WAV in the library and current Playground.
+zoom into the selection to refine its edges, optionally add short fades, and click
+**Play selection** to hear just that area. The button switches to **Stop selection**
+during playback. Changing the selection or fades stops the old preview; the next
+play uses the updated area. **Save as new asset** creates a WAV in the library and current Playground.
 The source is retained, and the new asset records its parent, exact sample-frame
 interval, fades, source hash, and decoder. Export the derivative through its inspector.
 

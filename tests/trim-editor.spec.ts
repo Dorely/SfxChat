@@ -67,15 +67,38 @@ test('trim editor analyzes, previews, and persists a derived asset', async () =>
     await expect(editor.getByLabel('In point (s)')).toHaveValue('0.051')
     await editor.getByLabel('In point (s)').fill('0.050')
 
-    await editor.getByRole('button', { name: 'Preview selection' }).click()
+    // Observe real playback from the user-facing button. Keep the tiny fixture looping
+    // for the stop-button check; never call audio.play() on the application's behalf.
+    await page.evaluate(() => {
+      const observations = { starts: 0 }
+      ;(window as any).__trimPlayback = observations
+      document.addEventListener('playing', event => {
+        const audio = event.target
+        if (audio instanceof HTMLAudioElement && audio.closest('.trim-preview')) {
+          observations.starts += 1
+          if (observations.starts === 1) audio.loop = true
+        }
+      }, true)
+    })
+    await editor.getByRole('button', { name: 'Play selection', exact: true }).click()
     const preview = editor.locator('audio')
     await expect(preview).toHaveAttribute('src', /^blob:/)
     await expect.poll(async () => preview.evaluate((audio: HTMLAudioElement) => audio.readyState)).toBeGreaterThan(0)
-    await preview.evaluate(async (audio: HTMLAudioElement) => { audio.loop = true; await audio.play() })
     await expect.poll(async () => preview.evaluate((audio: HTMLAudioElement) => !audio.paused)).toBe(true)
+    expect(await preview.evaluate((audio: HTMLAudioElement) => audio.duration)).toBeCloseTo(0.15, 3)
+    await editor.getByRole('button', { name: 'Stop selection', exact: true }).click()
+    expect(await preview.evaluate((audio: HTMLAudioElement) => ({ paused: audio.paused, time: audio.currentTime }))).toEqual({ paused: true, time: 0 })
+    await preview.evaluate((audio: HTMLAudioElement) => { audio.loop = false })
+    await editor.getByRole('button', { name: 'Play selection', exact: true }).click()
+    await expect.poll(async () => page.evaluate(() => (window as any).__trimPlayback.starts)).toBeGreaterThanOrEqual(2)
+    await expect.poll(async () => preview.evaluate((audio: HTMLAudioElement) => audio.ended)).toBe(true)
+    await expect(editor.getByRole('button', { name: 'Play selection', exact: true })).toBeEnabled()
     await editor.getByLabel('Fade in (ms)').fill('10')
     await expect(editor.locator('audio')).toHaveCount(0)
-    await editor.getByLabel('In point (s)').fill('0.050')
+    await editor.getByLabel('In point (s)').fill('0.100')
+    await editor.getByRole('button', { name: 'Play selection', exact: true }).click()
+    await expect.poll(async () => page.evaluate(() => (window as any).__trimPlayback.starts)).toBeGreaterThanOrEqual(3)
+    expect(await preview.evaluate((audio: HTMLAudioElement) => audio.duration)).toBeCloseTo(0.1, 3)
     await editor.getByRole('button', { name: 'Save as new asset' }).click()
     await expect(editor).toBeHidden()
     await expect.poll(async () => (await snapshot(app))?.assets.length).toBe(2)

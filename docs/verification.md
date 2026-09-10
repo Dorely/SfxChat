@@ -95,3 +95,12 @@ exercised with local/synthetic calls; live hosted-model tool selection remains a
 user acceptance check. Playback state and PCM checks do not establish perceptual
 quality, and no listener judgment is claimed. Temporary test apps/profiles were
 closed/removed. Existing user audio and credentials were not read for this work.
+
+## Direct trim selection playback (2026-09-10)
+
+Type checking, the production build, and both Electron workflows passed after
+adding Play/Stop selection. The trim regression now clicks the actual play button
+instead of invoking `audio.play()` from the test. It verifies playback of the
+selected duration, stop/reset, replay, natural completion, and a new selected
+duration after changing the in point and fades. Tests used only the synthetic
+fixture; temporary app instances and profiles were closed/removed.

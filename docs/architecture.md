@@ -45,6 +45,10 @@ validated IPC and assistant `analyze_audio`/`trim_asset` tools use those operati
 The renderer owns selection, zoom, draft fades, and exclusive audition state.
 Analysis, rendered previews, and final trims use the same decoded PCM timeline.
 There is no provider invocation for editing and no new credential requirement.
+The trim editor's Play selection button renders and starts the selected interval
+in one action, including its fades. It can stop playback and replay from the in point.
+Selection/fade changes invalidate the preview; unchanged previews can be replayed
+without re-rendering. Playback uses the workbench's exclusive player state.
 
 `MediaLibrary` serializes audio operations, verifies source SHA-256 on every request,
 and caches at most one decoded asset. `audio.ts` decodes MP3 with pinned
