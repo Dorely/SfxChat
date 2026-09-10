@@ -6,6 +6,8 @@ import type { AssetPatch, AudioAnalysisInput, GenerationInput, SettingsStatus, S
 import type { DiagnosticLog } from './diagnostics';
 import { diagnosticError } from './providers/errors';
 import { unlink } from 'node:fs/promises';
+import { ContextTokenCounter } from './chat-context';
+import { CHAT_MODELS, resolveChatModel } from '../shared/chat-models';
 
 export interface ChatResult { output: unknown[]; calls: { id: string; name: string; arguments: string }[]; usage?: unknown; requestId?: string | null }
 export interface ServicePorts {
@@ -15,6 +17,8 @@ export interface ServicePorts {
   safeError(error: unknown): string;
 }
 export class WorkbenchService {
+  private contextCounter = new ContextTokenCounter();
+  private liveContext = new Map<string, { input: unknown[]; text: string }>();
   private turns = new Map<string, AbortController>();
   private activeJob: { id: string; controller: AbortController } | null = null;
   private pumpPromise: Promise<void> | null = null;
@@ -25,6 +29,21 @@ export class WorkbenchService {
   private requireOpen() { if (this.stopped) throw new Error('SfxChat is closing.'); }
   async snapshot(): Promise<Snapshot> {
     return { conversations: this.store.conversations(), messages: this.store.messages(), assets: this.store.assets(), jobs: this.store.jobs(), playground: this.store.playground(), settings: await this.ports.settings(), activeTurns: [...this.turns.keys()] };
+  }
+  private chatInstructions(conversationId: string) {
+    return instructions + `\nCurrent comparison board: ${JSON.stringify(this.store.playground()[conversationId] ?? [])}\nCurrent generation jobs: ${JSON.stringify(this.store.jobs().filter(j => j.conversationId === conversationId).map(j => ({ id: j.id, status: j.status, assetId: j.assetId })))}`;
+  }
+  async chatContext(conversationId: string, draft = '') {
+    this.requireOpen();
+    this.store.requireConversation(conversationId);
+    const model = resolveChatModel((await this.ports.settings()).model);
+    this.requireOpen();
+    const live = this.liveContext.get(conversationId);
+    const input = live?.input ?? this.store.repairToolHistory(conversationId, JSON.parse(this.store.setting(`history/${conversationId}`, '[]'))).input;
+    return {
+      model, limit: CHAT_MODELS.find(entry => entry.id === model)?.contextLimit ?? null,
+      ...this.contextCounter.count({ instructions: this.chatInstructions(conversationId), tools, input, draft, streamingText: live?.text })
+    };
   }
   async generate(conversationId: string, raw: GenerationInput, callId?: string) {
     this.requireOpen();
@@ -163,18 +182,19 @@ export class WorkbenchService {
     try {
       const repaired = this.store.repairToolHistory(conversationId, JSON.parse(this.store.setting(historyKey, '[]')));
       const input = repaired.input;
+      const live = { input, text: '' }; this.liveContext.set(conversationId, live);
       if (repaired.restoredCallIds.length) this.diagnostics?.record('chat.history_repaired', { conversationId, callIds: repaired.restoredCallIds });
       input.push({ role: 'user', content: [{ type: 'input_text', text }] });
       this.store.setSetting(historyKey, JSON.stringify(input));
       while (!controller.signal.aborted) {
         round++;
         const settings = await this.ports.settings();
-        const context = `\nCurrent comparison board: ${JSON.stringify(this.store.playground()[conversationId] ?? [])}\nCurrent generation jobs: ${JSON.stringify(this.store.jobs().filter(j => j.conversationId === conversationId).map(j => ({ id: j.id, status: j.status, assetId: j.assetId })))}`;
         this.diagnostics?.record('chat.request_started', { conversationId, messageId: message.id, round, model: settings.model, input: inputSummary(input) });
-        const response = await this.ports.chat({ model: settings.model, input, instructions: instructions + context, tools, signal: controller.signal, onText: text => { message.text += text; this.store.updateMessage(message); } });
+        const response = await this.ports.chat({ model: resolveChatModel(settings.model), input, instructions: this.chatInstructions(conversationId), tools, signal: controller.signal, onText: text => { live.text += text; message.text += text; this.store.updateMessage(message); } });
         this.diagnostics?.record('chat.request_completed', { conversationId, messageId: message.id, round, requestId: response.requestId, callIds: response.calls.map(call => call.id), output: inputSummary(response.output) });
         message.status = 'completed'; this.store.updateMessage(message);
         input.push(...response.output);
+        live.text = '';
         for (const call of response.calls) {
           let result: string;
           try {
@@ -194,7 +214,7 @@ export class WorkbenchService {
       const detail = round > 1 ? 'Assistant follow-up failed. Completed sounds remain in your library; they have not been regenerated.' : 'Chat request failed.';
       message.text += `\n${controller.signal.aborted ? 'Response stopped.' : `${detail}\n${this.ports.safeError(error)}${logReference(reference)}`}`;
       this.store.updateMessage(message); this.store.setTurn(conversationId, message.status);
-    }
+    } finally { this.liveContext.delete(conversationId); }
   }
   async executeTool(conversationId: string, call: { id: string; name: string; arguments: string }, signal?: AbortSignal): Promise<string> {
     this.requireOpen();

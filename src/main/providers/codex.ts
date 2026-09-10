@@ -1,9 +1,9 @@
 import { redactText } from '../diagnostics';
 import { ProviderHttpError, ProviderResponseError } from './errors';
+import { DEFAULT_MODEL, resolveChatModel } from '../../shared/chat-models';
 export { ProviderHttpError } from './errors';
 
 const RESPONSES_ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
-const DEFAULT_MODEL = 'gpt-5.6-sol';
 const ORIGINATOR = 'codex_cli_rs';
 
 export interface StreamChatInput { token: string; model?: string; input: unknown; instructions?: string; tools?: unknown[]; signal?: AbortSignal; onText?: (text: string) => void | Promise<void> }
@@ -49,7 +49,7 @@ export class CodexClient {
   }
 
   private async request(args: StreamChatInput): Promise<StreamChatResult> {
-    const body: Record<string, unknown> = { model: args.model || DEFAULT_MODEL, stream: true, store: false, input: args.input, instructions: args.instructions ?? 'You are a helpful assistant.' };
+    const body: Record<string, unknown> = { model: resolveChatModel(args.model), stream: true, store: false, input: args.input, instructions: args.instructions ?? 'You are a helpful assistant.' };
     if (args.tools?.length) { body.tools = args.tools; body.tool_choice = 'auto'; }
     const response = await this.fetcher(this.endpoint, { method: 'POST', headers: { authorization: `Bearer ${args.token}`, 'ChatGPT-Account-ID': accountId(args.token), 'OpenAI-Beta': 'responses=experimental', originator: ORIGINATOR, 'User-Agent': 'codex_cli_rs/0.0.0 (SfxChat)', accept: 'text/event-stream', 'content-type': 'application/json' }, body: JSON.stringify(body), signal: args.signal });
     if (!response.ok) throw await ProviderHttpError.fromResponse(response, 'Codex', [args.token]);

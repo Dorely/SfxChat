@@ -13,6 +13,11 @@ tags, collections, and review status. WAV/MP3 imports and exports preserve origi
 bytes. Search includes original prompts and feedback. Local library use needs no
 provider login.
 
+The chat composer shows a local tiktoken estimate including the draft, instructions,
+and tool history against the selected model's default Codex context size (272,000
+tokens for the configured models). The meter is advisory; hidden reasoning and
+server accounting can differ. See [context counter evidence](docs/research/chat-context.md).
+
 The assistant uses direct Codex OAuth and Responses streaming adapted from the
 Lorekeeper and PixelChat references. There is no CLI prerequisite. Source and mock
 tests alone do not establish that a particular account can log in or use a model;

@@ -26,6 +26,63 @@ async function snapshot(app: ElectronApplication) {
   })
 }
 
+test('chat context counts drafts, follows conversations and model settings, and marks the default threshold', async () => {
+  const profile = await mkdtemp(join(tmpdir(), 'sfxchat-context-e2e-'))
+  const running = await launch(profile)
+  try {
+    const { page } = running
+    const meter = page.getByTestId('chat-context')
+    await expect(meter).toContainText('/ 272,000 tokens')
+    const baseline = (await meter.textContent())!
+    const composer = page.getByLabel('Message SfxChat')
+    await composer.fill('A quick metallic click with a short bright tail.')
+    await expect(meter).not.toHaveText(baseline)
+    await page.getByRole('button', { name: 'Send message' }).click()
+    await expect(page.locator('.message-assistant')).toContainText('Describe a sound')
+    await expect(composer).toHaveValue('')
+    await expect(meter).not.toHaveText(baseline)
+    const original = await page.evaluate(async () => (await window.sfx.snapshot()).conversations[0].id)
+    await page.getByRole('button', { name: 'New conversation' }).click()
+    await expect(meter).toHaveText(baseline)
+
+    await page.getByRole('button', { name: 'Open settings' }).first().click()
+    await page.getByLabel('Chat model', { exact: true }).selectOption('gpt-6-astra')
+    await page.getByRole('button', { name: 'Save model' }).click()
+    await expect(meter).toHaveAttribute('title', /gpt-6-astra/)
+    await page.getByLabel('Chat model', { exact: true }).selectOption('backend default')
+    await page.getByRole('button', { name: 'Save model' }).click()
+    await expect(meter).toHaveAttribute('title', /gpt-5.6-sol/)
+    await page.getByRole('button', { name: 'Close settings' }).click()
+    await page.evaluate(() => window.sfx.saveModel('unknown-model'))
+    await expect(meter).toContainText('/ unknown tokens')
+    await page.evaluate(() => window.sfx.saveModel('gpt-5.6-luna'))
+    await expect(meter).toHaveAttribute('title', /gpt-5.6-luna/)
+
+    // Exercise the real local tokenizer beyond the standard window, without sending.
+    await composer.fill(' sound'.repeat(275_000))
+    await expect(meter).toContainText('Above default context size', { timeout: 30_000 })
+    await expect(meter).toHaveClass(/context-over/)
+    await composer.fill('')
+    await expect(meter).toHaveText(baseline)
+    const originalTitle = await page.evaluate(async id => (await window.sfx.snapshot()).conversations.find(c => c.id === id)!.title, original)
+    await page.locator('.conversation-row').filter({ hasText: originalTitle }).click()
+    await expect(meter).toContainText('/ 272,000 tokens')
+    await expect(meter).not.toHaveText(baseline)
+    await running.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1000, 650))
+    const composerBox = await composer.boundingBox()
+    const meterBox = await meter.boundingBox()
+    expect(composerBox).not.toBeNull()
+    expect(meterBox).not.toBeNull()
+    expect(composerBox!.y + composerBox!.height).toBeLessThanOrEqual(await page.evaluate(() => innerHeight))
+    expect(meterBox!.y).toBeGreaterThanOrEqual(0)
+    await mkdir(resolve(root, '.tmp'), { recursive: true })
+    await page.screenshot({ path: resolve(root, '.tmp', 'chat-context.png') })
+  } finally {
+    await running.app.close().catch(() => undefined)
+    await rm(profile, { recursive: true, force: true })
+  }
+})
+
 test('complete creative workbench flow persists assets and protects the renderer boundary', async () => {
   const profile = await mkdtemp(join(tmpdir(), 'sfxchat-e2e-'))
   let running = await launch(profile)

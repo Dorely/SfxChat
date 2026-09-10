@@ -30,10 +30,12 @@ export interface GenerationInput {
 }
 export interface Job { id: string; conversationId: string; status: JobStatus; input: GenerationInput; assetId: string | null; error: string | null; createdAt: string }
 export interface SettingsStatus { codexReady: boolean; elevenLabsReady: boolean; secureStorageAvailable: boolean; loginPending: boolean; model: string; error: string | null }
+export interface ChatContext { model: string; tokens: number; limit: number | null; includesHiddenReasoning: boolean }
 export interface Snapshot { conversations: Conversation[]; messages: Message[]; assets: Asset[]; jobs: Job[]; playground: Record<string, string[]>; settings: SettingsStatus; activeTurns: string[] }
 export interface AssetPatch { name?: string; description?: string; tags?: string[]; collections?: string[]; review?: Review; feedback?: string }
 export interface SfxApi {
   snapshot(): Promise<Snapshot>;
+  chatContext(conversationId: string, draft: string): Promise<ChatContext>;
   openLogs(): Promise<void>;
   createConversation(): Promise<string>;
   sendMessage(conversationId: string, text: string): Promise<void>;

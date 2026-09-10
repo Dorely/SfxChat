@@ -74,6 +74,9 @@ output; the original HTTP error body was not available.
 
 ## Historical source-file fingerprints
 
+Token-counter research, sibling reference revisions, model-catalog metadata, and
+official documentation checks are recorded in [chat context](research/chat-context.md).
+
 Trimming research and implementation evidence (2026-09-10) is documented separately
 in [agentic audio editing](research/agentic-audio-editing.md) and
 [local decoding](research/audio-decoding.md). Those Markdown notes record findings,

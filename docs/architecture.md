@@ -20,6 +20,15 @@ Chat follows streamed output while the reader is at the bottom. Scrolling up pau
 following; returning to the bottom, sending a message, or selecting a conversation
 returns to the latest content. This follow state belongs only to the renderer.
 
+The fixed `chatContext` IPC operation estimates selected-conversation context in
+the main process using bundled `js-tiktoken`/`o200k_base`. It shares the turn's
+instruction builder and uses repaired persisted history or active in-memory
+history, plus streamed text and the trimmed composer draft. Display-only activity
+and errors do not inflate the count. The renderer throttles updates and rejects
+stale responses. Model metadata supplies default Codex context sizes; unknown
+models show an unknown limit. The approximate meter is advisory, with encrypted
+reasoning omitted and flagged. See [evidence and limits](research/chat-context.md).
+
 ## Persistence and originals
 
 SQLite uses WAL, foreign keys, transactional migrations, and FTS5 search. Schema v1

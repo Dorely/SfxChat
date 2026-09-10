@@ -7,6 +7,7 @@ import { WorkbenchService, type ServicePorts } from './service';
 import { SecureStore } from './providers/secrets';
 import { CodexAuth } from './providers/auth';
 import { CodexClient, DEFAULT_MODEL } from './providers/codex';
+import { resolveChatModel } from '../shared/chat-models';
 import { ElevenLabsClient } from './providers/elevenlabs';
 import { commandSchemas, idSchema } from './validation';
 import { mockPorts } from './testing';
@@ -46,7 +47,7 @@ else {
     let credentialError: string | null = null;
     try { await auth.initialize(); } catch (error) { credentialError = safeError(error); }
     const codex = new CodexClient(); const eleven = new ElevenLabsClient();
-    const model = () => store.setting('chat-model', DEFAULT_MODEL);
+    const model = () => resolveChatModel(store.setting('chat-model', DEFAULT_MODEL));
     const livePorts: ServicePorts = {
       settings: async () => {
         let elevenLabsReady = false;
@@ -82,6 +83,7 @@ else {
 
     const handlers: Record<string, (...args: any[]) => unknown> = {
       snapshot: () => service!.snapshot(), createConversation: () => store.createConversation(),
+      chatContext: (id, draft) => service!.chatContext(id, draft),
       openLogs: async () => { const directory = join(root, 'logs'); await mkdir(directory, { recursive: true }); const error = await shell.openPath(directory); if (error) throw new Error(error); },
       sendMessage: (id, text) => service!.sendMessage(id, text), cancelTurn: id => service!.cancelTurn(id),
       generate: (id, input) => service!.generate(id, input).then(() => undefined), cancelJob: id => service!.cancelJob(id),
@@ -101,7 +103,7 @@ else {
       },
       startLogin: () => auth!.startLogin(), cancelLogin: () => auth!.cancelLogin(), logout: () => auth!.logout(),
       saveElevenLabsKey: async key => { if (key.trim()) await secrets.set('elevenlabs', key.trim()); else await secrets.delete('elevenlabs'); credentialError = null; changed(); },
-      saveModel: value => store.setSetting('chat-model', value)
+      saveModel: value => store.setSetting('chat-model', resolveChatModel(value))
     };
     ipcMain.handle('sfx:call', async (event, method: unknown, rawArgs: unknown) => {
       if (quitting) throw new Error('SfxChat is closing.');

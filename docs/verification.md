@@ -5,6 +5,16 @@ and live-provider acceptance are recorded separately.
 
 ## Current evidence
 
+Token counter follow-up (2026-09-10): type checking, the production build, and all
+69 unit tests passed. The new mocked Electron context test passed, exercising
+real local tokenization of a 275,000-word draft, threshold styling, draft removal,
+conversation switching, all three configured models, backend default, and unknown
+model limits. The existing trimming and full workbench Electron tests also passed.
+Visual review at 1000×650 confirmed the counter and composer remain visible.
+Initial context-test failures were assertion whitespace/selector issues, corrected
+before the passing rerun. No live provider calls or billed generations were made.
+The updated source/build was not installed or packaged during this follow-up.
+
 - `npm run typecheck`: passed.
 - `npm test`: 32 passing tests under Electron's Node (9 runtime, 16 provider,
   and 7 lifecycle checks). Coverage includes OAuth state expiry/replay, refresh

@@ -27,6 +27,7 @@ is recorded in [verification](docs/verification.md).
 | [docs/sources.md](docs/sources.md) | Source locations, revision/date/hash provenance, copy policy, and original documentation links. |
 | [docs/research/agentic-audio-editing.md](docs/research/agentic-audio-editing.md) | Dated primary-source research, timing/representation limitations, and trimming design decisions. |
 | [docs/research/audio-decoding.md](docs/research/audio-decoding.md) | Pinned MP3 decoder behavior, source revisions, licenses, and rebuild materials. |
+| [docs/research/chat-context.md](docs/research/chat-context.md) | Codex default-context evidence, tokenizer provenance, and estimate limitations. |
 | [third-party/](third-party/) | Decoder attribution, LGPL text, and corresponding upstream source/build archives shipped with the app. |
 | [docs/knowledge/README.md](docs/knowledge/README.md) | API bundle navigation, historical-status caveats, and research boundaries. |
 | [docs/knowledge/elevenlabs.md](docs/knowledge/elevenlabs.md) | Inherited SFX API request/prompt, output, provenance, and bounded-generation lessons. |
@@ -50,6 +51,8 @@ is recorded in [verification](docs/verification.md).
 | [vitest.config.ts](vitest.config.ts), [scripts/test.mjs](scripts/test.mjs) | Unit tests using Electron's Node runtime and native-module ABI. |
 | [scripts/smoke-installed.mjs](scripts/smoke-installed.mjs) | Installed-app startup, native SQLite, secure-storage availability, and packaged-mode isolation checks. |
 | [src/shared/types.ts](src/shared/types.ts) | Renderer/preload/application operation and snapshot contracts. |
+| [src/shared/chat-models.ts](src/shared/chat-models.ts) | Configured model IDs, default Codex context sizes, and legacy/default resolution. |
+| [src/main/chat-context.ts](src/main/chat-context.ts) | Cached local tiktoken context estimates with encrypted-reasoning exclusion. |
 | [src/main/store.ts](src/main/store.ts) | SQLite schema migration, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
 | [src/main/media.ts](src/main/media.ts) | Original storage/import/export, integrity checks, serialized editing/analysis, and bounded decoded cache. |
 | [src/main/audio.ts](src/main/audio.ts) | Bounded MP3/WAV decode, timestamped amplitude windows, exact sample-frame trims, fades, and float32 WAV rendering. |
@@ -71,6 +74,8 @@ is recorded in [verification](docs/verification.md).
 | [src/renderer/index.html](src/renderer/index.html), [src/renderer/main.tsx](src/renderer/main.tsx) | Renderer entrypoint and content security policy. |
 | [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Chat, Library, Playground, audition, inspector, settings, and styling. |
 | [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Waveform trim selection, fine-window zoom, fades, exact rendered preview, and derived-asset saving. |
+| [src/renderer/ChatContextMeter.tsx](src/renderer/ChatContextMeter.tsx) | Throttled composer context indicator, threshold styling, and estimate details. |
+| [tests/chat-context.test.ts](tests/chat-context.test.ts) | Draft/history/stream counting, conversation isolation, persistence, and model defaults. |
 | [tests/audio-editing.test.ts](tests/audio-editing.test.ts) | Sample/channel correctness, analysis zoom, fades, provenance/replay, source integrity, MP3 decode, and shutdown. |
 | [tests/trim-editor.spec.ts](tests/trim-editor.spec.ts) | Electron trimming workflow, preview, waveform zoom, preserved originals, and persisted derivatives. |
 | [playwright.config.ts](playwright.config.ts), [tests/workbench.spec.ts](tests/workbench.spec.ts) | Mocked Electron workflow, playback, persistence, and Windows secure-storage checks. |

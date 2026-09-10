@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",
+    "js-tiktoken": "1.0.21",
     "mpg123-decoder": "1.0.3",
     "music-metadata": "11.15.0",
     "react": "19.3.0",
