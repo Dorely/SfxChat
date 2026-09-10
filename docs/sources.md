@@ -62,6 +62,18 @@ Build sources: [electron-vite guide](https://electron-vite.org/guide/),
 [security](https://www.electronjs.org/docs/latest/tutorial/security). Dependencies
 are pinned in the lockfile; Vite 7 is used to satisfy electron-vite 5's peer range.
 
+## Sound-effects prompting review (2026-09-10)
+
+The [ElevenLabs knowledge note](knowledge/elevenlabs.md) supersedes its inherited
+request/prompt guidance with a dated review of the official documentation index,
+endpoint reference (including Markdown), capabilities/prompting overview, product
+guide/FAQ, developer quickstart, and Help Center prompt guidance. It records links
+and the duration-minimum discrepancy, distinguishes website behavior from the API,
+and maps findings to the running assistant and manual regeneration. The vendored
+skill and license remain byte-identical historical snapshots. New prompt examples
+are authored illustrations, not returned audio or listening evidence. Pricing,
+terms, SDK versions, and output rights were not re-audited by this review.
+
 ## Follow-up debugging (2026-09-10)
 
 Re-read PixelChat's

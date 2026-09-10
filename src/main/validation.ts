@@ -11,9 +11,13 @@ export const analysisSchema = z.object({
   bins: z.number().int().min(1).max(512).optional()
 }).strict();
 export const generationSchema = z.object({
-  prompt: z.string().trim().min(1), count: z.number().int().positive().safe().optional(),
-  duration: z.number().min(0.5).max(30).nullable().optional(), loop: z.boolean().optional(),
-  influence: z.number().min(0).max(1).optional(), parentId: idSchema.nullable().optional(), name: z.string().trim().min(1).optional()
+  prompt: z.string().trim().min(1).describe('Complete, concise description of the audible source, action and useful acoustic details; put connected events in order. For revisions, restate the sound with the requested changes. Sent as text without chat history or parent audio.'),
+  count: z.number().int().positive().safe().optional().describe('Number of separate candidates using this same prompt. Defaults to 1; follow the user-requested scope.'),
+  duration: z.number().min(0.5).max(30).nullable().optional().describe('Whole clip length in seconds, 0.5–30. Omit or use null for automatic duration. Does not specify exact event timestamps.'),
+  loop: z.boolean().optional().describe('Request seamless repetition for a continuous sound bed; defaults to false. Use a matching continuous description. Does not extend the maximum clip length.'),
+  influence: z.number().min(0).max(1).optional().describe('Prompt adherence, 0–1; omitted uses provider default 0.3. Higher follows the description more closely with less variation. Not volume or quality.'),
+  parentId: idSchema.nullable().optional().describe('Local revision lineage only. Does not send source audio or earlier prompts to the provider.'),
+  name: z.string().trim().min(1).optional().describe('Library name, separate from the provider sound description.')
 }).strict();
 export const patchSchema = z.object({ name: z.string().trim().min(1).optional(), description: z.string().optional(), tags: z.array(z.string().trim().min(1)).optional(), collections: z.array(z.string().trim().min(1)).optional(), review: z.enum(['unreviewed','accepted','rejected']).optional(), feedback: z.string().optional() }).strict();
 export const commandSchemas = {

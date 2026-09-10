@@ -30,7 +30,7 @@ is recorded in [verification](docs/verification.md).
 | [docs/research/chat-context.md](docs/research/chat-context.md) | Codex default-context evidence, tokenizer provenance, and estimate limitations. |
 | [third-party/](third-party/) | Decoder attribution, LGPL text, and corresponding upstream source/build archives shipped with the app. |
 | [docs/knowledge/README.md](docs/knowledge/README.md) | API bundle navigation, historical-status caveats, and research boundaries. |
-| [docs/knowledge/elevenlabs.md](docs/knowledge/elevenlabs.md) | Inherited SFX API request/prompt, output, provenance, and bounded-generation lessons. |
+| [docs/knowledge/elevenlabs.md](docs/knowledge/elevenlabs.md) | Dated official SFX prompting review, endpoint/app control mapping, revision examples, source discrepancies, and evidence limits. |
 | [docs/knowledge/gemini-audio.md](docs/knowledge/gemini-audio.md) | Inherited audio-input, response, usage, and calibration lessons. |
 
 ## Repository-local skill
@@ -60,7 +60,7 @@ is recorded in [verification](docs/verification.md).
 | [src/main/service.ts](src/main/service.ts) | Shared library operations, sequential generation jobs, chat turns, and tool execution. |
 | [src/main/diagnostics.ts](src/main/diagnostics.ts) | Rotating local JSONL records, diagnostic references, and credential redaction. |
 | [src/main/providers/errors.ts](src/main/providers/errors.ts) | Bounded provider error parsing, request IDs, readable failures, and safe diagnostic fields. |
-| [src/main/assistant.ts](src/main/assistant.ts) | Runtime sound-design instructions and assistant tool definitions. |
+| [src/main/assistant.ts](src/main/assistant.ts) | Runtime sound-design and ElevenLabs prompting/revision instructions, plus assistant tool definitions. |
 | [tests/runtime.test.ts](tests/runtime.test.ts) | Persistence, search, provenance, jobs, tool replay, import/export, and recovery tests. |
 | [tests/fixtures/tone.mp3](tests/fixtures/tone.mp3) | Synthetic 440 Hz test tone, generated locally with FFmpeg; no provider-generated media. |
 | [src/main/index.ts](src/main/index.ts) | Electron lifecycle, validated IPC, media protocol, provider wiring, and native dialogs. |

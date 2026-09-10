@@ -106,7 +106,14 @@ If the app closes during preparation, only candidates already queued are retaine
 the activity message explains this before admission begins.
 
 Chat runs outside renderer lifetimes and persists streamed messages/activity.
-Runtime instructions and tool definitions deliberately provide sound-design guidance.
+Runtime instructions and tool field descriptions provide sound-design guidance and
+[reviewed ElevenLabs prompting practices](knowledge/elevenlabs.md): complete audible
+descriptions, deliberate duration/loop/adherence controls, and self-contained
+revision prompts. Provider generation receives no parent audio or chat history;
+`parentId` is local lineage only. Manual regeneration uses an editable Generation
+prompt, prefilled from the original, separately from review feedback, and reuses
+requested duration rather than measured file duration. Markdown/skill snapshots
+are not injected into the assistant at runtime.
 The generation tool waits for results so the assistant can organize returned assets.
 Its initial job IDs are recorded atomically with creation. Duplicate tool calls
 return durable results; conflicting IDs are rejected. Stopping a turn stops its wait;

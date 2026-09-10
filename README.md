@@ -64,6 +64,12 @@ only one running instance.
 5. Export original audio through the inspector. Choose a new destination filename;
    v0.1 refuses to overwrite an existing file.
 
+For manual regeneration, edit **Generation prompt** in the inspector to describe
+the complete desired sound. It starts with the original prompt; **Feedback** is
+kept separately as review notes. Use chat to turn feedback into a revised prompt.
+See the [ElevenLabs prompting guide](docs/knowledge/elevenlabs.md) for examples,
+duration/loop/influence guidance, and documented endpoint limitations.
+
 ## Trim sounds
 
 Open a sound's inspector and choose **Trim as new asset**. Set the in/out points,

@@ -1,5 +1,34 @@
 # v0.1 verification
 
+## ElevenLabs prompting review and regeneration (2026-09-10)
+
+Reviewed the official SFX documentation listed in the
+[prompting guide](knowledge/elevenlabs.md), traced assistant/tool fields through
+the service and HTTP adapter, and corrected manual regeneration's use of bare
+feedback as the provider prompt.
+
+- `npm run typecheck`: passed after the code and test changes.
+- `npm test`: 69 tests across 10 files passed before adding three focused transport
+  cases. `npm test -- tests/providers.test.ts`: all 19 provider tests then passed,
+  including omission/null auto duration, explicit looping with zero influence,
+  exact model/query/body mapping, and exclusion of app metadata.
+- `npm run test:e2e -- --grep 'complete creative workbench flow'`: production build
+  and the selected Electron workflow passed. It verifies prompt prefill, feedback
+  independence, empty-prompt blocking, explicit replacement prompt persistence,
+  parent preservation, and reuse of requested generation settings. The first run
+  exposed a test assumption about library order; the assertion now uses the actual
+  selected asset ID. Test-owned app instances and temporary profiles were cleaned up.
+- Relative links in changed Markdown resolve; `git diff --check` passed. The
+  vendored skill and license hashes still match the original provenance record.
+
+All generation in these checks used synthetic provider responses. No paid provider
+calls, real audio inspection, listening evaluation, or installed-app update was
+performed. Documentation and deterministic tests do not establish that the hosted
+assistant will always follow the guidance or that resulting sounds meet creative
+intent; those remain live user-audition checks.
+
+## Initial verification
+
 Checked on 2026-09-10 UTC on Windows x64. Automated checks, platform evidence,
 and live-provider acceptance are recorded separately.
 

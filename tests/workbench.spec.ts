@@ -138,11 +138,20 @@ test('complete creative workbench flow persists assets and protects the renderer
 
     await page.locator('.asset-grid .asset-card').first().click()
     await page.getByRole('button', { name: 'Inspect' }).click()
+    const selectedAssetId = await page.locator('.asset-grid .asset-card').first().getAttribute('data-asset-id')
+    const originalPrompt = (await snapshot(app))?.assets.find((asset: { id: string | null }) => asset.id === selectedAssetId)?.prompt
+    await expect(drawer.getByLabel('Generation prompt')).toHaveValue(originalPrompt)
     await drawer.locator('textarea[placeholder="What should change in the next pass?"]').fill('A shorter, softer revision for menu confirmations.')
+    await expect(drawer.getByLabel('Generation prompt')).toHaveValue(originalPrompt)
+    await drawer.getByLabel('Generation prompt').fill('')
+    await expect(drawer.getByRole('button', { name: 'Regenerate' })).toBeDisabled()
+    await drawer.getByLabel('Generation prompt').fill('A complete soft menu confirmation chime with a crisp attack and a short warm tail.')
     await drawer.getByRole('button', { name: 'Regenerate' }).click()
     await expect.poll(async () => (await snapshot(app))?.assets.length ?? 0, { timeout: 30_000 }).toBe(3)
     const revised = await snapshot(app)
-    expect(revised?.assets.some((asset: { parentId: string | null }) => asset.parentId !== null)).toBe(true)
+    const child = revised?.assets.find((asset: { parentId: string | null }) => asset.parentId !== null)
+    expect(child).toMatchObject({ parentId: selectedAssetId, prompt: 'A complete soft menu confirmation chime with a crisp attack and a short warm tail.', request: { prompt: 'A complete soft menu confirmation chime with a crisp attack and a short warm tail.', duration: 1, loop: false, influence: 0.3 } })
+    expect(revised?.assets.find((asset: { id: string | null }) => asset.id === selectedAssetId)?.prompt).toBe(originalPrompt)
     await drawer.getByRole('button', { name: 'Close inspector' }).click()
 
     await app.evaluate(({ dialog }, source) => {

@@ -223,4 +223,18 @@ describe('ElevenLabs transport', () => {
     await expect(generateSound({ prompt: 'x', influence: -0.1 }, 'key', undefined, { fetch: fetcher })).rejects.toThrow(/influence/i);
     expect(fetcher).not.toHaveBeenCalled();
   });
+  it.each([
+    [{ prompt: 'Steady ventilation drone.', duration: null, count: 2, name: 'Air bed', parentId: 'local-only' }, {}],
+    [{ prompt: 'Steady ventilation drone.' }, {}],
+    [{ prompt: 'Steady ventilation drone.', duration: 30, loop: true, influence: 0 }, { duration_seconds: 30, loop: true, prompt_influence: 0 }],
+  ])('keeps auto duration and local metadata out of the provider body: %j', async (input, controls) => {
+    let request: Request | undefined;
+    await generateSound(input, 'key.synthetic', undefined, { fetch: async (url, init) => {
+      request = new Request(url, init);
+      return new Response(new Uint8Array([0, 1, 255]));
+    } });
+    expect(request?.method).toBe('POST');
+    expect(request?.url).toBe('https://api.elevenlabs.io/v1/sound-generation?output_format=mp3_44100_128');
+    expect(JSON.parse(await request!.text())).toEqual({ text: input.prompt, model_id: 'eleven_text_to_sound_v2', ...controls });
+  });
 });
