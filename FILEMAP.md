@@ -50,3 +50,11 @@ typed operations, durable chat/jobs/library storage, and provider-independent se
 | [src/main/assistant.ts](src/main/assistant.ts) | Runtime sound-design instructions and assistant tool definitions. |
 | [tests/runtime.test.ts](tests/runtime.test.ts) | Persistence, search, provenance, jobs, tool replay, import/export, and recovery tests. |
 | [tests/fixtures/tone.mp3](tests/fixtures/tone.mp3) | Synthetic 440 Hz test tone, generated locally with FFmpeg; no provider-generated media. |
+| [src/main/index.ts](src/main/index.ts) | Electron lifecycle, validated IPC, media protocol, provider wiring, and native dialogs. |
+| [src/preload/index.ts](src/preload/index.ts) | Isolated renderer bridge with fixed operations and change notifications. |
+| [src/main/providers/auth.ts](src/main/providers/auth.ts) | Codex browser OAuth/PKCE, refresh serialization, and login lifecycle. |
+| [src/main/providers/codex.ts](src/main/providers/codex.ts) | Account Responses SSE transport and tool/message normalization. |
+| [src/main/providers/elevenlabs.ts](src/main/providers/elevenlabs.ts) | Validated SFX requests, exact returned bytes, and response provenance. |
+| [src/main/providers/secrets.ts](src/main/providers/secrets.ts) | Atomic encrypted credential storage using injected OS protection. |
+| [src/main/testing.ts](src/main/testing.ts) | Deterministic development-only provider ports for Electron tests. |
+| [tests/providers.test.ts](tests/providers.test.ts) | Secure-store, OAuth, streamed chat/tool, and SFX transport tests. |

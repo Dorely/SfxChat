@@ -26,7 +26,7 @@
 - Inspect callers and downstream effects before editing. Use `rg` for file and text discovery.
 - Keep UI interaction state separate from library operations, assistant orchestration, provider transports, and background jobs. Manual UI actions and assistant tools should use the same owning operations.
 - Preserve provider boundaries; do not spread provider-specific payloads or model names through the UI.
-- Implement only what the current milestone needs. Electron with React/TypeScript is provisional; no .NET/Blazor stack or runtime framework is established here.
+- Implement only what the current milestone needs. The desktop stack is Electron with React/TypeScript; keep privileged operations in the main process and the renderer isolated.
 - Replace superseded runtime code and documentation coherently. Preserve necessary immutable history and unrelated work.
 - Use UTF-8 and LF for authored text. Preserve third-party license notices and document changes to vendored material.
 

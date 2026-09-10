@@ -99,7 +99,7 @@ export class Store {
         const job: Job = { id: randomUUID(), conversationId, status: 'queued', input: { ...input, count: 1 }, assetId: null, error: null, createdAt: now() };
         this.db.prepare('INSERT INTO jobs VALUES (?,?,?,?)').run(job.id, conversationId, job.status, JSON.stringify(job)); jobs.push(job);
       }
-      if (toolCallId) this.finishTool(toolCallId, JSON.stringify({ jobIds: jobs.map(j => j.id) }));
+      if (toolCallId) this.db.prepare('UPDATE tool_calls SET status=?,result=? WHERE id=?').run('waiting', JSON.stringify({ jobIds: jobs.map(j => j.id) }), toolCallId);
     })();
     this.changed(); return jobs;
   }
@@ -126,6 +126,9 @@ export class Store {
       for (const m of this.messages().filter(m => m.status === 'running')) this.updateMessage({ ...m, status: 'failed', text: m.text + '\n[Interrupted when the app closed.]' });
       this.db.prepare("UPDATE turns SET status='interrupted' WHERE status='running'").run();
       this.db.prepare("UPDATE tool_calls SET status='uncertain',result=? WHERE status='running'").run(JSON.stringify({ error: 'Interrupted tool outcome; not replayed.' }));
+      for (const row of this.db.prepare("SELECT id,result FROM tool_calls WHERE status='waiting'").all() as { id: string; result: string }[]) {
+        this.db.prepare('UPDATE tool_calls SET status=?,result=? WHERE id=?').run('uncertain', JSON.stringify({ ...JSON.parse(row.result), interrupted: true, message: 'Inspect the recorded jobs; this call is not replayed.' }), row.id);
+      }
     })();
   }
 }

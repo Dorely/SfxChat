@@ -18,13 +18,16 @@ export class WorkbenchService {
   private turnPromises = new Set<Promise<void>>();
   private stopped = false;
   constructor(readonly store: Store, readonly media: MediaLibrary, private ports: ServicePorts, private changed: () => void) {}
+  private requireOpen() { if (this.stopped) throw new Error('SfxChat is closing.'); }
   async snapshot(): Promise<Snapshot> {
     return { conversations: this.store.conversations(), messages: this.store.messages(), assets: this.store.assets(), jobs: this.store.jobs(), playground: this.store.playground(), settings: await this.ports.settings(), activeTurns: [...this.turns.keys()] };
   }
   async generate(conversationId: string, raw: GenerationInput, callId?: string) {
+    this.requireOpen();
     const input = generationSchema.parse(raw);
     if (input.parentId) this.store.asset(input.parentId);
     const settings = await this.ports.settings();
+    this.requireOpen();
     if (!settings.elevenLabsReady) throw new Error('Add your ElevenLabs API key in Settings first.');
     const jobs = this.store.createJobs(conversationId, input, callId);
     this.store.addMessage(conversationId, 'tool', `Queued ${jobs.length} sound${jobs.length === 1 ? '' : 's'}: ${input.prompt}`);
@@ -64,19 +67,22 @@ export class WorkbenchService {
     if (job.status === 'queued') this.store.updateJob({ ...job, status: 'cancelled' });
     if (this.activeJob?.id === id) this.activeJob.controller.abort();
   }
-  updateAsset(id: string, raw: AssetPatch) {
+  updateAsset(id: string, raw: AssetPatch, conversationId?: string) {
+    this.requireOpen();
     const patch = patchSchema.parse(raw);
-    const conversationId = Object.entries(this.store.playground()).find(([, ids]) => ids.includes(id))?.[0];
+    if (conversationId) this.store.requireConversation(conversationId);
     this.store.updateAsset(id, patch, conversationId);
   }
   async importFiles(conversationId: string, paths: string[]) {
+    this.requireOpen();
     this.store.requireConversation(conversationId);
     for (const path of paths) {
-      const asset = await this.media.import(path); this.store.insertAsset(asset); this.store.addToPlayground(conversationId, [asset.id]);
+      const asset = await this.media.import(path); this.requireOpen(); this.store.insertAsset(asset); this.store.addToPlayground(conversationId, [asset.id]);
       this.store.addMessage(conversationId, 'tool', `Imported “${asset.name}”.`);
     }
   }
   async sendMessage(conversationId: string, text: string) {
+    this.requireOpen();
     this.store.requireConversation(conversationId);
     if (this.turns.has(conversationId)) throw new Error('A response is already running in this conversation.');
     const controller = new AbortController(); this.turns.set(conversationId, controller);
@@ -118,6 +124,7 @@ export class WorkbenchService {
     }
   }
   async executeTool(conversationId: string, call: { id: string; name: string; arguments: string }, signal?: AbortSignal): Promise<string> {
+    this.requireOpen();
     const recorded = this.store.beginTool(call.id, conversationId, call.name, call.arguments);
     if (!recorded.fresh) return recorded.result ?? JSON.stringify({ error: 'Tool outcome is uncertain; not replayed.' });
     try {

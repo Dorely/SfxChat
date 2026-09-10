@@ -24,7 +24,7 @@ export interface SfxApi {
   cancelTurn(conversationId: string): Promise<void>;
   generate(conversationId: string, input: GenerationInput): Promise<void>;
   cancelJob(id: string): Promise<void>;
-  updateAsset(id: string, patch: AssetPatch): Promise<void>;
+  updateAsset(id: string, patch: AssetPatch, conversationId?: string): Promise<void>;
   setPlayground(conversationId: string, assetIds: string[]): Promise<void>;
   importAudio(conversationId: string): Promise<void>;
   exportAsset(id: string): Promise<void>;

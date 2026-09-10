@@ -10,7 +10,7 @@ export const commandSchemas = {
   snapshot: z.tuple([]), createConversation: z.tuple([]),
   sendMessage: z.tuple([idSchema, z.string().trim().min(1)]), cancelTurn: z.tuple([idSchema]),
   generate: z.tuple([idSchema, generationSchema]), cancelJob: z.tuple([idSchema]),
-  updateAsset: z.tuple([idSchema, patchSchema]), setPlayground: z.tuple([idSchema, z.array(idSchema)]),
+  updateAsset: z.tuple([idSchema, patchSchema, idSchema.optional()]), setPlayground: z.tuple([idSchema, z.array(idSchema)]),
   importAudio: z.tuple([idSchema]), exportAsset: z.tuple([idSchema]), searchAssets: z.tuple([z.string()]),
   startLogin: z.tuple([]), cancelLogin: z.tuple([]), logout: z.tuple([]),
   saveElevenLabsKey: z.tuple([z.string()]), saveModel: z.tuple([z.string().trim().regex(/^[a-zA-Z0-9._-]+$/)])

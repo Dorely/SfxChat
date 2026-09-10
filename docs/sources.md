@@ -36,6 +36,36 @@ These links were present in the inherited material. They were not fetched or ver
 
 ## Exact source-file fingerprints
 
+## v0.1 implementation verification (2026-09-10 UTC)
+
+The user selected the local Lorekeeper/PixelChat implementations as technical
+guidance for the direct Codex integration. SfxChat independently implements their
+OAuth/PKCE flow, account headers, Responses request/tool exchange, and streamed
+events in TypeScript. Their .NET code, databases, and credentials are not runtime
+dependencies. The original fingerprint table below remains historical provenance.
+
+Re-read the current local `Lorekeeper/Llm/CodexAuthService.cs`, `CodexChatClient.cs`,
+and `CodexProvider.cs`; and PixelChat's `Llm/OpenAIAccountAuthService.cs`,
+`OpenAIAccountChatClient.cs`, `OpenAIAccountProvider.cs`, and `Secrets/SqliteSecretStore.cs`.
+The chat default follows Lorekeeper's `gpt-5.6-sol` configuration. SfxChat implements
+OS-backed encrypted storage independently of the reference apps' database storage.
+
+Rechecked official ElevenLabs [SFX API](https://elevenlabs.io/docs/api-reference/text-to-sound-effects/convert),
+[capabilities](https://elevenlabs.io/docs/overview/capabilities/sound-effects),
+[terms](https://elevenlabs.io/terms-of-use), and [API pricing](https://elevenlabs.io/pricing/api).
+The API documents `eleven_text_to_sound_v2`, optional 0.5–30 second duration,
+v2 looping, influence 0–1, and the `character-cost` response header. The adapter
+requests `mp3_44100_128` and preserves original bytes. No dollar cost guarantee or
+media-license grant is inferred; pricing/rights depend on the provider and account.
+
+Build sources: [electron-vite guide](https://electron-vite.org/guide/),
+[electron-builder](https://www.electron.build/), Electron
+[safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage) and
+[security](https://www.electronjs.org/docs/latest/tutorial/security). Dependencies
+are pinned in the lockfile; Vite 7 is used to satisfy electron-vite 5's peer range.
+
+### Historical fingerprints
+
 SHA-256 values below were computed during extraction. Paths are relative to the named source root above. For vendored files the destination bytes match the installed source bytes; other files are attribution for summarized material, not copied payloads.
 
 | Source | Relative path | SHA-256 |
