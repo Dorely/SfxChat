@@ -30,7 +30,7 @@ const musicInputFields = {
   count: z.number().int().positive().safe().optional().describe('Number of separately billed candidates using this prompt. Defaults to 1; follow the user-requested scope.'),
   durationMs: z.number().int().min(MUSIC_DURATION_MIN_MS).max(MUSIC_DURATION_MAX_MS).nullable().optional().describe('Whole track length in milliseconds, 3000-600000. Omit or use null to let the provider choose a length from the prompt. Not exact section timing, which belongs in the prompt text. Some models always return a fixed length.'),
   instrumental: z.boolean().optional().describe('Request a track without vocals. Defaults to false, and most prompts produce vocals without it.'),
-  providerId: z.string().trim().min(1).max(80).nullable().optional().describe('Configured music provider to use for this request. Omit or use null for the active provider in Settings.'),
+  providerId: z.string().trim().min(1).max(80).nullable().optional().describe('Configured music provider to use for this request, copied exactly from the providerIds in your instructions. Never invent or abbreviate one. Omit or use null for the active provider in Settings.'),
   parentId: idSchema.nullable().optional().describe('Local revision lineage only. Music providers receive no source audio and cannot continue an earlier generation.'),
   name: z.string().trim().min(1).optional().describe('Library name, separate from the provider music description.')
 };

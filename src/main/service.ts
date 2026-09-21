@@ -45,9 +45,8 @@ export class WorkbenchService {
     return { conversations: this.store.conversations(), messages: this.store.messages(), assets: this.store.assets(), jobs: this.store.jobs(), playground: this.store.playground(), settings: await this.ports.settings(), activeTurns: [...this.turns.keys()] };
   }
   private chatInstructions(conversationId: string, settings: SettingsStatus) {
-    const active = settings.musicProviders.find(entry => entry.id === settings.activeMusicId) ?? settings.musicProviders.find(entry => entry.ready) ?? null;
     return instructions
-      + `\n${musicInstructions(active ? { kind: active.kind, label: active.label, model: active.model } : null)}`
+      + `\n${musicInstructions(settings.musicProviders, settings.activeMusicId)}`
       + `\nCurrent comparison board: ${JSON.stringify(this.store.playground()[conversationId] ?? [])}\nCurrent generation jobs: ${JSON.stringify(this.store.jobs().filter(j => j.conversationId === conversationId).map(j => ({ id: j.id, kind: j.kind, status: j.status, assetId: j.assetId })))}`;
   }
   async chatContext(conversationId: string, draft = '') {
@@ -82,7 +81,7 @@ export class WorkbenchService {
     this.requireOpen();
     if (!settings.musicProviders.length) throw new Error('Configure a music provider in Settings first.');
     const requested = parsed.providerId ? settings.musicProviders.find(entry => entry.id === parsed.providerId) : undefined;
-    if (parsed.providerId && !requested) throw new Error('That music provider is no longer configured. Choose another provider in Settings.');
+    if (parsed.providerId && !requested) throw new Error(`No configured music provider has the ID "${parsed.providerId}". Configured providers: ${settings.musicProviders.map(entry => `${entry.label} (${entry.id})`).join(', ')}. Omit providerId to use the active provider, or pick another in Settings.`);
     const target = requested ?? settings.musicProviders.find(entry => entry.id === settings.activeMusicId) ?? settings.musicProviders.find(entry => entry.ready);
     if (!target) throw new Error('Configure a music provider in Settings first.');
     if (!target.ready) throw new Error(`Add the API key for ${target.label} in Settings first.`);

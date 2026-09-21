@@ -114,7 +114,7 @@ export class MusicRegistry {
     if (!providers.length) throw new Error('Configure a music provider in Settings first.');
     const requested = providerId?.trim();
     const provider = requested ? providers.find(entry => entry.id === requested) : undefined;
-    if (requested && !provider) throw new Error('That music provider is no longer configured. Choose another provider in Settings.');
+    if (requested && !provider) throw new Error(`No configured music provider has the ID "${requested}". Configured providers: ${providers.map(entry => `${entry.label} (${entry.id})`).join(', ')}. Omit providerId to use the active provider, or pick another in Settings.`);
     const active = provider ?? providers.find(entry => entry.id === this.activeId()) ?? providers[0]!;
     if (!musicModel(active.kind, active.model)) throw new Error(`The saved model for "${active.label}" is not supported by this version. Update the provider in Settings.`);
     const key = await this.providerKey(active.id);

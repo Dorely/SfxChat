@@ -1,5 +1,37 @@
 # v0.1 verification
 
+## Music providerId mismatch fixed (2026-09-21)
+
+A live chat turn failed with `Could not generate music: That music provider is no
+longer configured. Choose another provider in Settings.` A read-only inspection of this
+app's own profile (`%APPDATA%/SfxChat/library.sqlite`) showed the cause: the tool ledger
+held two `generate_music` calls whose `providerId` was the guessed string `"gemini"`,
+while the configured provider IDs are UUIDs (`30a36439-…` for ElevenLabs Music,
+`58709c54-…` for Gemini Lyria). Nothing in the per-turn instructions supplied those IDs,
+so the model invented one, and the rejection text implied a deleted provider. The
+assistant then omitted `providerId`, the user set Gemini active in Settings, and the
+retry generated the comparison track on `lyria-3.5` (recorded asset, `request.providerId`
+null). No billed request was lost to the mismatch; `music-active` is now the Gemini entry.
+
+- `musicInstructions` (`src/main/assistant.ts`) now takes the configured providers and the
+  active ID, and the per-turn block lists every provider with its exact ID, model, key
+  readiness, and active marker, with instructions to copy an ID verbatim or omit the field.
+- The rejection in `WorkbenchService.generateMusic` and `MusicRegistry.resolve` now names
+  the requested ID and lists the configured IDs instead of claiming the provider was
+  removed. The `providerId` tool field description requires the copied ID.
+- `npm run typecheck` (`npx tsc --noEmit`): passed.
+- `npm run build`: passed (main 190.63 kB, renderer 747.08 kB, CSS 30.27 kB).
+- Temporary harnesses outside the repository compiled `assistant.ts` and
+  `music-registry.ts`, then checked the emitted header against the real provider records
+  (both IDs present, active marker on the selected entry, Lyria/ElevenLabs block matching
+  the active kind, empty-roster guidance unchanged) and the resolver (real UUID resolves;
+  `"gemini"`, `"Gemini Lyria"`, and `"gemini-lyria"` are rejected with the listing; null
+  and undefined fall back to the active provider). The harnesses were deleted after the run.
+
+Not verified: the live assistant behavior after this change (whether the hosted model now
+copies the ID) needs a real chat turn with a non-active provider. No paid generation was
+made for this fix, and no listener judgment is claimed.
+
 ## Music providers, libraries, and prompting guidance (2026-09-21)
 
 Implemented ElevenLabs Music and Gemini Lyria as a separate asset kind with an

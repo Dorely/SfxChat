@@ -116,11 +116,12 @@ Chat runs outside renderer lifetimes and persists streamed messages/activity.
 Runtime instructions and tool field descriptions provide sound-design guidance,
 [reviewed ElevenLabs prompting practices](knowledge/elevenlabs.md), and
 [reviewed music prompting practices](knowledge/elevenlabs-music.md). Per turn,
-`chatInstructions` appends the block for the active music provider and model
-(`musicElevenLabsInstructions` or `musicLyriaInstructions` from `assistant.ts`), so the
-model sees provider-accurate limits and prompting advice instead of generic music
-advice. Provider generation receives no parent audio or chat history; `parentId` is
-local lineage only, and no music provider can continue an earlier generation. Manual
+`chatInstructions` appends the configured music providers with their exact IDs, the
+active choice, and the provider-specific block (`musicInstructions` in `assistant.ts`),
+so the model sees provider-accurate limits and prompting advice and copies a real
+provider ID rather than one it guesses. Provider generation receives no parent audio
+or chat history; `parentId` is local lineage only, and no music provider can continue
+an earlier generation. Manual
 regeneration uses an editable Generation prompt, prefilled from the original, separately
 from review feedback, and reuses requested duration rather than measured file duration.
 Markdown/skill snapshots are not injected into the assistant at runtime.

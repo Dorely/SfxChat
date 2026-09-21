@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import type { MusicProviderKind } from '../shared/types';
+import type { MusicProviderEntry } from '../shared/types';
+import { musicProviderLabel } from '../shared/music-models';
 import { analysisSchema, generationSchema, idSchema, musicToolSchema, patchSchema, trimSchema } from './validation';
 
 export const instructions = `You are SfxChat, a specialist sound-design assistant.
@@ -127,8 +128,6 @@ audio, mixing tracks, and assembling a scene are not available.
 You cannot read arbitrary files or execute shell
 commands. Manual controls and your tools share the same library operations.`;
 
-export interface MusicContext { kind: MusicProviderKind; label: string; model: string }
-
 const elevenlabsMusicInstructions = `ElevenLabs Music specifics. The prompt is the whole score: it carries genre, mood,
 instrumentation, tempo, key, era, production notes, structure, and lyrics, and it may
 use up to 4100 characters, so spend that budget on musical detail rather than chat
@@ -166,14 +165,19 @@ mentioning if provenance comes up. The clip model is the cheapest way to explore
 direction before committing to a full song.`;
 
 /**
- * Provider guidance for the configured music target. The provider and model are
- * resolved per turn, so this block follows whatever Settings is active.
+ * Provider guidance for the configured music targets. The roster and the active
+ * choice are resolved per turn, so this block follows whatever Settings holds.
+ * Provider IDs appear here because a request may name one for a single generation;
+ * the tool rejects an ID that does not match, and a guessed one is indistinguishable
+ * from a deleted provider until the IDs are listed.
  */
-export function musicInstructions(target: MusicContext | null): string {
-  if (!target) return 'No music provider is configured, so generate_music cannot run. Tell the user to add a music provider and its API key in Settings, and keep working on sound effects in the meantime.';
-  const label = target.kind === 'elevenlabs-music' ? 'ElevenLabs Music' : 'Gemini Lyria';
-  const header = `Active music provider: ${target.label} (${label}, model ${target.model}). One request may target another configured provider; the Playground form and the providerId tool field do that.`;
-  return `${header}\n${target.kind === 'elevenlabs-music' ? elevenlabsMusicInstructions : lyriaMusicInstructions}`;
+export function musicInstructions(providers: MusicProviderEntry[], activeMusicId: string | null): string {
+  if (!providers.length) return 'No music provider is configured, so generate_music cannot run. Tell the user to add a music provider and its API key in Settings, and keep working on sound effects in the meantime.';
+  const active = providers.find(entry => entry.id === activeMusicId) ?? providers.find(entry => entry.ready) ?? providers[0]!;
+  const name = (entry: MusicProviderEntry) => entry.label === musicProviderLabel(entry.kind) ? entry.label : `${entry.label} — ${musicProviderLabel(entry.kind)}`;
+  const roster = providers.map(entry => `${name(entry)}, model ${entry.model}, ${entry.ready ? 'key saved' : 'no key yet'}, ${entry.id === active.id ? 'active, ' : ''}providerId "${entry.id}"`).join('; ');
+  const header = `Active music provider: ${name(active)} (model ${active.model}). Configured music providers: ${roster}. To target another configured provider for one request, copy its providerId exactly as quoted; never shorten, rename, or invent an ID, and omit providerId to use the active provider. If the provider a request needs is not in this list, say so and ask instead of guessing.`;
+  return `${header}\n${active.kind === 'elevenlabs-music' ? elevenlabsMusicInstructions : lyriaMusicInstructions}`;
 }
 
 export const toolSchemas = {
