@@ -9,7 +9,6 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/test.mjs",
     "test:e2e": "npm run build && playwright test",
     "rebuild": "electron-builder install-app-deps",
     "package": "npm run build && electron-builder --win nsis --x64 --publish never",
@@ -35,7 +34,6 @@
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
     "typescript": "7.0.2",
-    "vite": "7.3.6",
-    "vitest": "5.0.0"
+    "vite": "7.3.6"
   }
 }

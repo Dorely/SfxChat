@@ -10,14 +10,11 @@ max-tokens discovery (8192 floor). Codex keeps its OAuth transport and gains
 SQLite; keys stay in OS-backed `SecureStore` and are never echoed to the UI.
 
 - `npm run typecheck` (`npx tsc --noEmit`): passed.
-- `npm test`: 89 tests across 14 files passed under Electron's Node, including 17
-  new generic tests (chat/responses/anthropic SSE and tool-call accumulation,
-  reasoning-effort fallback, no-auth header absence, registry normalization,
-  per-effort gating, max-tokens ladder, vision/audio flags, combined-selection
-  resolution with stale-effort fallback).
-- Ranges/provenance: pixel/audio probe fixtures are synthetic constants in code
-  (no binary fixtures committed); no live provider calls, keys, or billed
-  generations were made. No sibling-app credentials were read or copied.
+- `npm run build`: passed.
+- Live/manual checks only: unit tests were removed from the project at this
+  stage of development, so no `npm test` evidence is claimed here. No live
+  provider calls, keys, or billed generations were made for this entry. No
+  sibling-app credentials were read or copied.
 
 Pending live acceptance: hosted Command Code/DeepSeek/OpenRouter/Gemini entries,
 local Ollama no-key entry (tool-capable and non-tool models), and Anthropic

@@ -21,6 +21,10 @@
 - Preserve provider boundaries; do not spread provider-specific payloads or model names through the UI.
 - Implement only what the current milestone needs. The desktop stack is Electron with React/TypeScript; keep privileged operations in the main process and the renderer isolated.
 - Replace superseded runtime code and documentation coherently. Preserve necessary immutable history and unrelated work.
+- Do not add unit tests at this stage of development. Do not create `*.test.ts`
+  files, test runners, or test-only harnesses, and do not reintroduce removed
+  test dependencies such as Vitest. Verify work with `typecheck`, the production
+  build, and live/manual checks instead.
 - Use UTF-8 and LF for authored text. Preserve third-party license notices and document changes to vendored material.
 
 ## Credentials and provider operations

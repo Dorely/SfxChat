@@ -179,8 +179,7 @@ profile's logs directory. There is no arbitrary-path or log-reading renderer API
 
 ## Verification boundaries
 
-Unit tests run inside Electron's Node for SQLite ABI compatibility. Playwright runs
-the actual shell with temporary profiles and deterministic provider ports; packaged
-builds refuse mock mode. The fixture is a synthetic tone, not a quality sample.
-Windows CI builds an unsigned installer without credentials. Signing, updates, and
-other-platform packaging are deferred.
+Playwright runs the actual shell with temporary profiles and deterministic
+provider ports; packaged builds refuse mock mode. The fixture is a synthetic
+tone, not a quality sample. Windows CI builds an unsigned installer without
+credentials. Signing, updates, and other-platform packaging are deferred.

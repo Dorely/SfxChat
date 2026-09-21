@@ -34,13 +34,11 @@ Use Node.js 22.12 or newer in the 22 release line, npm, and Git.
 npm ci
 npm run dev
 npm run typecheck
-npm test
 npm run test:e2e
 npm run package
 ```
 
-Installation rebuilds SQLite for the pinned Electron runtime. Unit tests use
-Electron's embedded Node to match that native ABI. Run `npm run rebuild` after
+Installation rebuilds SQLite for the pinned Electron runtime. Run `npm run rebuild` after
 changing Electron/native dependencies. The unsigned installer is written to
 `release/`; packaging does not publish it. Windows CI runs credential-free checks
 and retains the installer as a build artifact.
