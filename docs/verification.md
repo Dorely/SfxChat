@@ -1,5 +1,72 @@
 # v0.1 verification
 
+## Music providers, libraries, and prompting guidance (2026-09-21)
+
+Implemented ElevenLabs Music and Gemini Lyria as a separate asset kind with an
+independent music provider registry, a `generate_music` tool, three workspace tabs, and
+per-provider runtime prompting guidance. Researched guidance was written into
+`src/main/assistant.ts` (shared music doctrine, an ElevenLabs Music block, a Lyria
+block, and tool/field descriptions) and recorded with dated sources in
+[knowledge/elevenlabs-music.md](knowledge/elevenlabs-music.md) and
+[knowledge/gemini-lyria.md](knowledge/gemini-lyria.md).
+
+- `npm run typecheck` (`npx tsc --noEmit`): passed.
+- `npm run build`: passed (main 192 kB, renderer 747 kB, CSS 30 kB).
+- Adapter behavior was exercised against a local stub HTTP server with a temporary
+  harness. The harness was kept outside version control and deleted after the run, and
+  nothing was added to the repository. It reported 21 passing checks over both adapters:
+  the `/v1/music?output_format=auto` URL, `xi-api-key` header, the exact
+  `prompt`/`model_id`/`music_length_ms`/`force_instrumental` body, omission of unset
+  optional fields, `song-id` → requestId, byte preservation, the `bad_prompt` suggestion
+  (message plus retained code/detail) with no credential in the error text, the local
+  4100-character guard, the Interactions URL and `x-goog-api-key` header, the
+  `{ model, input, store: false }` body with composed instrumental/length lines, the
+  clip-model fixed-length rejection, base64 audio decoding, interleaved text blocks
+  collected as lyrics, a no-audio response carrying the provider reason, and 400 mapping
+  to a bounded provider error.
+- Provider-selection wiring was checked in the running development app before the test
+  suites were removed later the same day: saving a music provider wrote a
+  `music-key-<id>` secret, generation created a `kind: music` asset with its provider,
+  model, duration, and instrumental request recorded, the asset appeared only in the
+  Music Library, and the instructions sent to the chat provider contained the active
+  provider header plus its provider-specific block. That run used a temporary local
+  profile and no provider credentials, so no paid request was made.
+- A functional defect was found and fixed in secure storage: `SecureStore` names must
+  match `[a-zA-Z0-9._-]+`, and both registries built names as `chat-key/<uuid>` /
+  `music-key/<uuid>`, so `safeName` rejected every provider-key write and chat API keys
+  could never be saved. Secret names are now built through `secretName()` and validated
+  eagerly.
+- Repository checks: `git diff --check` passed; relative Markdown links in the changed
+  files resolve; the four vendored music-skill files match the SHA-256 values recorded
+  in [sources](sources.md) for upstream revision
+  `9edcbd4b80ed57b8e07a3f86ea520333969fbc3c` and are covered by the byte-preserving
+  `.gitattributes` rule.
+
+Not verified: no paid generation was made against either provider, so real ElevenLabs
+Music and Lyria responses, their latency, their returned formats, SynthID watermark
+presence, cost, and account/plan availability are unverified here. No listener judgment
+is claimed, no audio was auditioned, and no rights review was performed. The Music API
+requires a paid ElevenLabs plan; Lyria's WAV `response_format` path is unverified
+because this app does not send it. Live acceptance remains: configure each provider with
+a real key, generate one track, audition it, and record the outcome here.
+
+## Test infrastructure removed (2026-09-21)
+
+The project carries no automated tests. Removed: both Playwright Electron workflows
+(`tests/workbench.spec.ts`, `tests/trim-editor.spec.ts`), the synthetic tone fixture,
+`playwright.config.ts`, the installed-app smoke script, the `test:e2e` script, the
+`@playwright/test` dependency, the CI step that ran it, the test-mode entry in the
+TypeScript project, and the main-process mock port providers with their `SFXCHAT_TEST_*`
+environment overrides. Verification is now `npm run typecheck`, `npm run build`, and
+live/manual app runs, as required by [AGENTS.md](../AGENTS.md).
+
+Two stale assertions in the removed suite had been repaired while updating it for music
+(the chat-context workflow drove a `Chat model` picker that the generic-provider work had
+already deleted, and asserted an unknown-model state the chat registry no longer
+permits); both were pre-existing defects in the suite rather than product regressions.
+The evidence those suites previously provided is historical: earlier entries below
+describe checks that no longer exist in the repository and must not be re-run as written.
+
 ## Generic agentic chat providers (2026-09-21)
 
 Implemented generic Chat Completions, generic Responses, and Anthropic Messages

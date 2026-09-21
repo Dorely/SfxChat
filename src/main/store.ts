@@ -1,9 +1,12 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import type { Asset, AssetPatch, Conversation, GenerationInput, Job, Message } from '../shared/types';
+import type { Asset, AssetKind, AssetPatch, Conversation, GenerationInput, Job, Message, MusicGenerationInput } from '../shared/types';
 
 const now = () => new Date().toISOString();
 const decode = <T>(row: unknown): T => JSON.parse((row as { json: string }).json) as T;
+// Records written before music existed carry no kind; they are sound effects.
+const normalizeAsset = (asset: Asset): Asset => asset.kind ? asset : { ...asset, kind: 'effect' };
+const normalizeJob = (job: Job): Job => job.kind ? job : { ...job, kind: 'effect' };
 
 export class Store {
   readonly db: Database.Database;
@@ -51,10 +54,10 @@ export class Store {
     this.changed(); return message;
   }
   updateMessage(message: Message) { this.db.prepare('UPDATE messages SET json=? WHERE id=?').run(JSON.stringify(message), message.id); this.changed(); }
-  assets(): Asset[] { return this.db.prepare('SELECT json FROM assets ORDER BY rowid DESC').all().map(decode<Asset>); }
+  assets(): Asset[] { return this.db.prepare('SELECT json FROM assets ORDER BY rowid DESC').all().map(decode<Asset>).map(normalizeAsset); }
   asset(id: string): Asset {
     const row = this.db.prepare('SELECT json FROM assets WHERE id=?').get(id);
-    if (!row) throw new Error('Sound not found.'); return decode<Asset>(row);
+    if (!row) throw new Error('Asset not found.'); return normalizeAsset(decode<Asset>(row));
   }
   private indexAsset(asset: Asset) {
     this.db.prepare('DELETE FROM asset_search WHERE id=?').run(asset.id);
@@ -76,7 +79,7 @@ export class Store {
     const words = query.trim().split(/\s+/).filter(Boolean);
     if (!words.length) return this.assets();
     const match = words.map(w => `"${w.replaceAll('"', '""')}"*`).join(' AND ');
-    return this.db.prepare('SELECT a.json FROM asset_search s JOIN assets a ON a.id=s.id WHERE asset_search MATCH ? ORDER BY rank').all(match).map(decode<Asset>);
+    return this.db.prepare('SELECT a.json FROM asset_search s JOIN assets a ON a.id=s.id WHERE asset_search MATCH ? ORDER BY rank').all(match).map(decode<Asset>).map(normalizeAsset);
   }
   playground(): Record<string, string[]> {
     return Object.fromEntries((this.db.prepare('SELECT * FROM playground').all() as { conversation_id: string; json: string }[]).map(r => [r.conversation_id, JSON.parse(r.json)]));
@@ -87,16 +90,16 @@ export class Store {
     this.changed();
   }
   addToPlayground(conversationId: string, ids: string[]) { this.setPlayground(conversationId, [...(this.playground()[conversationId] ?? []), ...ids]); }
-  jobs(): Job[] { return this.db.prepare('SELECT json FROM jobs ORDER BY rowid').all().map(decode<Job>); }
+  jobs(): Job[] { return this.db.prepare('SELECT json FROM jobs ORDER BY rowid').all().map(decode<Job>).map(normalizeJob); }
   job(id: string): Job {
-    const row = this.db.prepare('SELECT json FROM jobs WHERE id=?').get(id); if (!row) throw new Error('Generation not found.'); return decode<Job>(row);
+    const row = this.db.prepare('SELECT json FROM jobs WHERE id=?').get(id); if (!row) throw new Error('Generation not found.'); return normalizeJob(decode<Job>(row));
   }
-  createJobs(conversationId: string, input: GenerationInput, toolCallId?: string): Job[] {
+  createJobs(conversationId: string, input: GenerationInput | MusicGenerationInput, kind: AssetKind, toolCallId?: string): Job[] {
     this.requireConversation(conversationId);
     const jobs: Job[] = [];
     this.db.transaction(() => {
       for (let i = 0; i < (input.count ?? 1); i++) {
-        const job: Job = { id: randomUUID(), conversationId, status: 'queued', input: { ...input, count: 1 }, assetId: null, error: null, createdAt: now() };
+        const job: Job = { id: randomUUID(), conversationId, kind, status: 'queued', input: { ...input, count: 1 }, assetId: null, error: null, createdAt: now() };
         this.db.prepare('INSERT INTO jobs VALUES (?,?,?,?)').run(job.id, conversationId, job.status, JSON.stringify(job)); jobs.push(job);
       }
       if (toolCallId) {

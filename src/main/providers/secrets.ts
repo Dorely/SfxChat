@@ -26,6 +26,14 @@ function safeName(name: string): string {
   return name;
 }
 
+/**
+ * Builds a store-safe secret name for a namespaced id. Names may not contain path
+ * separators, so callers must not use "/" between the namespace and the id.
+ */
+export function secretName(namespace: string, id: string): string {
+  return safeName(`${namespace}-${id}`);
+}
+
 function toBuffer(value: Ciphertext): Buffer {
   if (Buffer.isBuffer(value)) return value;
   if (typeof value === 'string') return Buffer.from(value, 'base64');

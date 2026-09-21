@@ -14,9 +14,9 @@ when intent changes. Implementation evidence belongs in README and architecture.
 5. Build the resizable left-third chat and right-side Library/Playground. Include
    WAV/MP3 import, search, tags/collections/reviews, provenance, linked regeneration,
    waveform playback, seeking/loop/preview volume, comparison, and original export.
-6. Verify services, transports, recovery, secure storage, mocked Electron workflow,
-   native SQLite, and installed package. Real login/generation/listener checks are
-   recorded separately and must not be inferred from compilation or mocks.
+6. Verify services, transports, recovery, secure storage, and the installed package by
+   type checking, production builds, and live/manual runs. Real login/generation/listener
+   checks are recorded separately and must not be inferred from compilation.
 
 One library per Windows user; Playground membership/order belongs to a conversation.
 Default chat model follows Lorekeeper (`gpt-5.6-sol`), configurable in settings.
@@ -25,5 +25,20 @@ otherwise requested. No approval dialogs, spending caps, or artificial count lim
 Music, Gemini analysis, local editing/mixing, cloud sync, multiple library locations,
 automatic updates, signing, and non-Windows packaging are deferred.
 
-Use focused reviewed commits and Windows CI without live credentials. Produce an
-unsigned installer locally. Preserve the ElevenLabs vendored license separately.
+## Music providers (added after v0.1)
+
+Accepted 2026-09-21. Music became a first-class library kind with its own provider
+configuration, deliberately separate from chat providers and from the sound-effects key:
+one active music provider with an optional per-generation override, its own
+`music-key-<id>` secret, and a `generate_music` tool. ElevenLabs Music and Google's Lyria
+models are implemented; researched prompting guidance is written into the runtime
+assistant prompt per active provider and recorded in
+[docs/knowledge](knowledge/README.md). Composition plans, audio reference, inpainting,
+streaming, stem separation, image-to-music input, and provider-side metadata (word
+timestamps, waveform visuals) remain deferred, as do new assistant tools for inspecting
+or modifying music files.
+
+Use focused reviewed commits and CI that runs the type check and package build without
+live credentials. Produce an unsigned installer locally. Preserve the ElevenLabs vendored
+license separately. Automated test suites of any kind are out of scope for this project;
+see [AGENTS.md](../AGENTS.md).

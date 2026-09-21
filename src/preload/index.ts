@@ -6,11 +6,11 @@ const api: SfxApi = {
   chatContext: (id, draft) => call('chatContext', id, draft),
   openLogs: () => call('openLogs'),
   sendMessage: (id, text) => call('sendMessage', id, text), cancelTurn: id => call('cancelTurn', id),
-  generate: (id, input) => call('generate', id, input), cancelJob: id => call('cancelJob', id),
+  generate: (id, input) => call('generate', id, input), generateMusic: (id, input) => call('generateMusic', id, input), cancelJob: id => call('cancelJob', id),
   updateAsset: (id, patch, conversationId) => call('updateAsset', id, patch, conversationId), setPlayground: (id, ids) => call('setPlayground', id, ids),
   analyzeAudio: (id, input) => call('analyzeAudio', id, input), trimAsset: (conversationId, id, input) => call('trimAsset', conversationId, id, input),
   previewTrim: (id, input) => call('previewTrim', id, input),
-  importAudio: id => call('importAudio', id), exportAsset: id => call('exportAsset', id), searchAssets: query => call('searchAssets', query),
+  importAudio: (id, kind) => call('importAudio', id, kind), exportAsset: id => call('exportAsset', id), searchAssets: query => call('searchAssets', query),
   startLogin: () => call('startLogin'), cancelLogin: () => call('cancelLogin'), logout: () => call('logout'),
   saveElevenLabsKey: key => call('saveElevenLabsKey', key), saveModel: model => call('saveModel', model),
   saveChatProvider: input => call('saveChatProvider', input), deleteChatProvider: id => call('deleteChatProvider', id),
@@ -18,6 +18,8 @@ const api: SfxApi = {
   testChatModel: input => call('testChatModel', input),
   saveChatModel: input => call('saveChatModel', input), deleteChatModel: id => call('deleteChatModel', id),
   setActiveChat: input => call('setActiveChat', input),
+  saveMusicProvider: input => call('saveMusicProvider', input), deleteMusicProvider: id => call('deleteMusicProvider', id),
+  setActiveMusic: id => call('setActiveMusic', id),
   onChanged: callback => { const listener = () => callback(); ipcRenderer.on('sfx:changed', listener); return () => ipcRenderer.removeListener('sfx:changed', listener); }
 };
 contextBridge.exposeInMainWorld('sfx', api);

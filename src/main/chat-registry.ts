@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Store } from './store';
-import type { SecureStore } from './providers/secrets';
+import { secretName, type SecureStore } from './providers/secrets';
 import type { ChatModelEntry } from '../shared/types';
 import { CHAT_MODELS, DEFAULT_EFFORT, DEFAULT_MODEL } from '../shared/chat-models';
 import {
@@ -118,8 +118,8 @@ export class ChatRegistry {
     if (existing >= 0) providers[existing] = provider;
     else providers.push(provider);
     this.writeProviders(providers);
-    if (input.apiKey?.trim()) await this.secrets.set(`chat-key/${id}`, input.apiKey.trim());
-    else await this.secrets.delete(`chat-key/${id}`).catch(() => undefined);
+    if (input.apiKey?.trim()) await this.secrets.set(secretName('chat-key', id), input.apiKey.trim());
+    else await this.secrets.delete(secretName('chat-key', id)).catch(() => undefined);
     return provider;
   }
 
@@ -127,7 +127,7 @@ export class ChatRegistry {
     const providers = this.providers().filter(entry => entry.id !== id);
     this.writeProviders(providers);
     this.writeModels(this.models().filter(entry => entry.providerId !== id));
-    await this.secrets.delete(`chat-key/${id}`).catch(() => undefined);
+    await this.secrets.delete(secretName('chat-key', id)).catch(() => undefined);
     const active = this.activeSelection();
     if (active.modelId === id || this.models().every(entry => entry.id !== active.modelId && !active.modelId.startsWith('codex:'))) {
       this.store.setSetting('chat-active', JSON.stringify({ modelId: `codex:${DEFAULT_MODEL}`, effort: DEFAULT_EFFORT }));
@@ -136,7 +136,7 @@ export class ChatRegistry {
 
   async providerKey(providerId: string): Promise<string | null> {
     try {
-      return await this.secrets.get(`chat-key/${providerId}`);
+      return await this.secrets.get(secretName('chat-key', providerId));
     } catch {
       return null;
     }

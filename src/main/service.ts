@@ -1,8 +1,8 @@
 import { Store } from './store';
 import { MediaLibrary, generatedFields } from './media';
-import { analysisSchema, generationSchema, patchSchema, trimSchema } from './validation';
-import { instructions, tools, toolSchemas } from './assistant';
-import type { AssetPatch, AudioAnalysisInput, GenerationInput, SettingsStatus, Snapshot, TrimInput } from '../shared/types';
+import { analysisSchema, generationSchema, musicGenerationSchema, patchSchema, trimSchema } from './validation';
+import { instructions, musicInstructions, tools, toolSchemas } from './assistant';
+import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, GenerationInput, MusicGenerationInput, MusicProviderKind, SettingsStatus, Snapshot, TrimInput } from '../shared/types';
 import type { DiagnosticLog } from './diagnostics';
 import { diagnosticError } from './providers/errors';
 import { unlink } from 'node:fs/promises';
@@ -10,10 +10,24 @@ import { ContextTokenCounter } from './chat-context';
 import { CHAT_MODELS, resolveChatModel } from '../shared/chat-models';
 
 export interface ChatResult { output: unknown[]; calls: { id: string; name: string; arguments: string }[]; usage?: unknown; requestId?: string | null }
+/** Provider-reported outcome of one generation, including the provider that produced it. */
+export interface GenerationResult {
+  bytes: Buffer;
+  format: 'mp3' | 'wav';
+  provider: string;
+  model: string;
+  requestId: string | null;
+  usage: string | null;
+  /** Exact provider text when the app appended provider-specific guidance. */
+  providerPrompt?: string | null;
+  /** Lyrics or structure text returned by the provider, when it returns any. */
+  lyrics?: string;
+}
 export interface ServicePorts {
   settings(): Promise<SettingsStatus>;
   chat(options: { model: string; input: unknown[]; instructions: string; tools: unknown[]; signal: AbortSignal; onText: (text: string) => void }): Promise<ChatResult>;
-  generate(input: GenerationInput, signal: AbortSignal): Promise<{ bytes: Buffer; requestId: string | null; usage: string | null; model: string }>;
+  generateEffect(input: GenerationInput, signal: AbortSignal): Promise<GenerationResult>;
+  generateMusic(input: MusicGenerationInput, signal: AbortSignal): Promise<GenerationResult>;
   safeError(error: unknown): string;
 }
 export class WorkbenchService {
@@ -30,19 +44,23 @@ export class WorkbenchService {
   async snapshot(): Promise<Snapshot> {
     return { conversations: this.store.conversations(), messages: this.store.messages(), assets: this.store.assets(), jobs: this.store.jobs(), playground: this.store.playground(), settings: await this.ports.settings(), activeTurns: [...this.turns.keys()] };
   }
-  private chatInstructions(conversationId: string) {
-    return instructions + `\nCurrent comparison board: ${JSON.stringify(this.store.playground()[conversationId] ?? [])}\nCurrent generation jobs: ${JSON.stringify(this.store.jobs().filter(j => j.conversationId === conversationId).map(j => ({ id: j.id, status: j.status, assetId: j.assetId })))}`;
+  private chatInstructions(conversationId: string, settings: SettingsStatus) {
+    const active = settings.musicProviders.find(entry => entry.id === settings.activeMusicId) ?? settings.musicProviders.find(entry => entry.ready) ?? null;
+    return instructions
+      + `\n${musicInstructions(active ? { kind: active.kind, label: active.label, model: active.model } : null)}`
+      + `\nCurrent comparison board: ${JSON.stringify(this.store.playground()[conversationId] ?? [])}\nCurrent generation jobs: ${JSON.stringify(this.store.jobs().filter(j => j.conversationId === conversationId).map(j => ({ id: j.id, kind: j.kind, status: j.status, assetId: j.assetId })))}`;
   }
   async chatContext(conversationId: string, draft = '') {
     this.requireOpen();
     this.store.requireConversation(conversationId);
-    const model = resolveChatModel((await this.ports.settings()).model);
+    const settings = await this.ports.settings();
+    const model = resolveChatModel(settings.model);
     this.requireOpen();
     const live = this.liveContext.get(conversationId);
     const input = live?.input ?? this.store.repairToolHistory(conversationId, JSON.parse(this.store.setting(`history/${conversationId}`, '[]'))).input;
     return {
       model, limit: CHAT_MODELS.find(entry => entry.id === model)?.contextLimit ?? null,
-      ...this.contextCounter.count({ instructions: this.chatInstructions(conversationId), tools, input, draft, streamingText: live?.text })
+      ...this.contextCounter.count({ instructions: this.chatInstructions(conversationId, settings), tools, input, draft, streamingText: live?.text })
     };
   }
   async generate(conversationId: string, raw: GenerationInput, callId?: string) {
@@ -52,20 +70,44 @@ export class WorkbenchService {
     const settings = await this.ports.settings();
     this.requireOpen();
     if (!settings.elevenLabsReady) throw new Error('Add your ElevenLabs API key in Settings first.');
+    const jobs = await this.queueCandidates(conversationId, input, 'effect', callId);
+    this.store.addMessage(conversationId, 'tool', `Queued ${jobs.length} sound${jobs.length === 1 ? '' : 's'}: ${input.prompt}`);
+    this.pump(); return { jobIds: jobs.map(j => j.id) };
+  }
+  async generateMusic(conversationId: string, raw: MusicGenerationInput, callId?: string) {
+    this.requireOpen();
+    const parsed = musicGenerationSchema.parse(raw);
+    if (parsed.parentId) this.store.asset(parsed.parentId);
+    const settings = await this.ports.settings();
+    this.requireOpen();
+    if (!settings.musicProviders.length) throw new Error('Configure a music provider in Settings first.');
+    const requested = parsed.providerId ? settings.musicProviders.find(entry => entry.id === parsed.providerId) : undefined;
+    if (parsed.providerId && !requested) throw new Error('That music provider is no longer configured. Choose another provider in Settings.');
+    const target = requested ?? settings.musicProviders.find(entry => entry.id === settings.activeMusicId) ?? settings.musicProviders.find(entry => entry.ready);
+    if (!target) throw new Error('Configure a music provider in Settings first.');
+    if (!target.ready) throw new Error(`Add the API key for ${target.label} in Settings first.`);
+    const input: MusicGenerationInput = { ...parsed, kind: 'music', providerId: parsed.providerId ?? null };
+    const jobs = await this.queueCandidates(conversationId, input, 'music', callId);
+    this.store.addMessage(conversationId, 'tool', `Queued ${jobs.length} track${jobs.length === 1 ? '' : 's'} on ${target.label} (${target.model}): ${input.prompt}`);
+    this.pump(); return { jobIds: jobs.map(j => j.id) };
+  }
+  /**
+   * Admits candidates in transactions of up to 128 jobs, yielding between them so
+   * large explicit requests keep the UI and shutdown responsive. This is an
+   * admission chunk, not a count limit.
+   */
+  private async queueCandidates(conversationId: string, input: GenerationInput | MusicGenerationInput, kind: AssetKind, callId?: string) {
     const jobs: ReturnType<Store['createJobs']> = [];
     const requested = input.count ?? 1;
     if (requested > 128) this.store.addMessage(conversationId, 'tool', `Preparing ${requested} requested candidates. If the app closes during preparation, only already queued candidates will run.`);
     for (let remaining = requested; remaining > 0;) {
       this.requireOpen();
       const count = Math.min(128, remaining);
-      jobs.push(...this.store.createJobs(conversationId, { ...input, count }, callId));
+      jobs.push(...this.store.createJobs(conversationId, { ...input, count }, kind, callId));
       remaining -= count;
-      // Yield between transactions so even large explicit requests leave the UI
-      // and shutdown responsive. This is an admission chunk, not a count limit.
       if (remaining) await new Promise<void>(resolve => setImmediate(resolve));
     }
-    this.store.addMessage(conversationId, 'tool', `Queued ${jobs.length} sound${jobs.length === 1 ? '' : 's'}: ${input.prompt}`);
-    this.pump(); return { jobIds: jobs.map(j => j.id) };
+    return jobs;
   }
   pump() {
     if (this.stopped || this.pumpPromise) return;
@@ -76,10 +118,17 @@ export class WorkbenchService {
       const job = this.store.jobs().find(j => j.status === 'queued'); if (!job) break;
       const controller = new AbortController(); this.activeJob = { id: job.id, controller };
       job.status = 'running'; this.store.updateJob(job);
-      this.diagnostics?.record('generation.started', { conversationId: job.conversationId, jobId: job.id, provider: 'ElevenLabs' });
+      this.diagnostics?.record('generation.started', { conversationId: job.conversationId, jobId: job.id, kind: job.kind });
       try {
-        const result = await this.ports.generate(job.input, controller.signal);
-        const asset = await this.media.save(result.bytes, 'mp3', { ...generatedFields(job.input), provider: 'ElevenLabs', model: result.model, requestId: result.requestId, usage: result.usage });
+        const result = job.input.kind === 'music'
+          ? await this.ports.generateMusic(job.input, controller.signal)
+          : await this.ports.generateEffect(job.input, controller.signal);
+        const asset = await this.media.save(result.bytes, result.format, {
+          ...generatedFields(job.input, job.kind), provider: result.provider, model: result.model,
+          requestId: result.requestId, usage: result.usage,
+          providerPrompt: result.providerPrompt ?? null,
+          ...(result.lyrics ? { lyrics: result.lyrics } : {})
+        });
         if (asset.duration === null || asset.duration <= 0) {
           this.store.insertAsset(asset);
           this.store.updateJob({ ...job, status: 'failed', assetId: asset.id, error: 'Returned audio could not be validated. Original bytes were retained; no retry was made.' });
@@ -90,7 +139,7 @@ export class WorkbenchService {
         // A complete response that races cancellation is retained as a completed
         // original. Cancellation cannot unspend or unreceive a provider result.
         this.store.completeJob(job, asset);
-        this.diagnostics?.record('generation.completed', { conversationId: job.conversationId, jobId: job.id, assetId: asset.id, requestId: result.requestId, bytes: asset.bytes, hash: asset.hash });
+        this.diagnostics?.record('generation.completed', { conversationId: job.conversationId, jobId: job.id, assetId: asset.id, provider: result.provider, requestId: result.requestId, bytes: asset.bytes, hash: asset.hash });
         this.store.addMessage(job.conversationId, 'tool', `Ready: ${asset.name}${asset.duration === null ? ' (audio metadata could not be read; audition before use)' : ''}`);
       } catch (error) {
         const knownFailure = !!error && typeof error === 'object' && ('status' in error || 'statusCode' in error);
@@ -113,11 +162,11 @@ export class WorkbenchService {
     if (conversationId) this.store.requireConversation(conversationId);
     this.store.updateAsset(id, patch, conversationId);
   }
-  async importFiles(conversationId: string, paths: string[]) {
+  async importFiles(conversationId: string, paths: string[], kind: AssetKind = 'effect') {
     this.requireOpen();
     this.store.requireConversation(conversationId);
     for (const path of paths) {
-      const asset = await this.media.import(path); this.requireOpen(); this.store.insertAsset(asset); this.store.addToPlayground(conversationId, [asset.id]);
+      const asset = await this.media.import(path, kind); this.requireOpen(); this.store.insertAsset(asset); this.store.addToPlayground(conversationId, [asset.id]);
       this.store.addMessage(conversationId, 'tool', `Imported “${asset.name}”.`);
     }
   }
@@ -138,7 +187,7 @@ export class WorkbenchService {
       this.requireOpen();
       signal?.throwIfAborted();
       const asset = await this.media.save(rendered.bytes, 'wav', {
-        source: 'edited', name: input.name ?? `${source.name} (trim)`, description: source.description,
+        source: 'edited', kind: source.kind, name: input.name ?? `${source.name} (trim)`, description: source.description,
         tags: [...source.tags], collections: [...source.collections], parentId: source.id, edit: rendered.edit,
         // Generation provenance remains on the immutable parent; no new provider request occurred.
         prompt: source.prompt
@@ -190,7 +239,7 @@ export class WorkbenchService {
         round++;
         const settings = await this.ports.settings();
         this.diagnostics?.record('chat.request_started', { conversationId, messageId: message.id, round, model: settings.model, input: inputSummary(input) });
-        const response = await this.ports.chat({ model: resolveChatModel(settings.model), input, instructions: this.chatInstructions(conversationId), tools, signal: controller.signal, onText: text => { live.text += text; message.text += text; this.store.updateMessage(message); } });
+        const response = await this.ports.chat({ model: resolveChatModel(settings.model), input, instructions: this.chatInstructions(conversationId, settings), tools, signal: controller.signal, onText: text => { live.text += text; message.text += text; this.store.updateMessage(message); } });
         this.diagnostics?.record('chat.request_completed', { conversationId, messageId: message.id, round, requestId: response.requestId, callIds: response.calls.map(call => call.id), output: inputSummary(response.output) });
         message.status = 'completed'; this.store.updateMessage(message);
         input.push(...response.output);
@@ -229,10 +278,13 @@ export class WorkbenchService {
       switch (call.name) {
         case 'generate_sounds': {
           const queued = await this.generate(conversationId, args as GenerationInput, call.id);
-          while (!signal?.aborted && !this.stopped && queued.jobIds.some(id => ['queued', 'running'].includes(this.store.job(id).status))) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-          const jobs = queued.jobIds.map(id => this.store.job(id));
+          const jobs = await this.waitForJobs(queued.jobIds, signal);
+          result = { ...queued, jobs, assets: jobs.flatMap(job => job.assetId ? [this.store.asset(job.assetId)] : []) };
+          break;
+        }
+        case 'generate_music': {
+          const queued = await this.generateMusic(conversationId, args as MusicGenerationInput, call.id);
+          const jobs = await this.waitForJobs(queued.jobIds, signal);
           result = { ...queued, jobs, assets: jobs.flatMap(job => job.assetId ? [this.store.asset(job.assetId)] : []) };
           break;
         }
@@ -251,6 +303,13 @@ export class WorkbenchService {
       const output = JSON.stringify({ error: this.ports.safeError(error) }); this.store.finishTool(call.id, output);
       this.store.addMessage(conversationId, 'tool', `Could not ${call.name.replaceAll('_', ' ')}: ${this.ports.safeError(error)}`, 'failed'); return output;
     }
+  }
+  /** Waits for queued jobs to reach a terminal state, or for the turn to stop. */
+  private async waitForJobs(jobIds: string[], signal?: AbortSignal) {
+    while (!signal?.aborted && !this.stopped && jobIds.some(id => ['queued', 'running'].includes(this.store.job(id).status))) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return jobIds.map(id => this.store.job(id));
   }
   async idle() { await this.pumpPromise; await Promise.all([...this.turnPromises]); await Promise.allSettled([...this.editPromises]); await this.media.idle(); }
   async shutdown() {

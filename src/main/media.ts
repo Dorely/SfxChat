@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { join, extname, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { parseBuffer } from 'music-metadata';
-import type { Asset, AudioAnalysisInput, GenerationInput, TrimInput } from '../shared/types';
+import type { Asset, AssetKind, AudioAnalysisInput, GenerationInput, MusicGenerationInput, TrimInput } from '../shared/types';
 import { analyzeAudio, decodeAudio, renderTrim, MAX_AUDIO_BYTES, type DecodedAudio } from './audio';
 
 export class MediaLibrary {
@@ -39,15 +39,15 @@ export class MediaLibrary {
     await rename(temp, path);
     let duration: number | null = null;
     try { const metadata = await parseBuffer(bytes, format === 'mp3' ? 'audio/mpeg' : 'audio/wav', { duration: true }); duration = metadata.format.duration ?? null; } catch { /* originals still preserved */ }
-    return { id, name: 'Untitled sound', description: '', tags: [], collections: [], review: 'unreviewed', feedback: '', source: 'imported', format, hash: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length, duration, prompt: '', provider: null, model: null, requestId: null, request: null, usage: null, parentId: null, createdAt: new Date().toISOString(), ...fields };
+    return { id, name: 'Untitled sound', description: '', tags: [], collections: [], review: 'unreviewed', feedback: '', source: 'imported', kind: 'effect', format, hash: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length, duration, prompt: '', provider: null, model: null, requestId: null, request: null, usage: null, parentId: null, createdAt: new Date().toISOString(), ...fields };
   }
-  async import(path: string): Promise<Asset> {
+  async import(path: string, kind: AssetKind = 'effect'): Promise<Asset> {
     const extension = extname(path).toLowerCase();
     if (extension !== '.mp3' && extension !== '.wav') throw new Error('Import a WAV or MP3 file.');
     const bytes = await readFile(path);
     const metadata = await parseBuffer(bytes, extension === '.mp3' ? 'audio/mpeg' : 'audio/wav', { duration: true });
     if (!metadata.format.codec || !metadata.format.duration) throw new Error('The file does not contain playable audio.');
-    return this.save(bytes, extension.slice(1) as 'mp3' | 'wav', { name: basename(path, extension), source: 'imported' });
+    return this.save(bytes, extension.slice(1) as 'mp3' | 'wav', { name: basename(path, extension), source: 'imported', kind });
   }
   async export(asset: Asset, destination: string) {
     const original = await readFile(this.path(asset));
@@ -56,6 +56,6 @@ export class MediaLibrary {
   }
 }
 
-export function generatedFields(input: GenerationInput): Partial<Asset> {
-  return { source: 'generated', prompt: input.prompt, request: input, parentId: input.parentId ?? null, name: input.name ?? input.prompt.slice(0, 64), description: input.prompt };
+export function generatedFields(input: GenerationInput | MusicGenerationInput, kind: AssetKind): Partial<Asset> {
+  return { source: 'generated', kind, prompt: input.prompt, request: input, parentId: input.parentId ?? null, name: input.name ?? input.prompt.slice(0, 64), description: input.prompt };
 }

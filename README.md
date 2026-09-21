@@ -1,17 +1,25 @@
 # SfxChat
 
-A Windows desktop workbench for creating, comparing, and organizing sound effects
-with a chat assistant. [Public source](https://github.com/Dorely/SfxChat) ·
+A Windows desktop workbench for creating, comparing, and organizing sound effects and
+music with a chat assistant. [Public source](https://github.com/Dorely/SfxChat) ·
 [MIT license](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## v0.1
 
-Chat occupies a resizable left sidebar. Library and conversation-specific Playground
-views share the right workspace. Generate through ElevenLabs, audition candidates,
-record feedback, regenerate linked alternatives, and organize names, descriptions,
-tags, collections, and review status. WAV/MP3 imports and exports preserve original
-bytes. Search includes original prompts and feedback. Local library use needs no
-provider login.
+Chat occupies a resizable left sidebar. Effects Library, Music Library, and
+conversation-specific Playground views share the right workspace. Generate sound
+effects through ElevenLabs and music through a separately configured music provider,
+audition candidates, record feedback, regenerate linked alternatives, and organize
+names, descriptions, tags, collections, and review status. WAV/MP3 imports and exports
+preserve original bytes. Search includes original prompts and feedback. Local library
+use needs no provider login.
+
+The Playground generates either kind. Sound effects use the ElevenLabs key from
+Settings; music uses the active **music provider**, which is configured independently of
+chat providers and of the effects key — choosing Gemini for chat does not configure
+Gemini for music, and an ElevenLabs sound-effects key is never reused for Music. One
+provider is active; a generation can target another configured provider. Each candidate
+is a separate billed generation, and music generations are slower than effects.
 
 The chat composer shows a local tiktoken estimate including the draft, instructions,
 and tool history against the selected model's default Codex context size (272,000
@@ -23,8 +31,10 @@ Lorekeeper and PixelChat references. There is no CLI prerequisite. Source and mo
 tests alone do not establish that a particular account can log in or use a model;
 see [verification](docs/verification.md) for actual evidence and live acceptance.
 
-Music, Gemini analysis, mixing and edits beyond trimming/fades, cloud sync, multiple libraries, automatic
-updates, signed installers, and other platform packages are deferred.
+Music, Gemini analysis, mixing and edits beyond trimming/fades, cloud sync, multiple
+libraries, automatic updates, signed installers, and other platform packages are
+deferred. Composition plans, audio reference, inpainting, streaming, and stem separation
+are available from the providers but not exposed by this app.
 
 ## Development on Windows x64
 
@@ -34,14 +44,17 @@ Use Node.js 22.12 or newer in the 22 release line, npm, and Git.
 npm ci
 npm run dev
 npm run typecheck
-npm run test:e2e
 npm run package
 ```
 
 Installation rebuilds SQLite for the pinned Electron runtime. Run `npm run rebuild` after
 changing Electron/native dependencies. The unsigned installer is written to
-`release/`; packaging does not publish it. Windows CI runs credential-free checks
-and retains the installer as a build artifact.
+`release/`; packaging does not publish it. Windows CI runs `npm ci`, the type check, and
+the package build, then retains the installer as a build artifact.
+
+This project carries no automated tests. Verify changes with `typecheck`, the production
+build, and live/manual runs of the app, and record what was actually checked in
+[verification](docs/verification.md).
 
 For interactive debugging in VS Code, select `Debug SfxChat` in Run and Debug and
 press F5. This launches the development app with source-mapped main-process and
@@ -55,18 +68,33 @@ only one running instance.
 2. Save your ElevenLabs API key in Settings. Credentials use Windows-backed
    encryption. Settings reads expose readiness, never stored values. An empty key
    removes the saved key.
-3. Request sounds in chat or use the Playground form. Generation runs directly
+3. Add a music provider (ElevenLabs Music or Gemini Lyria), choose its model, and save
+   its API key. Music providers are configured separately from chat providers and from
+   the effects key. The ElevenLabs Music API requires a paid plan.
+4. Request sounds or music in chat or use the Playground form. Generation runs directly
    without a separate spending approval and uses your provider account's credits.
-4. Audition candidates, record feedback, and regenerate. Metadata edits preserve
+5. Audition candidates, record feedback, and regenerate. Metadata edits preserve
    original prompts, hashes, requests, and files.
-5. Export original audio through the inspector. Choose a new destination filename;
+6. Export original audio through the inspector. Choose a new destination filename;
    v0.1 refuses to overwrite an existing file.
 
 For manual regeneration, edit **Generation prompt** in the inspector to describe
 the complete desired sound. It starts with the original prompt; **Feedback** is
 kept separately as review notes. Use chat to turn feedback into a revised prompt.
-See the [ElevenLabs prompting guide](docs/knowledge/elevenlabs.md) for examples,
-duration/loop/influence guidance, and documented endpoint limitations.
+See the API knowledge notes — [sound effects](docs/knowledge/elevenlabs.md),
+[ElevenLabs Music](docs/knowledge/elevenlabs-music.md), and
+[Gemini Lyria](docs/knowledge/gemini-lyria.md) — for prompting guidance and documented
+endpoint limitations.
+
+## Make music
+
+Switch the Playground to **Music**, choose a length, and optionally mark the track
+instrumental or target a different configured provider. Music prompts carry the whole
+creative direction — genre, instrumentation, tempo, key, structure, and any lyrics — so
+a revision is a new generation with a restated direction, not an edit of the previous
+track. Lyria and ElevenLabs Music answer length, structure, and vocal questions
+differently; the assistant follows the active provider's documented behavior, and each
+note above records what was verified and what remains unverified.
 
 ## Trim sounds
 

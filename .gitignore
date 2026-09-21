@@ -44,9 +44,6 @@ generated/
 *.aac
 *.aiff
 *.pcm
-!tests/fixtures/*.mp3
-test-results/
-playwright-report/
 
 # Machine-local editor/OS files
 .idea/
@@ -54,3 +51,6 @@ playwright-report/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Local agent/tool state (learned preferences and session data)
+.commandcode/

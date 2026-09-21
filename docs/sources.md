@@ -13,6 +13,7 @@ These original absolute locations are optional provenance/navigation references.
 | PixelChat | `C:/Users/jonth/Source/repos/PixelChat` | `8f2eb708794f2857fd1d2910e19fd86b25f0d4cf` |
 | Shellmate | `C:/Users/jonth/Source/repos/Shellmate` | `63bd45a133623ebbbf59d6af95529b5aece2cd01` |
 | Installed ElevenLabs skill | `C:/Users/jonth/.codex/skills/elevenlabs-sound-effects` | Upstream revision recorded by Chimera: `82f6b49dce482ff9e9fee57ce5bed8bf42f8ab8f`; not independently fetched in this handoff. |
+| ElevenLabs music skill (upstream) | `https://github.com/elevenlabs/skills` `music/` | `9edcbd4b80ed57b8e07a3f86ea520333969fbc3c`, fetched 2026-09-21 for the vendored copy. |
 
 HEAD identifies the inspected repository context. The hashes below identify actual file bytes read for the handoff, including any working-copy differences in reference applications.
 
@@ -24,7 +25,7 @@ HEAD identifies the inspected repository context. The hashes below identify actu
 - **Adapted architecture:** ownership and workflow patterns from the three sibling apps, summarized in [architecture](architecture.md). Their code and databases were not copied. No credential/token values were accessed.
 - **New project intent:** the user's accepted SfxChat brief and clarifications define the documentation-only scope, API-focused carryover, and provisional Electron/React direction.
 
-Excluded: game rules and taste, cue selections, audio/media files, audition pages, local model installations, private account state, raw API results, and unrelated scripts. Music-generation research remains future work.
+Excluded: game rules and taste, cue selections, audio/media files, audition pages, local model installations, private account state, raw API results, and unrelated scripts. The music-generation research that was excluded from the initial handoff was performed during the music feature work; see [music provider research](#music-provider-research-2026-09-21).
 
 ## Original references retained for later verification
 
@@ -84,6 +85,30 @@ conversation payloads or generated audio were copied into tests or source contro
 The synthetic regression covers streamed items followed by an empty terminal
 output; the original HTTP error body was not available.
 
+## Music provider research (2026-09-21)
+
+Music generation was researched from official sources and then implemented. The dated
+reviews, request mappings, documented limits and discrepancies, and evidence boundaries
+are recorded in the [ElevenLabs Music](knowledge/elevenlabs-music.md) and
+[Gemini Lyria](knowledge/gemini-lyria.md) notes. Their runtime form is the music
+instruction block in [assistant.ts](../src/main/assistant.ts), which is selected per turn
+from the active music provider; the notes are provenance rather than runtime input.
+
+Sources consulted: ElevenLabs [Music capabilities](https://elevenlabs.io/docs/overview/capabilities/music),
+[best practices](https://elevenlabs.io/docs/overview/capabilities/music/best-practices),
+[POST /v1/music](https://elevenlabs.io/docs/api-reference/music/compose),
+[POST /v1/music/detailed](https://elevenlabs.io/docs/api-reference/music/compose-detailed),
+[composition plans](https://elevenlabs.io/docs/eleven-api/guides/how-to/music/composition-plans),
+[Music quickstart](https://elevenlabs.io/docs/eleven-api/guides/cookbooks/music), and
+[API pricing](https://elevenlabs.io/pricing/api); Google
+[music generation](https://ai.google.dev/gemini-api/docs/music-generation),
+[Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview),
+[Lyria prompt guide](https://ai.google.dev/gemini-api/docs/lyria-prompt-guide), and
+[pricing](https://ai.google.dev/gemini-api/docs/pricing).
+
+No paid generation, listener evaluation, or rights review was performed. Listed prices
+are provider-published figures from that date and are not a cost guarantee.
+
 ## Historical source-file fingerprints
 
 Token-counter research, sibling reference revisions, model-catalog metadata, and
@@ -102,6 +127,10 @@ SHA-256 values below were computed during extraction. Paths are relative to the 
 | ElevenLabs | `SKILL.md` | `e4b87f43220ef2992cc30a16b8f12500e2dbc613a0de814ca58dff946c25e966` |
 | ElevenLabs | `references/installation.md` | `58724eebca1477e889a13d8a5cb9956b95f6b0269b3ecb16e5a74b1a57034522` |
 | ElevenLabs | `LICENSE` | `4ab5e9af2296f748eefa6c0696667f83aa9c0edda7b6972785966b60644b3da6` |
+| ElevenLabs music skill | `music/SKILL.md` | `647dcdcc634277763d06e3d7697263b0e49c256f51f26da7bf3f989d9723085c` |
+| ElevenLabs music skill | `music/references/installation.md` | `2ef32cf83d7f14131335621d88fcd816fba9746ae90b8deccb5865743239d59b` |
+| ElevenLabs music skill | `music/references/api_reference.md` | `feafd13ff2e20a1831b056b3d08a42c11439c04b126f8400a3557ef130a06af3` |
+| ElevenLabs music skill | `LICENSE` | `4ab5e9af2296f748eefa6c0696667f83aa9c0edda7b6972785966b60644b3da6` |
 | Chimera | `.agents/skills/chimera-sound-design/SKILL.md` | `5f79a073a41ffe96a163d9b4e655651d1f69e6c6e3ce2c422fbc33bf00cda8ad` |
 | Chimera | `.agents/skills/chimera-sound-design/references/providers.md` | `3b7f9af325e8b09beddb590a91b6f393659d4ae3a342375d11227dbf98a32a01` |
 | Chimera | `.agents/skills/chimera-sound-design/references/craft.md` | `7391d2fde3164ca9247380fee9914cbd35bf594b96768351c45fe5cafd7a913b` |

@@ -10,8 +10,9 @@
 /LICENSE text eol=lf
 /.gitignore text eol=lf
 /.gitattributes text eol=lf
-# Preserve the exact upstream skill snapshot, including its license.
+# Preserve the exact upstream skill snapshots, including their licenses.
 /.agents/skills/elevenlabs-sound-effects/** -text
+/.agents/skills/elevenlabs-music/** -text
 /third-party/*.txt text eol=lf
 # Preserve upstream COPYING bytes, including its original trailing whitespace.
 /third-party/LGPL-2.1-mpg123.txt -text whitespace=-blank-at-eol

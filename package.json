@@ -9,7 +9,6 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "npm run build && playwright test",
     "rebuild": "electron-builder install-app-deps",
     "package": "npm run build && electron-builder --win nsis --x64 --publish never",
     "postinstall": "electron-builder install-app-deps"
@@ -24,7 +23,6 @@
     "zod": "4.6.1"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0",
     "@types/better-sqlite3": "9.6.0",
     "@types/node": "24.13.4",
     "@types/react": "19.3.0",

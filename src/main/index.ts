@@ -9,22 +9,22 @@ import { CodexAuth } from './providers/auth';
 import { CodexClient, DEFAULT_MODEL } from './providers/codex';
 import { resolveChatModel } from '../shared/chat-models';
 import { ElevenLabsClient } from './providers/elevenlabs';
+import { ElevenLabsMusicClient } from './providers/elevenlabs-music';
+import { GeminiMusicClient } from './providers/gemini-music';
 import { ChatRegistry } from './chat-registry';
+import { MusicRegistry } from './music-registry';
 import { AnthropicClient } from './providers/generic/anthropic';
 import { ChatCompletionsClient, toChatMessages, toResponsesOutput } from './providers/generic/chat';
 import { GenericResponsesClient } from './providers/generic/responses';
 import { capabilityNote, toolsForModel } from './providers/generic/capabilities';
 import { tools } from './assistant';
 import { commandSchemas, idSchema } from './validation';
-import { mockPorts } from './testing';
 import { DiagnosticLog, redactText } from './diagnostics';
 import { diagnosticError } from './providers/errors';
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'sfx-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 app.setName('SfxChat');
 app.setPath('userData', join(app.getPath('appData'), 'SfxChat'));
-const testMode = !app.isPackaged && process.env.SFXCHAT_TEST_MODE === '1';
-if (testMode && process.env.SFXCHAT_TEST_DATA) app.setPath('userData', process.env.SFXCHAT_TEST_DATA);
 let window: BrowserWindow | null = null;
 let service: WorkbenchService | null = null;
 let auth: CodexAuth | null = null;
@@ -53,14 +53,16 @@ else {
     let credentialError: string | null = null;
     try { await auth.initialize(); } catch (error) { credentialError = safeError(error); }
     const codex = new CodexClient(); const eleven = new ElevenLabsClient();
+    const elevenMusic = new ElevenLabsMusicClient(); const geminiMusic = new GeminiMusicClient();
     const registry = new ChatRegistry(store, secrets);
+    const music = new MusicRegistry(store, secrets);
     const model = () => resolveChatModel(store.setting('chat-model', DEFAULT_MODEL));
     const livePorts: ServicePorts = {
       settings: async () => {
         let elevenLabsReady = false;
         try { elevenLabsReady = Boolean(await secrets.get('elevenlabs')); } catch (error) { credentialError = safeError(error); }
         const active = registry.activeSelection();
-        return { codexReady: auth!.status.ready, loginPending: auth!.status.pending, elevenLabsReady, secureStorageAvailable: await secrets.available(), model: model(), error: auth!.status.error ?? credentialError, chatModels: registry.options(), activeChat: active, providers: registry.providers() };
+        return { codexReady: auth!.status.ready, loginPending: auth!.status.pending, elevenLabsReady, secureStorageAvailable: await secrets.available(), model: model(), error: auth!.status.error ?? credentialError, chatModels: registry.options(), activeChat: active, providers: registry.providers(), musicProviders: await music.entries(), activeMusicId: music.activeId() };
       },
       chat: async options => {
         const target = await registry.resolveActive();
@@ -84,10 +86,27 @@ else {
         const result = await new ChatCompletionsClient({ baseUrl: target.provider!.baseUrl, apiKey: key }).streamChat({ model: target.slug, messages: toChatMessages(options.input, instructions), tools: filtered, effort: target.effort || undefined, signal, onText: options.onText });
         return { output: toResponsesOutput(result.text, result.calls), calls: result.calls, usage: result.usage, requestId: result.requestId };
       },
-      generate: async (input, signal) => { const key = await secrets.get('elevenlabs'); if (!key) throw new Error('Add your ElevenLabs API key in Settings first.'); return eleven.generateSound(input, key, AbortSignal.any([signal, AbortSignal.timeout(180_000)])); },
+      generateEffect: async (input, signal) => {
+        const key = await secrets.get('elevenlabs');
+        if (!key) throw new Error('Add your ElevenLabs API key in Settings first.');
+        const result = await eleven.generateSound(input, key, AbortSignal.any([signal, AbortSignal.timeout(180_000)]));
+        return { ...result, format: 'mp3' as const, provider: 'ElevenLabs' };
+      },
+      generateMusic: async (input, signal) => {
+        // The provider, model, and key resolve here rather than in tool arguments or the
+        // renderer; music credentials are separate from chat and sound-effect keys.
+        const target = await music.resolve(input.providerId);
+        const timeout = AbortSignal.any([signal, AbortSignal.timeout(600_000)]);
+        if (target.provider.kind === 'elevenlabs-music') {
+          const result = await elevenMusic.compose(input, target.model, target.key, timeout);
+          return { ...result, provider: target.provider.label };
+        }
+        const result = await geminiMusic.compose(input, target.model, target.key, timeout);
+        return { ...result, provider: target.provider.label };
+      },
       safeError
     };
-    service = new WorkbenchService(store, media, testMode ? mockPorts(process.env.SFXCHAT_TEST_AUDIO ?? '', model) : livePorts, changed, diagnostics);
+    service = new WorkbenchService(store, media, livePorts, changed, diagnostics);
     store.recover(); if (!store.conversations().length) store.createConversation();
 
     protocol.handle('sfx-media', async request => {
@@ -116,14 +135,15 @@ else {
       openLogs: async () => { const directory = join(root, 'logs'); await mkdir(directory, { recursive: true }); const error = await shell.openPath(directory); if (error) throw new Error(error); },
       sendMessage: (id, text) => service!.sendMessage(id, text), cancelTurn: id => service!.cancelTurn(id),
       generate: (id, input) => service!.generate(id, input).then(() => undefined), cancelJob: id => service!.cancelJob(id),
+      generateMusic: (id, input) => service!.generateMusic(id, input).then(() => undefined),
       updateAsset: (id, patch, conversationId) => service!.updateAsset(id, patch, conversationId),
       analyzeAudio: (id, input) => service!.analyzeAudio(id, input), trimAsset: (conversationId, id, input) => service!.trimAsset(conversationId, id, input),
       previewTrim: (id, input) => service!.previewTrim(id, input),
       setPlayground: (id, ids) => { store.setPlayground(id, ids); store.addMessage(id, 'tool', 'Updated the comparison playground.'); },
       searchAssets: query => store.search(query),
-      importAudio: async id => {
-        const result = await dialog.showOpenDialog(window!, { title: 'Import sounds', filters: [{ name: 'Audio', extensions: ['wav', 'mp3'] }], properties: ['openFile', 'multiSelections'] });
-        if (!result.canceled) await service!.importFiles(id, result.filePaths);
+      importAudio: async (id, kind) => {
+        const result = await dialog.showOpenDialog(window!, { title: 'Import audio', filters: [{ name: 'Audio', extensions: ['wav', 'mp3'] }], properties: ['openFile', 'multiSelections'] });
+        if (!result.canceled) await service!.importFiles(id, result.filePaths, kind ?? 'effect');
       },
       exportAsset: async id => {
         const asset = store.asset(id);
@@ -139,7 +159,10 @@ else {
       testChatModel: input => registry.testModel(input),
       saveChatModel: async input => { const record = await registry.saveModel(input); changed(); return record; },
       deleteChatModel: async id => { await registry.deleteModel(id); changed(); },
-      setActiveChat: input => { const selection = registry.setActive(input.modelId, input.effort); store.setSetting('chat-model', selection.modelId.startsWith('codex:') ? selection.modelId.slice(6) : selection.modelId); changed(); return selection; }
+      setActiveChat: input => { const selection = registry.setActive(input.modelId, input.effort); store.setSetting('chat-model', selection.modelId.startsWith('codex:') ? selection.modelId.slice(6) : selection.modelId); changed(); return selection; },
+      saveMusicProvider: async input => { const provider = await music.saveProvider(input); changed(); return provider; },
+      deleteMusicProvider: async id => { await music.deleteProvider(id); changed(); },
+      setActiveMusic: id => { const active = music.setActive(id); changed(); return active; }
     };
     ipcMain.handle('sfx:call', async (event, method: unknown, rawArgs: unknown) => {
       if (quitting) throw new Error('SfxChat is closing.');

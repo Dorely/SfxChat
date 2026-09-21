@@ -36,6 +36,13 @@ stores conversations, messages, assets, jobs, Playground ordering, settings/wire
 history, turn state, and a tool-call ledger. Newer schema versions are rejected.
 Search covers names, descriptions, tags, collections, prompts, reviews, and feedback.
 
+Assets and jobs carry `kind` (`effect` or `music`). Records written before music
+existed have no field and are read as sound effects; no migration was required. Both
+kinds share the immutable `originals/<asset-id>.<format>` store: kind is metadata, so
+integrity checks, trimming, export, and the media protocol keep one code path. Music
+tracks also retain `providerPrompt` when the app appended provider-specific guidance to
+the submitted text, and `lyrics` when the provider returned lyrics or structure text.
+
 Original files live at `originals/<asset-id>.<format>`. Unique temporary writes are
 renamed before database registration. Provenance includes SHA-256, bytes, probed
 duration, exact prompt/settings, request ID/usage when returned, and revision parent.
@@ -106,16 +113,19 @@ If the app closes during preparation, only candidates already queued are retaine
 the activity message explains this before admission begins.
 
 Chat runs outside renderer lifetimes and persists streamed messages/activity.
-Runtime instructions and tool field descriptions provide sound-design guidance and
-[reviewed ElevenLabs prompting practices](knowledge/elevenlabs.md): complete audible
-descriptions, deliberate duration/loop/adherence controls, and self-contained
-revision prompts. Provider generation receives no parent audio or chat history;
-`parentId` is local lineage only. Manual regeneration uses an editable Generation
-prompt, prefilled from the original, separately from review feedback, and reuses
-requested duration rather than measured file duration. Markdown/skill snapshots
-are not injected into the assistant at runtime.
-The generation tool waits for results so the assistant can organize returned assets.
-Its initial job IDs are recorded atomically with creation. Duplicate tool calls
+Runtime instructions and tool field descriptions provide sound-design guidance,
+[reviewed ElevenLabs prompting practices](knowledge/elevenlabs.md), and
+[reviewed music prompting practices](knowledge/elevenlabs-music.md). Per turn,
+`chatInstructions` appends the block for the active music provider and model
+(`musicElevenLabsInstructions` or `musicLyriaInstructions` from `assistant.ts`), so the
+model sees provider-accurate limits and prompting advice instead of generic music
+advice. Provider generation receives no parent audio or chat history; `parentId` is
+local lineage only, and no music provider can continue an earlier generation. Manual
+regeneration uses an editable Generation prompt, prefilled from the original, separately
+from review feedback, and reuses requested duration rather than measured file duration.
+Markdown/skill snapshots are not injected into the assistant at runtime.
+The generation tools wait for results so the assistant can organize returned assets.
+Their initial job IDs are recorded atomically with creation. Duplicate tool calls
 return durable results; conflicting IDs are rejected. Stopping a turn stops its wait;
 jobs have separate cancellation controls.
 
@@ -158,7 +168,27 @@ or diagnostics. Key entry is transient. Sibling-app auth caches are never import
 
 ElevenLabs resolves its key at dispatch and preserves the SFX HTTP response as MP3.
 HTTP status failures and uncertain transport outcomes are distinct. Production
-provider requests have a three-minute timeout. Music and Gemini are deferred.
+provider requests have a three-minute timeout.
+
+Music has its own provider registry, `MusicRegistry` (`src/main/music-registry.ts`),
+which stores provider records in SQLite settings and each provider's key under its own
+`music-key-<id>` secret. This is deliberately separate from chat providers and from the
+sound-effects key: using Gemini for chat does not configure Gemini for music, and an
+ElevenLabs sound-effects key is never reused for Music. One provider is active; a
+request may name another configured provider (`providerId`), which the Playground form
+and the `generate_music` tool can do. Music requests carry their own timeout of ten
+minutes because full-length songs are slower than effects.
+
+Two adapters sit behind `ServicePorts.generateMusic`. `providers/elevenlabs-music.ts`
+posts to `/v1/music` with `output_format=auto`, maps app fields to `prompt`,
+`music_length_ms`, and `force_instrumental`, and records the `song-id` response header.
+`providers/gemini-music.ts` posts to the Interactions endpoint with `store:false`,
+composes the prompt from the app fields that Lyria has no parameters for (instrumental
+and target length), rejects a custom length on the fixed 30-second clip model, and
+parses `steps[]` for the audio block plus any returned lyrics. Provider errors keep the
+provider's own message, code, and any suggested prompt rewrite. Both adapters record
+the provider label and model on the asset, and neither retries a failed or uncertain
+generation.
 
 ## Diagnostics
 
@@ -179,7 +209,14 @@ profile's logs directory. There is no arbitrary-path or log-reading renderer API
 
 ## Verification boundaries
 
-Playwright runs the actual shell with temporary profiles and deterministic
-provider ports; packaged builds refuse mock mode. The fixture is a synthetic
-tone, not a quality sample. Windows CI builds an unsigned installer without
-credentials. Signing, updates, and other-platform packaging are deferred.
+This project carries no automated tests: no unit, integration, or end-to-end suites, no
+test runners or test dependencies, and no test-only fixtures, mock providers, or
+deterministic test modes. Verification is `npm run typecheck`, the production build, and
+live/manual runs of the app, with the results recorded in [verification](verification.md).
+The previous Playwright suites, their fixtures, the installed-app smoke script, and the
+main-process mock port mode were removed on 2026-09-21 so no dead test infrastructure
+remains. Removing mock mode also removed the `SFXCHAT_TEST_*` environment overrides, so
+a development launch always uses the real `%APPDATA%/SfxChat` profile. Provider behavior
+established this way is limited to what was actually exercised; compilation, packaging,
+and mock runs never establish provider, login, secure-storage, or platform integration.
+Signing, updates, and other-platform packaging are deferred.

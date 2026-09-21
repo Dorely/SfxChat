@@ -1,6 +1,9 @@
 import { z } from 'zod';
+import { MUSIC_DURATION_MAX_MS, MUSIC_DURATION_MIN_MS } from '../shared/music-models';
 export const idSchema = z.string().uuid();
 export const providerKindSchema = z.enum(['chat-completions', 'responses', 'anthropic']);
+export const musicProviderKindSchema = z.enum(['elevenlabs-music', 'gemini-lyria']);
+export const assetKindSchema = z.enum(['effect', 'music']);
 export const effortSchema = z.string().trim().regex(/^[a-zA-Z0-9._-]+$/).max(40);
 export const effortsSchema = z.array(effortSchema).max(8);
 export const trimSchema = z.object({
@@ -22,6 +25,19 @@ export const generationSchema = z.object({
   parentId: idSchema.nullable().optional().describe('Local revision lineage only. Does not send source audio or earlier prompts to the provider.'),
   name: z.string().trim().min(1).optional().describe('Library name, separate from the provider sound description.')
 }).strict();
+const musicInputFields = {
+  prompt: z.string().trim().min(1).max(4100).describe('Complete musical direction: genre, mood, instrumentation, tempo, key, production era, vocal or instrumental intent, arrangement order, and any lyrics with section tags. For a revision, restate the whole direction with the requested change. Sent as text without chat history or source audio.'),
+  count: z.number().int().positive().safe().optional().describe('Number of separately billed candidates using this prompt. Defaults to 1; follow the user-requested scope.'),
+  durationMs: z.number().int().min(MUSIC_DURATION_MIN_MS).max(MUSIC_DURATION_MAX_MS).nullable().optional().describe('Whole track length in milliseconds, 3000-600000. Omit or use null to let the provider choose a length from the prompt. Not exact section timing, which belongs in the prompt text. Some models always return a fixed length.'),
+  instrumental: z.boolean().optional().describe('Request a track without vocals. Defaults to false, and most prompts produce vocals without it.'),
+  providerId: z.string().trim().min(1).max(80).nullable().optional().describe('Configured music provider to use for this request. Omit or use null for the active provider in Settings.'),
+  parentId: idSchema.nullable().optional().describe('Local revision lineage only. Music providers receive no source audio and cannot continue an earlier generation.'),
+  name: z.string().trim().min(1).optional().describe('Library name, separate from the provider music description.')
+};
+/** IPC/application schema: accepts the kind discriminant the renderer and service send. */
+export const musicGenerationSchema = z.object({ kind: z.literal('music').optional(), ...musicInputFields }).strict();
+/** Agent-facing tool schema: the kind is implied by the tool, so it is not exposed to the model. */
+export const musicToolSchema = z.object(musicInputFields).strict();
 export const patchSchema = z.object({ name: z.string().trim().min(1).optional(), description: z.string().optional(), tags: z.array(z.string().trim().min(1)).optional(), collections: z.array(z.string().trim().min(1)).optional(), review: z.enum(['unreviewed','accepted','rejected']).optional(), feedback: z.string().optional() }).strict();
 export const commandSchemas = {
   snapshot: z.tuple([]), createConversation: z.tuple([]),
@@ -29,10 +45,11 @@ export const commandSchemas = {
   openLogs: z.tuple([]),
   sendMessage: z.tuple([idSchema, z.string().trim().min(1)]), cancelTurn: z.tuple([idSchema]),
   generate: z.tuple([idSchema, generationSchema]), cancelJob: z.tuple([idSchema]),
+  generateMusic: z.tuple([idSchema, musicGenerationSchema]),
   updateAsset: z.tuple([idSchema, patchSchema, idSchema.optional()]), setPlayground: z.tuple([idSchema, z.array(idSchema)]),
   analyzeAudio: z.tuple([idSchema, analysisSchema]), trimAsset: z.tuple([idSchema, idSchema, trimSchema]),
   previewTrim: z.tuple([idSchema, trimSchema]),
-  importAudio: z.tuple([idSchema]), exportAsset: z.tuple([idSchema]), searchAssets: z.tuple([z.string()]),
+  importAudio: z.tuple([idSchema, assetKindSchema.optional()]), exportAsset: z.tuple([idSchema]), searchAssets: z.tuple([z.string()]),
   startLogin: z.tuple([]), cancelLogin: z.tuple([]), logout: z.tuple([]),
   saveElevenLabsKey: z.tuple([z.string()]), saveModel: z.tuple([z.union([z.literal('backend default'), z.string().trim().regex(/^[a-zA-Z0-9._-]+$/)])]),
   saveChatProvider: z.tuple([z.object({ id: z.string().trim().min(1).max(80).optional(), label: z.string().trim().min(1).max(80), baseUrl: z.string().trim().min(1).max(500), kind: providerKindSchema, apiKey: z.string().max(500).optional() }).strict()]),
@@ -41,5 +58,8 @@ export const commandSchemas = {
   testChatModel: z.tuple([z.object({ providerId: z.string().trim().min(1).max(80), slug: z.string().trim().min(1).max(200), efforts: effortsSchema }).strict()]),
   saveChatModel: z.tuple([z.object({ id: z.string().trim().min(1).max(80).optional(), providerId: z.string().trim().min(1).max(80), slug: z.string().trim().min(1).max(200), efforts: effortsSchema }).strict()]),
   deleteChatModel: z.tuple([z.string().trim().min(1).max(80)]),
-  setActiveChat: z.tuple([z.object({ modelId: z.string().trim().min(1).max(120), effort: z.string().trim().max(40) }).strict()])
+  setActiveChat: z.tuple([z.object({ modelId: z.string().trim().min(1).max(120), effort: z.string().trim().max(40) }).strict()]),
+  saveMusicProvider: z.tuple([z.object({ id: z.string().trim().min(1).max(80).optional(), label: z.string().trim().min(1).max(80), kind: musicProviderKindSchema, model: z.string().trim().min(1).max(120), apiKey: z.string().max(500).optional() }).strict()]),
+  deleteMusicProvider: z.tuple([z.string().trim().min(1).max(80)]),
+  setActiveMusic: z.tuple([z.string().trim().min(1).max(80)])
 };

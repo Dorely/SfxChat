@@ -10,6 +10,8 @@ export interface ProviderErrorDetails {
   type?: string;
   param?: string;
   requestId?: string;
+  /** Provider-supplied replacement text, such as ElevenLabs' suggested prompt rewrite. */
+  suggestion?: string;
 }
 
 type ErrorStatus = number | undefined;
@@ -100,14 +102,24 @@ function parseObjectPayload(payload: unknown): ProviderErrorDetails {
     if (typeof source[key] === 'string') details[key] = source[key];
   }
   if (isRecord(root.detail) && typeof root.detail.status === 'string' && !details.code) details.code = root.detail.status;
+  const suggestion = suggestionFrom(source) ?? suggestionFrom(root.detail) ?? suggestionFrom(root);
+  if (typeof suggestion === 'string') details.suggestion = suggestion;
   const requestId = source.request_id ?? source.requestId ?? root.request_id ?? root.requestId;
   if (typeof requestId === 'string') details.requestId = requestId;
   return details;
 }
 
+function suggestionFrom(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  for (const key of ['prompt_suggestion', 'composition_plan_suggestion'] as const) {
+    if (typeof value[key] === 'string') return value[key];
+  }
+  return isRecord(value.data) ? suggestionFrom(value.data) : undefined;
+}
+
 function sanitizeDetails(details: ProviderErrorDetails, secrets: string[]): ProviderErrorDetails {
   const safe: ProviderErrorDetails = {};
-  for (const key of ['message', 'code', 'type', 'param', 'requestId'] as const) {
+  for (const key of ['message', 'code', 'type', 'param', 'requestId', 'suggestion'] as const) {
     if (typeof details[key] === 'string') safe[key] = sanitizeField(details[key]!, secrets);
   }
   return safe;
@@ -130,7 +142,8 @@ function formatMessage(status: ErrorStatus, provider: string, details: ProviderE
   const parameter = details.param && details.message && !details.message.includes(details.param)
     ? ` (parameter ${details.param})` : '';
   const request = details.requestId ? ` (request ${details.requestId})` : '';
-  return `${provider} ${statusText}${summary}${parameter}${request}`;
+  const suggestion = details.suggestion ? ` Suggested replacement: ${details.suggestion}` : '';
+  return `${provider} ${statusText}${summary}${parameter}${request}${suggestion}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
