@@ -33,7 +33,7 @@ async function setup() {
   const store = new Store(join(root, 'library.sqlite')), media = new MediaLibrary(join(root, 'audio'));
   const generate = vi.fn<ServicePorts['generate']>();
   const service = new WorkbenchService(store, media, {
-    settings: async () => ({ codexReady: false, elevenLabsReady: false, secureStorageAvailable: false, loginPending: false, model: 'test', error: null }),
+    settings: async () => ({ codexReady: false, elevenLabsReady: false, secureStorageAvailable: false, loginPending: false, model: 'test', error: null, chatModels: [], activeChat: { modelId: 'codex:test', effort: '' }, providers: [] }),
     generate, chat: async () => ({ output: [], calls: [] }), safeError: e => e instanceof Error ? e.message : String(e)
   }, () => undefined);
   contexts.push({ root, store, service });

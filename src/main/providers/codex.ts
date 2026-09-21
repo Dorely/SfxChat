@@ -1,12 +1,13 @@
 import { redactText } from '../diagnostics';
 import { ProviderHttpError, ProviderResponseError } from './errors';
+import { postWithEffortFallback } from './generic/chat';
 import { DEFAULT_MODEL, resolveChatModel } from '../../shared/chat-models';
 export { ProviderHttpError } from './errors';
 
 const RESPONSES_ENDPOINT = 'https://chatgpt.com/backend-api/codex/responses';
 const ORIGINATOR = 'codex_cli_rs';
 
-export interface StreamChatInput { token: string; model?: string; input: unknown; instructions?: string; tools?: unknown[]; signal?: AbortSignal; onText?: (text: string) => void | Promise<void> }
+export interface StreamChatInput { token: string; model?: string; input: unknown; instructions?: string; tools?: unknown[]; effort?: string; signal?: AbortSignal; onText?: (text: string) => void | Promise<void> }
 export interface StreamChatResult { output: any[]; calls: { id: string; name: string; arguments: string }[]; usage?: unknown; requestId?: string | null }
 export interface CodexClientOptions { fetch?: typeof globalThis.fetch; endpoint?: string }
 
@@ -49,9 +50,13 @@ export class CodexClient {
   }
 
   private async request(args: StreamChatInput): Promise<StreamChatResult> {
-    const body: Record<string, unknown> = { model: resolveChatModel(args.model), stream: true, store: false, input: args.input, instructions: args.instructions ?? 'You are a helpful assistant.' };
-    if (args.tools?.length) { body.tools = args.tools; body.tool_choice = 'auto'; }
-    const response = await this.fetcher(this.endpoint, { method: 'POST', headers: { authorization: `Bearer ${args.token}`, 'ChatGPT-Account-ID': accountId(args.token), 'OpenAI-Beta': 'responses=experimental', originator: ORIGINATOR, 'User-Agent': 'codex_cli_rs/0.0.0 (SfxChat)', accept: 'text/event-stream', 'content-type': 'application/json' }, body: JSON.stringify(body), signal: args.signal });
+    const buildBody = (effortFields: Record<string, unknown>): Record<string, unknown> => {
+      const body: Record<string, unknown> = { model: resolveChatModel(args.model), stream: true, store: false, input: args.input, instructions: args.instructions ?? 'You are a helpful assistant.', ...effortFields };
+      if (args.tools?.length) { body.tools = args.tools; body.tool_choice = 'auto'; }
+      return body;
+    };
+    const headers = { authorization: `Bearer ${args.token}`, 'ChatGPT-Account-ID': accountId(args.token), 'OpenAI-Beta': 'responses=experimental', originator: ORIGINATOR, 'User-Agent': 'codex_cli_rs/0.0.0 (SfxChat)', accept: 'text/event-stream', 'content-type': 'application/json' };
+    const response = await postWithEffortFallback({ kind: 'codex-account', effort: args.effort, fetchImpl: this.fetcher, url: this.endpoint, headers, buildBody, signal: args.signal, providerLabel: 'Codex', secrets: [args.token] });
     if (!response.ok) throw await ProviderHttpError.fromResponse(response, 'Codex', [args.token]);
     const requestId = response.headers.get('x-request-id') ?? response.headers.get('request-id');
     const streamFailure = (payload: any, fallback: string) => ProviderResponseError.fromPayload('Codex', { ...payload, message: payload?.message ?? fallback, request_id: requestId }, [args.token]);

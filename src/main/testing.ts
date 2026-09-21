@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import type { ServicePorts } from './service';
 export function mockPorts(audioPath: string, model: () => string): ServicePorts {
   return {
-    settings: async () => ({ codexReady: true, elevenLabsReady: true, secureStorageAvailable: true, loginPending: false, model: model(), error: null }),
+    settings: async () => ({ codexReady: true, elevenLabsReady: true, secureStorageAvailable: true, loginPending: false, model: model(), error: null, chatModels: [], activeChat: { modelId: `codex:${model()}`, effort: 'medium' }, providers: [] }),
     safeError: error => error instanceof Error ? error.message : 'Operation failed.',
     generate: async (_input, signal) => {
       await new Promise<void>((resolve, reject) => { const timer = setTimeout(resolve, 100); signal.addEventListener('abort', () => { clearTimeout(timer); reject(new Error('Cancelled')); }, { once: true }); });

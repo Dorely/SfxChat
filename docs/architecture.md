@@ -135,8 +135,21 @@ no installed background service or tray process.
 
 Codex directly adapts Lorekeeper/PixelChat OAuth PKCE and Responses SSE, with no CLI.
 The adapter owns account headers/claims, message/tool events, refresh rotation, and
-safe errors. A temporary localhost 1455 callback validates state and expiry.
+safe errors, and now sends the selected effort as `reasoning.effort` (PixelChat
+precedent). A temporary localhost 1455 callback validates state and expiry.
 Account and model access require real integration verification.
+
+Generic chat providers implement the same `ServicePorts.chat` contract through
+three adapters in `src/main/providers/generic/`: Chat Completions
+(`chat.ts`, SSE `choices` deltas), generic Responses without Codex-only headers
+(`responses.ts`), and Anthropic Messages (`anthropic.ts`, content-block SSE,
+`tool_use`/`tool_result` translation, saved per-model `maxTokens` with an 8192
+floor). `ChatRegistry` (`src/main/chat-registry.ts`) owns the provider/model
+registry in SQLite settings, combined `Provider:Model` selection with per-model
+effort lists, test-gated model saves (every listed effort must pass a lightweight
+live probe), and vision/audio capability flags that filter future
+vision/audio tools via `toolsForModel`. Stored conversation history stays
+Responses-shaped; adapters convert in memory per turn.
 
 `SecureStore` encrypts values with Electron `safeStorage` before atomic writes under
 the profile's `secrets/`. Windows protection is OS-backed; unavailable encryption

@@ -13,6 +13,11 @@ const api: SfxApi = {
   importAudio: id => call('importAudio', id), exportAsset: id => call('exportAsset', id), searchAssets: query => call('searchAssets', query),
   startLogin: () => call('startLogin'), cancelLogin: () => call('cancelLogin'), logout: () => call('logout'),
   saveElevenLabsKey: key => call('saveElevenLabsKey', key), saveModel: model => call('saveModel', model),
+  saveChatProvider: input => call('saveChatProvider', input), deleteChatProvider: id => call('deleteChatProvider', id),
+  listChatModels: providerId => call('listChatModels', providerId),
+  testChatModel: input => call('testChatModel', input),
+  saveChatModel: input => call('saveChatModel', input), deleteChatModel: id => call('deleteChatModel', id),
+  setActiveChat: input => call('setActiveChat', input),
   onChanged: callback => { const listener = () => callback(); ipcRenderer.on('sfx:changed', listener); return () => ipcRenderer.removeListener('sfx:changed', listener); }
 };
 contextBridge.exposeInMainWorld('sfx', api);

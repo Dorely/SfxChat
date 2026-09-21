@@ -1,5 +1,8 @@
 import { z } from 'zod';
 export const idSchema = z.string().uuid();
+export const providerKindSchema = z.enum(['chat-completions', 'responses', 'anthropic']);
+export const effortSchema = z.string().trim().regex(/^[a-zA-Z0-9._-]+$/).max(40);
+export const effortsSchema = z.array(effortSchema).max(8);
 export const trimSchema = z.object({
   startSeconds: z.number().finite().min(0), endSeconds: z.number().finite().positive(),
   fadeInMs: z.number().finite().min(0).max(10000).optional(),
@@ -31,5 +34,12 @@ export const commandSchemas = {
   previewTrim: z.tuple([idSchema, trimSchema]),
   importAudio: z.tuple([idSchema]), exportAsset: z.tuple([idSchema]), searchAssets: z.tuple([z.string()]),
   startLogin: z.tuple([]), cancelLogin: z.tuple([]), logout: z.tuple([]),
-  saveElevenLabsKey: z.tuple([z.string()]), saveModel: z.tuple([z.union([z.literal('backend default'), z.string().trim().regex(/^[a-zA-Z0-9._-]+$/)])])
+  saveElevenLabsKey: z.tuple([z.string()]), saveModel: z.tuple([z.union([z.literal('backend default'), z.string().trim().regex(/^[a-zA-Z0-9._-]+$/)])]),
+  saveChatProvider: z.tuple([z.object({ id: z.string().trim().min(1).max(80).optional(), label: z.string().trim().min(1).max(80), baseUrl: z.string().trim().min(1).max(500), kind: providerKindSchema, apiKey: z.string().max(500).optional() }).strict()]),
+  deleteChatProvider: z.tuple([z.string().trim().min(1).max(80)]),
+  listChatModels: z.tuple([z.string().trim().min(1).max(80)]),
+  testChatModel: z.tuple([z.object({ providerId: z.string().trim().min(1).max(80), slug: z.string().trim().min(1).max(200), efforts: effortsSchema }).strict()]),
+  saveChatModel: z.tuple([z.object({ id: z.string().trim().min(1).max(80).optional(), providerId: z.string().trim().min(1).max(80), slug: z.string().trim().min(1).max(200), efforts: effortsSchema }).strict()]),
+  deleteChatModel: z.tuple([z.string().trim().min(1).max(80)]),
+  setActiveChat: z.tuple([z.object({ modelId: z.string().trim().min(1).max(120), effort: z.string().trim().max(40) }).strict()])
 };

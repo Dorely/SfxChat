@@ -51,8 +51,16 @@ is recorded in [verification](docs/verification.md).
 | [vitest.config.ts](vitest.config.ts), [scripts/test.mjs](scripts/test.mjs) | Unit tests using Electron's Node runtime and native-module ABI. |
 | [scripts/smoke-installed.mjs](scripts/smoke-installed.mjs) | Installed-app startup, native SQLite, secure-storage availability, and packaged-mode isolation checks. |
 | [src/shared/types.ts](src/shared/types.ts) | Renderer/preload/application operation and snapshot contracts. |
-| [src/shared/chat-models.ts](src/shared/chat-models.ts) | Configured model IDs, default Codex context sizes, and legacy/default resolution. |
+| [src/shared/chat-models.ts](src/shared/chat-models.ts) | Configured model IDs, Codex effort lists, default context sizes, and legacy/default resolution. |
+| [src/main/chat-registry.ts](src/main/chat-registry.ts) | Generic provider/model registry, combined selection, test-gated saves, and active chat resolution. |
 | [src/main/chat-context.ts](src/main/chat-context.ts) | Cached local tiktoken context estimates with encrypted-reasoning exclusion. |
+| [src/main/providers/generic/sse.ts](src/main/providers/generic/sse.ts) | Shared SSE frame splitting for generic chat adapters. |
+| [src/main/providers/generic/chat.ts](src/main/providers/generic/chat.ts) | Chat Completions transport, history conversion, and reasoning-effort fallback. |
+| [src/main/providers/generic/responses.ts](src/main/providers/generic/responses.ts) | Generic Responses transport without Codex-only headers. |
+| [src/main/providers/generic/anthropic.ts](src/main/providers/generic/anthropic.ts) | Anthropic Messages transport with tool_use/tool_result translation. |
+| [src/main/providers/generic/registry.ts](src/main/providers/generic/registry.ts) | Provider/model validation, base-URL normalization, and effort parsing. |
+| [src/main/providers/generic/capabilities.ts](src/main/providers/generic/capabilities.ts) | Capability probes, max-tokens discovery, vision/audio flags, and tool filtering. |
+| [tests/generic-chat.test.ts](tests/generic-chat.test.ts), [tests/generic-responses.test.ts](tests/generic-responses.test.ts), [tests/generic-anthropic.test.ts](tests/generic-anthropic.test.ts), [tests/generic-capabilities.test.ts](tests/generic-capabilities.test.ts) | Generic transport, gating, and capability tests with synthetic SSE. |
 | [src/main/store.ts](src/main/store.ts) | SQLite schema migration, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
 | [src/main/media.ts](src/main/media.ts) | Original storage/import/export, integrity checks, serialized editing/analysis, and bounded decoded cache. |
 | [src/main/audio.ts](src/main/audio.ts) | Bounded MP3/WAV decode, timestamped amplitude windows, exact sample-frame trims, fades, and float32 WAV rendering. |

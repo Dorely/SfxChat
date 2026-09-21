@@ -9,6 +9,12 @@ import { CodexAuth } from './providers/auth';
 import { CodexClient, DEFAULT_MODEL } from './providers/codex';
 import { resolveChatModel } from '../shared/chat-models';
 import { ElevenLabsClient } from './providers/elevenlabs';
+import { ChatRegistry } from './chat-registry';
+import { AnthropicClient } from './providers/generic/anthropic';
+import { ChatCompletionsClient, toChatMessages, toResponsesOutput } from './providers/generic/chat';
+import { GenericResponsesClient } from './providers/generic/responses';
+import { capabilityNote, toolsForModel } from './providers/generic/capabilities';
+import { tools } from './assistant';
 import { commandSchemas, idSchema } from './validation';
 import { mockPorts } from './testing';
 import { DiagnosticLog, redactText } from './diagnostics';
@@ -47,14 +53,37 @@ else {
     let credentialError: string | null = null;
     try { await auth.initialize(); } catch (error) { credentialError = safeError(error); }
     const codex = new CodexClient(); const eleven = new ElevenLabsClient();
+    const registry = new ChatRegistry(store, secrets);
     const model = () => resolveChatModel(store.setting('chat-model', DEFAULT_MODEL));
     const livePorts: ServicePorts = {
       settings: async () => {
         let elevenLabsReady = false;
         try { elevenLabsReady = Boolean(await secrets.get('elevenlabs')); } catch (error) { credentialError = safeError(error); }
-        return { codexReady: auth!.status.ready, loginPending: auth!.status.pending, elevenLabsReady, secureStorageAvailable: await secrets.available(), model: model(), error: auth!.status.error ?? credentialError };
+        const active = registry.activeSelection();
+        return { codexReady: auth!.status.ready, loginPending: auth!.status.pending, elevenLabsReady, secureStorageAvailable: await secrets.available(), model: model(), error: auth!.status.error ?? credentialError, chatModels: registry.options(), activeChat: active, providers: registry.providers() };
       },
-      chat: async options => codex.streamChat({ ...options, token: await auth!.getAccessToken(), signal: AbortSignal.any([options.signal, AbortSignal.timeout(180_000)]) }),
+      chat: async options => {
+        const target = await registry.resolveActive();
+        const timeout = AbortSignal.timeout(180_000);
+        const signal = AbortSignal.any([options.signal, timeout]);
+        if (target.kind === 'codex') {
+          const filtered = toolsForModel({ vision: true, audio: true }, tools) as unknown[];
+          return codex.streamChat({ model: target.slug, input: options.input, instructions: options.instructions, tools: filtered, effort: target.effort, token: await auth!.getAccessToken(), signal, onText: options.onText });
+        }
+        const key = target.provider ? await registry.providerKey(target.provider.id) : null;
+        const filtered = toolsForModel(target.record ?? { vision: true, audio: true }, tools) as unknown[];
+        const note = target.record ? capabilityNote(target.record) : '';
+        const instructions = note ? `${options.instructions}\n${note}` : options.instructions;
+        if (target.kind === 'anthropic') {
+          const maxTokens = target.record?.maxTokens ?? 8192;
+          return new AnthropicClient({ baseUrl: target.provider!.baseUrl, apiKey: key }).streamChat({ model: target.slug, input: options.input, instructions, tools: filtered, maxTokens, signal, onText: options.onText });
+        }
+        if (target.kind === 'responses') {
+          return new GenericResponsesClient({ baseUrl: target.provider!.baseUrl, apiKey: key }).streamChat({ model: target.slug, input: options.input, instructions, tools: filtered, effort: target.effort || undefined, signal, onText: options.onText });
+        }
+        const result = await new ChatCompletionsClient({ baseUrl: target.provider!.baseUrl, apiKey: key }).streamChat({ model: target.slug, messages: toChatMessages(options.input, instructions), tools: filtered, effort: target.effort || undefined, signal, onText: options.onText });
+        return { output: toResponsesOutput(result.text, result.calls), calls: result.calls, usage: result.usage, requestId: result.requestId };
+      },
       generate: async (input, signal) => { const key = await secrets.get('elevenlabs'); if (!key) throw new Error('Add your ElevenLabs API key in Settings first.'); return eleven.generateSound(input, key, AbortSignal.any([signal, AbortSignal.timeout(180_000)])); },
       safeError
     };
@@ -103,7 +132,14 @@ else {
       },
       startLogin: () => auth!.startLogin(), cancelLogin: () => auth!.cancelLogin(), logout: () => auth!.logout(),
       saveElevenLabsKey: async key => { if (key.trim()) await secrets.set('elevenlabs', key.trim()); else await secrets.delete('elevenlabs'); credentialError = null; changed(); },
-      saveModel: value => store.setSetting('chat-model', resolveChatModel(value))
+      saveModel: value => { const resolved = resolveChatModel(value); store.setSetting('chat-model', resolved); registry.setActive(`codex:${resolved}`, registry.activeSelection().effort || 'medium'); },
+      saveChatProvider: async input => { const provider = await registry.saveProvider(input); changed(); return provider; },
+      deleteChatProvider: async id => { await registry.deleteProvider(id); changed(); },
+      listChatModels: providerId => registry.listModels(providerId),
+      testChatModel: input => registry.testModel(input),
+      saveChatModel: async input => { const record = await registry.saveModel(input); changed(); return record; },
+      deleteChatModel: async id => { await registry.deleteModel(id); changed(); },
+      setActiveChat: input => { const selection = registry.setActive(input.modelId, input.effort); store.setSetting('chat-model', selection.modelId.startsWith('codex:') ? selection.modelId.slice(6) : selection.modelId); changed(); return selection; }
     };
     ipcMain.handle('sfx:call', async (event, method: unknown, rawArgs: unknown) => {
       if (quitting) throw new Error('SfxChat is closing.');

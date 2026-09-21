@@ -44,7 +44,7 @@ function wavBytes(seconds = 1): Buffer {
 }
 
 function readySettings(overrides: Partial<SettingsStatus> = {}): SettingsStatus {
-  return { codexReady: false, elevenLabsReady: true, secureStorageAvailable: true, loginPending: false, model: 'synthetic-model', error: null, ...overrides };
+  return { codexReady: false, elevenLabsReady: true, secureStorageAvailable: true, loginPending: false, model: 'synthetic-model', error: null, chatModels: [], activeChat: { modelId: 'codex:synthetic-model', effort: '' }, providers: [], ...overrides };
 }
 
 function ports(overrides: Partial<ServicePorts> = {}): ServicePorts {

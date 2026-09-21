@@ -1,5 +1,29 @@
 # v0.1 verification
 
+## Generic agentic chat providers (2026-09-21)
+
+Implemented generic Chat Completions, generic Responses, and Anthropic Messages
+adapters behind the existing `ServicePorts.chat` contract, plus per-model effort
+lists, test-gated model saves, vision/audio capability flags, and Anthropic
+max-tokens discovery (8192 floor). Codex keeps its OAuth transport and gains
+`reasoning.effort` from the selected effort. Settings store providers/models in
+SQLite; keys stay in OS-backed `SecureStore` and are never echoed to the UI.
+
+- `npm run typecheck` (`npx tsc --noEmit`): passed.
+- `npm test`: 89 tests across 14 files passed under Electron's Node, including 17
+  new generic tests (chat/responses/anthropic SSE and tool-call accumulation,
+  reasoning-effort fallback, no-auth header absence, registry normalization,
+  per-effort gating, max-tokens ladder, vision/audio flags, combined-selection
+  resolution with stale-effort fallback).
+- Ranges/provenance: pixel/audio probe fixtures are synthetic constants in code
+  (no binary fixtures committed); no live provider calls, keys, or billed
+  generations were made. No sibling-app credentials were read or copied.
+
+Pending live acceptance: hosted Command Code/DeepSeek/OpenRouter/Gemini entries,
+local Ollama no-key entry (tool-capable and non-tool models), and Anthropic
+native messages — each verified via Test-then-Save, combined dropdown + effort
+switching, send/tool-call/cancel, and vision/audio badges. Record outcomes here.
+
 ## ElevenLabs prompting review and regeneration (2026-09-10)
 
 Reviewed the official SFX documentation listed in the

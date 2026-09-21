@@ -29,10 +29,24 @@ export interface GenerationInput {
   influence?: number; parentId?: string | null; name?: string;
 }
 export interface Job { id: string; conversationId: string; status: JobStatus; input: GenerationInput; assetId: string | null; error: string | null; createdAt: string }
-export interface SettingsStatus { codexReady: boolean; elevenLabsReady: boolean; secureStorageAvailable: boolean; loginPending: boolean; model: string; error: string | null }
+export type GenericProviderKind = 'chat-completions' | 'responses' | 'anthropic';
+export interface ChatProviderEntry { id: string; label: string; baseUrl: string; kind: GenericProviderKind }
+export type CapabilityFlag = true | false | 'unknown';
+export interface ChatModelEntry {
+  id: string; providerId: string; slug: string; efforts: string[];
+  maxTokens: number | null; vision: CapabilityFlag; audio: CapabilityFlag;
+  effortResults: Record<string, 'pass' | 'fail'>; lastTestedAt: string; testError?: string;
+}
+export interface ActiveChatSelection { modelId: string; effort: string }
+export interface ChatModelOption { id: string; label: string; providerLabel: string; slug: string; efforts: string[]; builtIn: boolean }
+export interface SettingsStatus { codexReady: boolean; elevenLabsReady: boolean; secureStorageAvailable: boolean; loginPending: boolean; model: string; error: string | null; chatModels: ChatModelOption[]; activeChat: ActiveChatSelection; providers: ChatProviderEntry[] }
 export interface ChatContext { model: string; tokens: number; limit: number | null; includesHiddenReasoning: boolean }
 export interface Snapshot { conversations: Conversation[]; messages: Message[]; assets: Asset[]; jobs: Job[]; playground: Record<string, string[]>; settings: SettingsStatus; activeTurns: string[] }
 export interface AssetPatch { name?: string; description?: string; tags?: string[]; collections?: string[]; review?: Review; feedback?: string }
+export interface ModelCapabilityResult {
+  perEffort: Record<string, 'pass' | 'fail'>; failedEfforts: string[];
+  maxTokens: number | null; vision: CapabilityFlag; audio: CapabilityFlag; error?: string;
+}
 export interface SfxApi {
   snapshot(): Promise<Snapshot>;
   chatContext(conversationId: string, draft: string): Promise<ChatContext>;
@@ -55,6 +69,13 @@ export interface SfxApi {
   logout(): Promise<void>;
   saveElevenLabsKey(key: string): Promise<void>;
   saveModel(model: string): Promise<void>;
+  saveChatProvider(input: { id?: string; label: string; baseUrl: string; kind: GenericProviderKind; apiKey?: string }): Promise<ChatProviderEntry>;
+  deleteChatProvider(id: string): Promise<void>;
+  listChatModels(providerId: string): Promise<string[]>;
+  testChatModel(input: { providerId: string; slug: string; efforts: string[] }): Promise<ModelCapabilityResult>;
+  saveChatModel(input: { id?: string; providerId: string; slug: string; efforts: string[] }): Promise<ChatModelEntry>;
+  deleteChatModel(id: string): Promise<void>;
+  setActiveChat(input: { modelId: string; effort: string }): Promise<void>;
   onChanged(callback: () => void): () => void;
 }
 declare global { interface Window { sfx: SfxApi } }

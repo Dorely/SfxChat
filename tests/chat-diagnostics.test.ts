@@ -25,7 +25,7 @@ function stream(...events: unknown[]): Response {
   return new Response(new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode(body)); controller.close(); } }), { status: 200, headers: { 'content-type': 'text/event-stream', 'x-request-id': 'req-stream' } });
 }
 
-function settings() { return { codexReady: true, elevenLabsReady: true, secureStorageAvailable: true, loginPending: false, model: 'test-model', error: null }; }
+function settings() { return { codexReady: true, elevenLabsReady: true, secureStorageAvailable: true, loginPending: false, model: 'test-model', error: null, chatModels: [], activeChat: { modelId: 'codex:test-model', effort: '' }, providers: [] }; }
 function setup(fetcher: typeof fetch, root: string, generate: () => Promise<{ bytes: Buffer; requestId: string; usage: string; model: string }>) {
   const store = new Store(join(root, 'library.sqlite'));
   const conversationId = store.createConversation();

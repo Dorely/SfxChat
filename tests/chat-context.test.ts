@@ -23,7 +23,7 @@ afterEach(async () => {
 });
 
 function settings(model = DEFAULT_MODEL): SettingsStatus {
-  return { codexReady: true, elevenLabsReady: true, secureStorageAvailable: true, loginPending: false, model, error: null };
+  return { codexReady: true, elevenLabsReady: true, secureStorageAvailable: true, loginPending: false, model, error: null, chatModels: [], activeChat: { modelId: `codex:${model}`, effort: '' }, providers: [] };
 }
 
 function ports(overrides: Partial<ServicePorts> = {}, model = DEFAULT_MODEL): ServicePorts {

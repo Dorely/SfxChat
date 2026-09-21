@@ -21,7 +21,7 @@ afterEach(async () => {
 });
 
 function readySettings(): SettingsStatus {
-  return { codexReady: true, elevenLabsReady: true, secureStorageAvailable: true, loginPending: false, model: 'synthetic-model', error: null };
+  return { codexReady: true, elevenLabsReady: true, secureStorageAvailable: true, loginPending: false, model: 'synthetic-model', error: null, chatModels: [], activeChat: { modelId: 'codex:synthetic-model', effort: '' }, providers: [] };
 }
 
 function ports(overrides: Partial<ServicePorts> = {}): ServicePorts {
