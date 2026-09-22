@@ -1,15 +1,19 @@
 import { Store } from './store';
 import { MediaLibrary, generatedFields } from './media';
-import { analysisSchema, generationSchema, musicGenerationSchema, patchSchema, trimSchema } from './validation';
+import { analysisSchema, generationSchema, musicGenerationSchema, patchSchema, spectrogramSchema, trimSchema } from './validation';
 import { instructions, musicInstructions, tools, toolSchemas } from './assistant';
-import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, GenerationInput, MusicGenerationInput, MusicProviderKind, SettingsStatus, Snapshot, TrimInput } from '../shared/types';
+import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, GenerationInput, MusicGenerationInput, MusicProviderKind, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
 import type { DiagnosticLog } from './diagnostics';
 import { diagnosticError } from './providers/errors';
 import { unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { ContextTokenCounter } from './chat-context';
 import { CHAT_MODELS, resolveChatModel } from '../shared/chat-models';
 
 export interface ChatResult { output: unknown[]; calls: { id: string; name: string; arguments: string }[]; usage?: unknown; requestId?: string | null }
+/** Media a tool produced for the model; bytes stay out of the tool ledger. */
+export interface ToolAttachment { label: string; kind: 'image' | 'audio'; mime: string; base64: string }
+export interface ToolOutcome { output: string; attachments: ToolAttachment[] }
 /** Provider-reported outcome of one generation, including the provider that produced it. */
 export interface GenerationResult {
   bytes: Buffer;
@@ -187,6 +191,11 @@ export class WorkbenchService {
     this.requireOpen();
     return this.media.analyze(this.store.asset(id, projectId), analysisSchema.parse(raw));
   }
+  async spectrogram(id: string, raw: SpectrogramInput, projectId: string) {
+    this.requireOpen();
+    const rendered = await this.media.spectrogram(this.store.asset(id, projectId), spectrogramSchema.parse(raw));
+    return new Uint8Array(rendered.png);
+  }
   async previewTrim(id: string, raw: TrimInput, projectId: string) {
     this.requireOpen();
     return new Uint8Array((await this.media.renderTrim(this.store.asset(id, projectId), trimSchema.parse(raw))).bytes);
@@ -212,7 +221,9 @@ export class WorkbenchService {
         this.store.db.transaction(() => {
           this.store.insertAsset(asset);
           this.store.addToPlayground(conversationId, [asset.id]);
-          this.store.addMessage(conversationId, 'tool', `Trimmed “${source.name}” to ${rendered.edit.startFrame / rendered.edit.sampleRate}–${rendered.edit.endFrame / rendered.edit.sampleRate}s as “${asset.name}”. Original preserved.`);
+          this.store.addMessage(conversationId, 'tool', rendered.edit.loop
+            ? `Looped “${source.name}” from ${rendered.edit.startFrame / rendered.edit.sampleRate}–${rendered.edit.endFrame / rendered.edit.sampleRate}s with a ${rendered.edit.loop.crossfadeFrames}-frame seam crossfade as “${asset.name}”. Original preserved.`
+            : `Trimmed “${source.name}” to ${rendered.edit.startFrame / rendered.edit.sampleRate}–${rendered.edit.endFrame / rendered.edit.sampleRate}s as “${asset.name}”. Original preserved.`);
           // Registration and durable tool result commit together: replay cannot create a second derivative.
           if (callId) this.store.finishTool(callId, JSON.stringify(asset));
         })();
@@ -259,11 +270,24 @@ export class WorkbenchService {
         input.push(...response.output);
         live.text = '';
         for (const call of response.calls) {
-          let result: string;
+          let outcome: ToolOutcome;
           try {
-            result = controller.signal.aborted ? JSON.stringify({ error: 'Turn cancelled before tool dispatch.' }) : await this.executeTool(conversationId, call, controller.signal);
-          } catch (error) { result = JSON.stringify({ error: this.ports.safeError(error) }); }
-          input.push({ type: 'function_call_output', call_id: call.id, output: result });
+            outcome = controller.signal.aborted
+              ? { output: JSON.stringify({ error: 'Turn cancelled before tool dispatch.' }), attachments: [] }
+              : await this.executeTool(conversationId, call, controller.signal);
+          } catch (error) { outcome = { output: JSON.stringify({ error: this.ports.safeError(error) }), attachments: [] }; }
+          input.push({ type: 'function_call_output', call_id: call.id, output: outcome.output });
+          if (outcome.attachments.length) {
+            const parts: unknown[] = [];
+            for (const attachment of outcome.attachments) {
+              parts.push({ type: 'input_text', text: `Attached from tool call ${call.id} — ${attachment.label}:` });
+              parts.push(attachment.kind === 'image'
+                ? { type: 'input_image', image_url: `data:${attachment.mime};base64,${attachment.base64}` }
+                : { type: 'input_audio', input_audio: { data: attachment.base64, format: 'wav' } });
+            }
+            input.push({ role: 'user', content: parts });
+            evictMedia(input);
+          }
         }
         this.store.setSetting(historyKey, JSON.stringify(input));
         if (!response.calls.length || controller.signal.aborted) break;
@@ -279,10 +303,10 @@ export class WorkbenchService {
       this.store.updateMessage(message); this.store.setTurn(conversationId, message.status);
     } finally { this.liveContext.delete(conversationId); }
   }
-  async executeTool(conversationId: string, call: { id: string; name: string; arguments: string }, signal?: AbortSignal): Promise<string> {
+  async executeTool(conversationId: string, call: { id: string; name: string; arguments: string }, signal?: AbortSignal): Promise<ToolOutcome> {
     this.requireOpen();
     const recorded = this.store.beginTool(call.id, conversationId, call.name, call.arguments);
-    if (!recorded.fresh) { this.diagnostics?.record('tool.restored', { conversationId, callId: call.id, name: call.name }); return recorded.result ?? JSON.stringify({ error: 'Tool outcome is uncertain; not replayed.' }); }
+    if (!recorded.fresh) { this.diagnostics?.record('tool.restored', { conversationId, callId: call.id, name: call.name }); return { output: recorded.result ?? JSON.stringify({ error: 'Tool outcome is uncertain; not replayed.' }), attachments: [] }; }
     this.diagnostics?.record('tool.started', { conversationId, callId: call.id, name: call.name });
     try {
       const schema = toolSchemas[call.name as keyof typeof toolSchemas];
@@ -290,6 +314,7 @@ export class WorkbenchService {
       const args = schema.parse(JSON.parse(call.arguments));
       const projectId = this.store.conversation(conversationId).projectId;
       let result: unknown;
+      const attachments: ToolAttachment[] = [];
       switch (call.name) {
         case 'generate_sounds': {
           const queued = await this.generate(conversationId, args as GenerationInput, call.id);
@@ -307,17 +332,46 @@ export class WorkbenchService {
         case 'inspect_asset': result = this.store.asset((args as { id: string }).id, projectId); break;
         case 'analyze_audio': { const { id, ...input } = args as AudioAnalysisInput & { id: string }; result = await this.analyzeAudio(id, input, projectId); break; }
         case 'trim_asset': { const { id, ...input } = args as TrimInput & { id: string }; result = await this.trimAsset(conversationId, id, input, call.id, signal); break; }
+        case 'spectrogram_view': {
+          const { id, ...input } = args as SpectrogramInput & { id: string };
+          const asset = this.store.asset(id, projectId);
+          const { png, mapping } = await this.media.spectrogram(asset, input);
+          result = {
+            attachmentId: randomUUID(),
+            image: { mediaType: 'image/png', bytes: png.length, width: mapping.width, height: mapping.height },
+            mapping,
+            note: `The attached PNG spans exactly ${mapping.startSeconds.toFixed(3)}–${mapping.endSeconds.toFixed(3)} decoded-source seconds across its width and ${Math.round(mapping.freqMin)}–${Math.round(mapping.freqMax)} Hz from bottom to top (${mapping.freqScale} scale), with faint grid lines every tenth of the width. Treat the image as a secondary view; take exact cut points from analyze_audio sample frames.`
+          };
+          this.store.addMessage(conversationId, 'tool', `Rendered a ${mapping.freqScale}-scale spectrogram of “${asset.name}” (${mapping.startSeconds.toFixed(2)}–${mapping.endSeconds.toFixed(2)} s).`);
+          attachments.push({ label: `spectrogram of “${asset.name}” (${mapping.startSeconds.toFixed(2)}–${mapping.endSeconds.toFixed(2)} s)`, kind: 'image', mime: 'image/png', base64: png.toString('base64') });
+          break;
+        }
+        case 'audio_listen': {
+          const { id, startSeconds, endSeconds } = args as { id: string; startSeconds?: number; endSeconds?: number };
+          const asset = this.store.asset(id, projectId);
+          const clip = await this.media.clip(asset, { ...(startSeconds === undefined ? {} : { startSeconds }), ...(endSeconds === undefined ? {} : { endSeconds }) });
+          const clipStart = clip.startFrame / clip.sampleRate;
+          const clipEnd = clip.endFrame / clip.sampleRate;
+          result = {
+            attachmentId: randomUUID(),
+            clip: { startSeconds: clipStart, endSeconds: clipEnd, duration: clipEnd - clipStart, sampleRate: clip.sampleRate, channels: 1, encoding: 'wav16', bytes: clip.bytes.length },
+            note: 'The attached WAV covers exactly this decoded-source window, downmixed to mono 16-bit PCM. Listening through the provider is an observation at its fidelity; the user audition decides quality.'
+          };
+          this.store.addMessage(conversationId, 'tool', `Attached ${(clipEnd - clipStart).toFixed(2)} s of “${asset.name}” for listening (${clipStart.toFixed(2)}–${clipEnd.toFixed(2)} s).`);
+          attachments.push({ label: `audio clip of “${asset.name}” (${clipStart.toFixed(2)}–${clipEnd.toFixed(2)} s)`, kind: 'audio', mime: 'audio/wav', base64: clip.bytes.toString('base64') });
+          break;
+        }
         case 'update_asset': { const { id, patch } = args as { id: string; patch: AssetPatch }; result = this.store.updateAsset(id, patch, projectId, conversationId); break; }
         case 'rename_session': { const { title } = args as { title: string }; const renamed = this.store.renameConversation(conversationId, title, 'assistant'); this.store.addMessage(conversationId, 'tool', `Renamed this session to “${renamed.title}”.`); result = { title: renamed.title }; break; }
         case 'set_playground': this.store.setPlayground(conversationId, (args as { assetIds: string[] }).assetIds); this.store.addMessage(conversationId, 'tool', 'Updated the comparison playground.'); result = { updated: true }; break;
         case 'inspect_jobs': result = this.store.jobs().filter(j => j.conversationId === conversationId); break;
       }
       const output = JSON.stringify(result); this.store.finishTool(call.id, output);
-      this.diagnostics?.record('tool.completed', { conversationId, callId: call.id, name: call.name }); return output;
+      this.diagnostics?.record('tool.completed', { conversationId, callId: call.id, name: call.name }); return { output, attachments };
     } catch (error) {
       this.diagnostics?.record('tool.failed', { conversationId, callId: call.id, name: call.name, error: diagnosticError(error) });
       const output = JSON.stringify({ error: this.ports.safeError(error) }); this.store.finishTool(call.id, output);
-      this.store.addMessage(conversationId, 'tool', `Could not ${call.name.replaceAll('_', ' ')}: ${this.ports.safeError(error)}`, 'failed'); return output;
+      this.store.addMessage(conversationId, 'tool', `Could not ${call.name.replaceAll('_', ' ')}: ${this.ports.safeError(error)}`, 'failed'); return { output, attachments: [] };
     }
   }
   /** Waits for queued jobs to reach a terminal state, or for the turn to stop. */
@@ -336,6 +390,34 @@ export class WorkbenchService {
 
 function logReference(reference: string | null | undefined): string {
   return reference ? `\nDiagnostic reference: ${reference}. Open Settings → Open diagnostic logs for details.` : '';
+}
+
+const MEDIA_BUDGET: Record<'input_image' | 'input_audio', number> = { input_image: 8, input_audio: 3 };
+const MEDIA_MARKER: Record<'input_image' | 'input_audio', string> = {
+  input_image: '[spectrogram image removed from context to bound size; call spectrogram_view again to re-attach]',
+  input_audio: '[audio clip removed from context to bound size; call audio_listen again to re-attach]'
+};
+/** Keeps only the newest media parts in persisted history so per-turn cost stays bounded. */
+export function evictMedia(input: unknown[]): void {
+  const counts = { input_image: 0, input_audio: 0 };
+  const seen: { content: unknown[]; index: number; type: 'input_image' | 'input_audio' }[] = [];
+  for (const item of input) {
+    if (!item || typeof item !== 'object') continue;
+    const content = (item as { content?: unknown }).content;
+    if (!Array.isArray(content)) continue;
+    for (let index = 0; index < content.length; index++) {
+      const part = content[index] as { type?: unknown } | null;
+      if (part && (part.type === 'input_image' || part.type === 'input_audio')) {
+        counts[part.type] += 1;
+        seen.push({ content, index, type: part.type });
+      }
+    }
+  }
+  for (const entry of seen) {
+    if (counts[entry.type] <= MEDIA_BUDGET[entry.type]) continue;
+    counts[entry.type] -= 1;
+    entry.content[entry.index] = { type: 'input_text', text: MEDIA_MARKER[entry.type] };
+  }
 }
 
 function inputSummary(input: unknown[]) {

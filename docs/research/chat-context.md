@@ -64,3 +64,22 @@ The main counter caches settled text counts with bounded retained strings and
 entries. Its fixed IPC operation returns numeric/model metadata only. A failure
 shows an unavailable state rather than a fabricated zero. At 90% the meter turns
 amber; above 100% it turns red and labels the exceeded default size.
+
+## Media attachments (2026-09-22)
+
+History items can now carry `input_image` (PNG data URL) and `input_audio`
+(base64 WAV) parts attached by the `spectrogram_view` and `audio_listen` tools.
+Base64 payloads are never tokenized: the counter strips those parts, counts the
+remaining item as text, and adds documented estimates instead — images from the
+PNG IHDR dimensions at width×height/750 tokens per pixel, audio from the WAV
+header duration at 32 tokens per second, with a flat 1000-token fallback when a
+header cannot be read. `ChatContext.includesEstimatedMedia` flags the
+substitution in the tooltip. A 768×320 spectrogram therefore counts 328 tokens
+and a 2-second clip 64, rather than tens of thousands for raw base64.
+
+These are coarse local analogues of published vision/audio tokenizations, not
+any provider's actual accounting: real per-modality pricing and token formulas
+vary by provider and must be rechecked against official documentation before
+being relied on. `service.ts` eviction keeps the newest 8 images and 3 audio
+clips in persisted history, so both the estimate and the resent payload stay
+bounded as a conversation grows.

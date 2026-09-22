@@ -67,7 +67,9 @@ export async function runCapabilityProbe(probe: CapabilityProbe): Promise<Capabi
     failedEfforts,
     maxTokens,
     vision: await probeModality(probe, firstEffort, secret, 'vision'),
-    audio: await probeModality(probe, firstEffort, secret, 'audio'),
+    // The Anthropic Messages API has no input-audio block, so audio input is
+    // deterministically unsupported there and must not be probed as reachable.
+    audio: probe.provider.kind === 'anthropic' ? false : await probeModality(probe, firstEffort, secret, 'audio'),
   };
 }
 
@@ -138,7 +140,7 @@ async function probeModality(probe: CapabilityProbe, effort: string | undefined,
             role: 'user',
             content: kind === 'vision'
               ? [{ type: 'input_text', text: 'Describe this pixel.' }, { type: 'input_image', image_url: `data:image/png;base64,${PIXEL_PNG_BASE64}` }]
-              : [{ type: 'input_text', text: 'Transcribe this blip.' }],
+              : [{ type: 'input_text', text: 'Transcribe this blip.' }, { type: 'input_audio', input_audio: { data: BLIP_WAV_BASE64, format: 'wav' } }],
           },
         ],
         instructions: probeInstructions(),

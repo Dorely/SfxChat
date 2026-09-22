@@ -107,15 +107,20 @@ Open a sound's inspector and choose **Trim as new asset**. Set the in/out points
 zoom into the selection to refine its edges, optionally add short fades, and click
 **Play selection** to hear just that area. The button switches to **Stop selection**
 during playback. Changing the selection or fades stops the old preview; the next
-play uses the updated area. **Save as new asset** creates a WAV in the library and current Playground.
+play uses the updated area. The **Spectrogram** toggle shows the same rendered
+spectrogram view that the assistant can attach in chat. **Save as new asset** creates a WAV in the library and current Playground.
 The source is retained, and the new asset records its parent, exact sample-frame
 interval, fades, source hash, and decoder. Export the derivative through its inspector.
 
-The assistant can use `analyze_audio` to examine timestamped amplitude measurements,
-zoom into smaller intervals, and call `trim_asset` to keep a focused section. These
-local operations need no audio-provider key or paid generation. The assistant can
-locate activity from measurements; it cannot identify an event by hearing it. Give
-timing hints when the desired event is ambiguous, and audition the result.
+The assistant can use `analyze_audio` to examine timestamped amplitude
+measurements, detect energy-based event intervals as candidate clip spots, and
+probe how a candidate loop's end wraps to its start; `trim_asset` keeps a focused
+section or renders a seamless loop with a wrap crossfade. These local operations
+need no audio-provider key or paid generation. When the configured chat model
+supports image and audio input, the assistant can also attach a spectrogram view
+and a bounded listening clip of a library asset — those are observations at the
+model's fidelity, never approval. Give timing hints when the desired event is
+ambiguous, and audition every result yourself.
 
 Editing supports MP3 and RIFF PCM/float WAV, up to 64 MiB each for source bytes and
 decoded float samples. Unsupported WAV encodings remain available for original-file
@@ -128,7 +133,9 @@ source links are recorded under [docs/research](docs/research/agentic-audio-edit
 The initial configurable chat model is `gpt-5.6-sol`, following Lorekeeper. SFX uses
 `eleven_text_to_sound_v2`, `mp3_44100_128`, optional 0.5–30 second duration, looping,
 and prompt influence. Account availability and output rights are provider-controlled.
-This version does not send audio to a listening model or claim aesthetic approval.
+Audio reaches a listening model only as a bounded clip through the assistant's
+capability-gated tool when the model's saved flags allow it, and no aesthetic
+approval is claimed.
 
 ## Data and recovery
 

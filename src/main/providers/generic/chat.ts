@@ -3,9 +3,13 @@ import { ProviderHttpError, ProviderResponseError } from '../errors';
 import { parseJsonPayload, readSseStream, type SseFrame } from './sse';
 
 export type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
+export type ChatContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+  | { type: 'input_audio'; input_audio: { data: string; format: string } };
 export interface ChatMessage {
   role: ChatRole;
-  content?: string | null;
+  content?: string | ChatContentPart[] | null;
   tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[];
   tool_call_id?: string;
   name?: string;
@@ -61,10 +65,30 @@ export function toChatMessages(input: unknown[], instructions: string): ChatMess
     const value = item as Record<string, unknown>;
     if (value.role === 'user' && Array.isArray(value.content)) {
       flushCalls();
-      const text = value.content
-        .map(part => (part as { type?: string; text?: string }).type === 'input_text' ? String((part as { text?: unknown }).text ?? '') : '')
-        .join('');
-      messages.push({ role: 'user', content: text });
+      const parts: ChatContentPart[] = [];
+      let text = '';
+      let media = false;
+      const flushText = () => { if (text) { parts.push({ type: 'text', text }); text = ''; } };
+      for (const rawPart of value.content) {
+        const part = rawPart as { type?: string; text?: string; image_url?: unknown; input_audio?: { data?: unknown; format?: unknown } };
+        if (part.type === 'input_text' && typeof part.text === 'string') text += part.text;
+        else if (part.type === 'input_image' && typeof part.image_url === 'string') {
+          flushText();
+          parts.push({ type: 'image_url', image_url: { url: part.image_url } });
+          media = true;
+        } else if (part.type === 'input_audio' && typeof part.input_audio?.data === 'string') {
+          flushText();
+          parts.push({ type: 'input_audio', input_audio: { data: part.input_audio.data, format: typeof part.input_audio.format === 'string' ? part.input_audio.format : 'wav' } });
+          media = true;
+        }
+      }
+      flushText();
+      if (!media) {
+        const joined = parts.map(part => (part as { text?: string }).text ?? '').join('');
+        messages.push({ role: 'user', content: joined });
+        continue;
+      }
+      messages.push({ role: 'user', content: parts });
       continue;
     }
     if (value.type === 'message' && Array.isArray(value.content)) {

@@ -58,10 +58,24 @@ export function toAnthropicMessages(input: unknown[]): { content: AnthropicConte
     if (value.role === 'user' && Array.isArray(value.content)) {
       flushAssistant();
       flushTools();
-      const text = value.content
-        .map(part => ((part as { type?: string; text?: string }).type === 'input_text' ? String((part as { text?: unknown }).text ?? '') : ''))
-        .join('');
-      messages.push({ role: 'user', content: [{ type: 'text', text }] });
+      const blocks: AnthropicContent[] = [];
+      let text = '';
+      const flushText = () => { if (text) { blocks.push({ type: 'text', text }); text = ''; } };
+      for (const rawPart of value.content) {
+        const part = rawPart as { type?: string; text?: string; image_url?: unknown; input_audio?: { data?: unknown } };
+        if (part.type === 'input_text' && typeof part.text === 'string') text += part.text;
+        else if (part.type === 'input_image' && typeof part.image_url === 'string') {
+          flushText();
+          const match = /^data:([^;,]+);base64,(.*)$/.exec(part.image_url);
+          if (match) blocks.push({ type: 'image', source: { type: 'base64', media_type: match[1], data: match[2] } });
+          else text += '[unreadable image attachment]';
+        } else if (part.type === 'input_audio' && typeof part.input_audio?.data === 'string') {
+          flushText();
+          blocks.push({ type: 'text', text: '[audio clip omitted: this provider accepts no audio input]' });
+        }
+      }
+      flushText();
+      messages.push({ role: 'user', content: blocks.length ? blocks : [{ type: 'text', text: '' }] });
       continue;
     }
     if (value.type === 'message' && Array.isArray(value.content)) {

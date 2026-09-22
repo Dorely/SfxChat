@@ -17,20 +17,39 @@ export interface Asset {
   request: GenerationInput | MusicGenerationInput | null; usage: string | null; parentId: string | null; createdAt: string;
   providerPrompt?: string | null; lyrics?: string; edit?: TrimEdit;
 }
-export interface TrimInput { startSeconds: number; endSeconds: number; fadeInMs?: number; fadeOutMs?: number; name?: string }
+export interface TrimInput {
+  startSeconds: number; endSeconds: number; fadeInMs?: number; fadeOutMs?: number; name?: string;
+  /** Render a wrap-crossfaded loop instead of a plain cut; fades are not allowed with it. */
+  loop?: boolean; crossfadeMs?: number;
+}
 export interface TrimEdit {
   kind: 'trim'; version: 1; sourceHash: string; sampleRate: number;
   startFrame: number; endFrame: number; fadeInFrames: number; fadeOutFrames: number;
   requested: TrimInput; decoder: string; outputEncoding: 'float32-wav';
+  loop?: { crossfadeFrames: number; outputFrames: number };
 }
-export interface AudioAnalysisInput { startSeconds?: number; endSeconds?: number; bins?: number }
+export interface AudioAnalysisInput { startSeconds?: number; endSeconds?: number; bins?: number; events?: boolean; seamProbe?: { startSeconds?: number; endSeconds?: number } }
+export interface EventInterval {
+  startFrame: number; endFrame: number; startSeconds: number; endSeconds: number;
+  peak: number; rms: number;
+}
+export interface SeamProbe {
+  startSeconds: number; endSeconds: number; startFrame: number; endFrame: number;
+  windowSamples: number; discontinuity: number; rmsHead: number; rmsTail: number;
+  correlation: number; suggestedOffsetFrames: number; bestCorrelation: number;
+  searchFrames: number; zeroCrossAfterStart: number | null; zeroCrossBeforeEnd: number | null;
+  note: string;
+}
 export interface AudioAnalysis {
   version: 1; assetId: string; sourceHash: string; sampleRate: number; channels: number;
   totalFrames: number; duration: number; startFrame: number; endFrame: number;
   startSeconds: number; endSeconds: number; decoder: string;
   bins: { startFrame: number; endFrame: number; startSeconds: number; endSeconds: number; min: number; max: number; peak: number; rms: number }[];
+  events?: EventInterval[];
+  seam?: SeamProbe;
   note: string;
 }
+export interface SpectrogramInput { startSeconds?: number; endSeconds?: number; width?: number; height?: number; freqScale?: 'log' | 'linear' }
 export interface GenerationInput {
   kind?: 'effect'; prompt: string; count?: number; duration?: number | null; loop?: boolean;
   influence?: number; parentId?: string | null; name?: string;
@@ -54,7 +73,7 @@ export interface ChatModelOption { id: string; label: string; providerLabel: str
 export type MusicProviderKind = 'elevenlabs-music' | 'gemini-lyria';
 export interface MusicProviderEntry { id: string; label: string; kind: MusicProviderKind; model: string; ready: boolean }
 export interface SettingsStatus { codexReady: boolean; elevenLabsReady: boolean; secureStorageAvailable: boolean; loginPending: boolean; model: string; error: string | null; chatModels: ChatModelOption[]; activeChat: ActiveChatSelection; providers: ChatProviderEntry[]; musicProviders: MusicProviderEntry[]; activeMusicId: string | null }
-export interface ChatContext { model: string; tokens: number; limit: number | null; includesHiddenReasoning: boolean }
+export interface ChatContext { model: string; tokens: number; limit: number | null; includesHiddenReasoning: boolean; includesEstimatedMedia: boolean }
 /** Every list below is scoped to `activeProjectId`; other projects' rows never reach the renderer. */
 export interface Snapshot { projects: Project[]; activeProjectId: string; conversations: Conversation[]; messages: Message[]; assets: Asset[]; jobs: Job[]; playground: Record<string, string[]>; settings: SettingsStatus; activeTurns: string[] }
 export interface AssetPatch { name?: string; description?: string; tags?: string[]; collections?: string[]; review?: Review; feedback?: string }
@@ -80,6 +99,7 @@ export interface SfxApi {
   analyzeAudio(id: string, input: AudioAnalysisInput): Promise<AudioAnalysis>;
   trimAsset(conversationId: string, id: string, input: TrimInput): Promise<Asset>;
   previewTrim(id: string, input: TrimInput): Promise<Uint8Array>;
+  spectrogram(id: string, input: SpectrogramInput): Promise<Uint8Array>;
   setPlayground(conversationId: string, assetIds: string[]): Promise<void>;
   importAudio(conversationId: string, kind?: AssetKind): Promise<void>;
   exportAsset(id: string): Promise<void>;

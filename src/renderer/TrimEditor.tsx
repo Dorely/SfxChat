@@ -35,9 +35,14 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
   const [viewEnd, setViewEnd] = useState(asset.duration || 1)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [showSpectrogram, setShowSpectrogram] = useState(true)
+  const [spectrogramUrl, setSpectrogramUrl] = useState<string | null>(null)
+  const [spectrogramLoading, setSpectrogramLoading] = useState(false)
+  const [spectrogramError, setSpectrogramError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const analysisRequestRef = useRef(0)
   const previewRequestRef = useRef(0)
+  const spectrogramRequestRef = useRef(0)
   const previewAudioRef = useRef<HTMLAudioElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
   const previewKey = `trim-preview-${asset.id}`
@@ -45,6 +50,22 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
   const duration = analysis?.duration || asset.duration || 0
   const fullStart = 0
   const fullEnd = duration
+
+  const loadSpectrogram = async (startSeconds: number, endSeconds: number) => {
+    const request = ++spectrogramRequestRef.current
+    setSpectrogramLoading(true)
+    setSpectrogramError(null)
+    try {
+      const bytes = await window.sfx.spectrogram(asset.id, { startSeconds, endSeconds, width: 768, height: 320 })
+      if (request !== spectrogramRequestRef.current) return
+      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'image/png' }))
+      setSpectrogramUrl(previous => { if (previous) URL.revokeObjectURL(previous); return url })
+    } catch (reason) {
+      if (request === spectrogramRequestRef.current) setSpectrogramError(reason instanceof Error ? reason.message : 'Unable to render the spectrogram.')
+    } finally {
+      if (request === spectrogramRequestRef.current) setSpectrogramLoading(false)
+    }
+  }
 
   const loadAnalysis = async (startSeconds?: number, endSeconds?: number, initial = false) => {
     const request = ++analysisRequestRef.current
@@ -60,6 +81,7 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
         setStartDraft(seconds(next.startSeconds)); setEndDraft(seconds(next.endSeconds))
         setViewStart(next.startSeconds); setViewEnd(next.endSeconds); setLoading(false)
       } else { setViewStart(next.startSeconds); setViewEnd(next.endSeconds) }
+      if (showSpectrogram) void loadSpectrogram(next.startSeconds, next.endSeconds)
     } catch (reason) {
       if (request === analysisRequestRef.current) setError(reason instanceof Error ? reason.message : 'Unable to analyze this audio.')
     } finally {
@@ -68,16 +90,32 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
     }
   }
 
+  const toggleSpectrogram = () => {
+    const next = !showSpectrogram
+    setShowSpectrogram(next)
+    if (!next) {
+      spectrogramRequestRef.current += 1
+      setSpectrogramLoading(false)
+      setSpectrogramError(null)
+      setSpectrogramUrl(previous => { if (previous) URL.revokeObjectURL(previous); return null })
+    } else if (analysis) {
+      void loadSpectrogram(analysis.startSeconds, analysis.endSeconds)
+    }
+  }
+
   useEffect(() => {
     setAnalysis(null); setStart(0); setEnd(asset.duration || 0)
     setStartDraft('0.000'); setEndDraft(seconds(asset.duration || 0))
     setViewStart(0); setViewEnd(asset.duration || 1); setFadeInMs(0); setFadeOutMs(0)
     setName(`${asset.name || 'Untitled sound'} trim`); setPreviewUrl(null)
+    spectrogramRequestRef.current += 1
+    setSpectrogramUrl(null); setSpectrogramError(null); setSpectrogramLoading(false)
     void loadAnalysis(undefined, undefined, true)
-    return () => { analysisRequestRef.current += 1; previewRequestRef.current += 1 }
+    return () => { analysisRequestRef.current += 1; previewRequestRef.current += 1; spectrogramRequestRef.current += 1 }
   }, [asset.id])
 
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl) }, [previewUrl])
+  useEffect(() => () => { if (spectrogramUrl) URL.revokeObjectURL(spectrogramUrl) }, [spectrogramUrl])
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null
     modalRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
@@ -171,9 +209,10 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
     <div className="trim-editor">
       <div className="trim-editor-header"><div><p className="eyebrow">Trim a sound</p><h2 id="trim-editor-title">Trim {asset.name || 'Untitled sound'}</h2></div><button className="icon-button" onClick={onClose} disabled={saving} aria-label="Close trim editor"><Icon name="close" /></button></div>
       <div className="trim-editor-scroll">
-        <div className="trim-waveform-heading"><span className="field-label">Measured waveform</span><span className="trim-decoder">{analysis?.sampleRate ? `${analysis.sampleRate.toLocaleString()} Hz · ${analysis.channels} ch · Times use decoded audio` : 'Analyzing…'}</span></div>
+        <div className="trim-waveform-heading"><span className="field-label">Measured waveform</span><span className="trim-decoder">{analysis?.sampleRate ? `${analysis.sampleRate.toLocaleString()} Hz · ${analysis.channels} ch · Times use decoded audio` : 'Analyzing…'}</span><button type="button" className="mini-button trim-spectrogram-toggle" onClick={toggleSpectrogram} aria-pressed={showSpectrogram}>Spectrogram</button></div>
         <div className="trim-waveform-wrap"><svg className="trim-waveform" viewBox="0 0 1000 180" preserveAspectRatio="none" role="img" aria-label="Audio waveform with selected trim range"><line x1="0" y1="90" x2="1000" y2="90" className="trim-waveform-axis" />{visibleBins.map((bin, index) => { const x = clamp((bin.startSeconds - viewStart) / span, 0, 1) * 1000; const width = Math.max(1, (bin.endSeconds - bin.startSeconds) / span * 1000); const yMax = 90 - clamp(bin.max, -1, 1) * 76; const yMin = 90 - clamp(bin.min, -1, 1) * 76; const yRms = 90 - clamp(bin.rms, -1, 1) * 48; return <g key={`${bin.startFrame}-${index}`}><rect className="trim-waveform-rms" x={x} y={Math.min(90, yRms)} width={width} height={Math.abs(yRms - 90) || 1} /><line className="trim-waveform-bar" x1={x + width / 2} x2={x + width / 2} y1={yMax} y2={yMin} /></g> })}<rect className="trim-selection" x={startX * 1000} y="0" width={Math.max(0, (endX - startX) * 1000)} height="180" /></svg><div className="trim-range-inputs"><input type="range" min={viewStart} max={viewEnd} step="0.001" value={clamp(start, viewStart, viewEnd)} onChange={event => updateStart(Number(event.target.value))} aria-label="Trim start in seconds" disabled={loading || viewLoading || saving || !analysis} /><input type="range" min={viewStart} max={viewEnd} step="0.001" value={clamp(end, viewStart, viewEnd)} onChange={event => updateEnd(Number(event.target.value))} aria-label="Trim end in seconds" disabled={loading || viewLoading || saving || !analysis} /></div></div>
         <div className="trim-time-labels"><span>{seconds(viewStart)} s</span><span>{seconds(viewEnd)} s</span></div>
+        {showSpectrogram && <div className="trim-spectrogram-wrap"><div className="trim-waveform-heading"><span className="field-label">Spectrogram — the same view the assistant can attach</span>{spectrogramLoading && <span className="trim-decoder">Rendering…</span>}</div>{spectrogramError ? <p className="trim-error" role="alert">{spectrogramError}</p> : spectrogramUrl ? <img className="trim-spectrogram" src={spectrogramUrl} alt={`Spectrogram of ${asset.name} from ${seconds(viewStart)} to ${seconds(viewEnd)} seconds`} /> : <div className="trim-spectrogram-placeholder">Rendering…</div>}</div>}
         <div className="trim-zoom-controls"><button className="mini-button" onClick={() => pan(-1)} disabled={loading || viewLoading || viewStart <= fullStart} aria-label="Pan waveform left"><Icon name="arrow-left" /></button><button className="secondary-button" onClick={zoomSelection} disabled={!validSelection || viewLoading || saving}>Zoom selection</button><button className="secondary-button" onClick={resetZoom} disabled={!analysis || viewLoading || saving}>Reset zoom</button><button className="mini-button" onClick={() => pan(1)} disabled={loading || viewLoading || viewEnd >= fullEnd} aria-label="Pan waveform right"><Icon name="arrow" /></button></div>
         <div className="trim-selection-summary"><span>Selection <strong>{durationLabel(selectionDuration)}</strong></span><span>In {seconds(start)} s</span><span>Out {seconds(end)} s</span></div>
         {!validFades && <p className="trim-error" role="alert">Each fade must be at most 10 seconds, and both fades together must fit within the selection.</p>}

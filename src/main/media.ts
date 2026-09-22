@@ -3,8 +3,9 @@ import { constants } from 'node:fs';
 import { join, extname, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { parseBuffer } from 'music-metadata';
-import type { Asset, AssetKind, AudioAnalysisInput, GenerationInput, MusicGenerationInput, TrimInput } from '../shared/types';
-import { analyzeAudio, decodeAudio, renderTrim, MAX_AUDIO_BYTES, type DecodedAudio } from './audio';
+import type { Asset, AssetKind, AudioAnalysisInput, GenerationInput, MusicGenerationInput, SpectrogramInput, TrimInput } from '../shared/types';
+import { analyzeAudio, decodeAudio, interval, renderClip, renderTrim, MAX_AUDIO_BYTES, type ClipRender, type DecodedAudio } from './audio';
+import { renderSpectrogram, type SpectrogramRender } from './spectrogram';
 
 export class MediaLibrary {
   private audioQueue: Promise<unknown> = Promise.resolve();
@@ -26,6 +27,16 @@ export class MediaLibrary {
   }
   analyze(asset: Asset, input: AudioAnalysisInput) { return this.withAudio(asset, audio => analyzeAudio(audio, asset, input)); }
   renderTrim(asset: Asset, input: TrimInput) { return this.withAudio(asset, audio => renderTrim(audio, asset, input)); }
+  clip(asset: Asset, input: { startSeconds?: number; endSeconds?: number }): Promise<ClipRender> {
+    return this.withAudio(asset, audio => renderClip(audio, input));
+  }
+  spectrogram(asset: Asset, input: SpectrogramInput): Promise<SpectrogramRender> {
+    return this.withAudio(asset, async audio => {
+      const duration = audio.channels[0].length / audio.sampleRate;
+      const { startFrame, endFrame } = interval(audio, input.startSeconds ?? 0, input.endSeconds ?? duration);
+      return renderSpectrogram(audio, startFrame, endFrame, { width: input.width, height: input.height, freqScale: input.freqScale });
+    });
+  }
   async idle() { await this.audioQueue; }
   path(asset: Pick<Asset, 'id' | 'format'>) { return join(this.root, `${asset.id}.${asset.format}`); }
   async save(bytes: Buffer, format: 'mp3' | 'wav', fields: Partial<Asset> & { projectId: string }): Promise<Asset> {

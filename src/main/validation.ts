@@ -10,11 +10,29 @@ export const trimSchema = z.object({
   startSeconds: z.number().finite().min(0), endSeconds: z.number().finite().positive(),
   fadeInMs: z.number().finite().min(0).max(10000).optional(),
   fadeOutMs: z.number().finite().min(0).max(10000).optional(),
-  name: z.string().trim().min(1).max(200).optional()
+  name: z.string().trim().min(1).max(200).optional(),
+  loop: z.boolean().optional().describe('Render a seamless-loop variant of the selection instead of a plain cut: the tail crossfades into the head and the output is shortened by the crossfade length. Cannot be combined with fades.'),
+  crossfadeMs: z.number().finite().min(0).max(5000).optional().describe('Loop seam crossfade length in milliseconds (0-5000, default 0). A small value such as 5-20 ms usually removes the click at the seam; only used when loop is true.')
 }).strict();
 export const analysisSchema = z.object({
   startSeconds: z.number().finite().min(0).optional(), endSeconds: z.number().finite().positive().optional(),
-  bins: z.number().int().min(1).max(512).optional()
+  bins: z.number().int().min(1).max(512).optional(),
+  events: z.boolean().optional().describe('Also run energy-based event detection over the interval and return candidate cut regions with exact frame boundaries. Candidates, not identified sounds.'),
+  seamProbe: z.object({
+    startSeconds: z.number().finite().min(0).optional(),
+    endSeconds: z.number().finite().positive().optional()
+  }).strict().optional().describe('Measure the loop seam where endSeconds wraps back to startSeconds: splice discontinuity, head/tail RMS, start/end correlation, and a suggested frame offset. Omit both fields to probe the whole asset as a loop.')
+}).strict();
+export const spectrogramSchema = z.object({
+  startSeconds: z.number().finite().min(0).optional(),
+  endSeconds: z.number().finite().positive().optional(),
+  width: z.number().int().min(256).max(1024).optional().describe('Image width in pixels (256-1024, default 768).'),
+  height: z.number().int().min(128).max(512).optional().describe('Image height in pixels (128-512, default 384).'),
+  freqScale: z.enum(['log', 'linear']).optional().describe('Frequency axis: "log" (default) suits music and low-frequency detail; "linear" shows the full spectrum evenly for harmonic/tonal inspection.')
+}).strict();
+export const clipSchema = z.object({
+  startSeconds: z.number().finite().min(0).optional(),
+  endSeconds: z.number().finite().positive().optional()
 }).strict();
 export const generationSchema = z.object({
   prompt: z.string().trim().min(1).describe('Complete, concise description of the audible source, action and useful acoustic details; put connected events in order. For revisions, restate the sound with the requested changes. Sent as text without chat history or parent audio.'),
@@ -52,6 +70,7 @@ export const commandSchemas = {
   updateAsset: z.tuple([idSchema, patchSchema, idSchema.optional()]), setPlayground: z.tuple([idSchema, z.array(idSchema)]),
   analyzeAudio: z.tuple([idSchema, analysisSchema]), trimAsset: z.tuple([idSchema, idSchema, trimSchema]),
   previewTrim: z.tuple([idSchema, trimSchema]),
+  spectrogram: z.tuple([idSchema, spectrogramSchema]),
   importAudio: z.tuple([idSchema, assetKindSchema.optional()]), exportAsset: z.tuple([idSchema]), searchAssets: z.tuple([z.string()]),
   startLogin: z.tuple([]), cancelLogin: z.tuple([]), logout: z.tuple([]),
   saveElevenLabsKey: z.tuple([z.string()]), saveModel: z.tuple([z.union([z.literal('backend default'), z.string().trim().regex(/^[a-zA-Z0-9._-]+$/)])]),

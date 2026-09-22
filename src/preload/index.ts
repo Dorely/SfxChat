@@ -13,6 +13,7 @@ const api: SfxApi = {
   updateAsset: (id, patch, conversationId) => call('updateAsset', id, patch, conversationId), setPlayground: (id, ids) => call('setPlayground', id, ids),
   analyzeAudio: (id, input) => call('analyzeAudio', id, input), trimAsset: (conversationId, id, input) => call('trimAsset', conversationId, id, input),
   previewTrim: (id, input) => call('previewTrim', id, input),
+  spectrogram: (id, input) => call('spectrogram', id, input),
   importAudio: (id, kind) => call('importAudio', id, kind), exportAsset: id => call('exportAsset', id), searchAssets: query => call('searchAssets', query),
   startLogin: () => call('startLogin'), cancelLogin: () => call('cancelLogin'), logout: () => call('logout'),
   saveElevenLabsKey: key => call('saveElevenLabsKey', key), saveModel: model => call('saveModel', model),

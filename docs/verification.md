@@ -1,3 +1,61 @@
+## Multimodal assistant: spectrograms, listening clips, loops, clip spots (2026-09-22)
+
+Added capability-gated `spectrogram_view` and `audio_listen` assistant tools with
+labeled media parts in chat history and bounded eviction (newest 8 images / 3 audio
+clips, older parts become re-attach markers), a self-contained STFT spectrogram
+renderer (`png.ts` + `spectrogram.ts`, no new dependencies), energy event detection
+and loop-seam probing in `analyze_audio`, wrap-crossfade loop rendering in
+`trim_asset`, a spectrogram panel in the trim editor, media-aware context
+estimates with `includesEstimatedMedia`, corrected capability probes (the
+responses-kind audio probe now sends a real `input_audio` part; Anthropic records
+`audio: false` deterministically), and media content mapping in the Chat
+Completions and Anthropic adapters.
+
+- `npm run typecheck` (`npx tsc --noEmit`): passed.
+- `npm run build`: passed (main 234.42 kB, preload 2.57 kB, renderer 763.83 kB, CSS 33.71 kB).
+- Two temporary harnesses outside the repository (esbuild bundles run under
+  Electron's Node with `ELECTRON_RUN_AS_NODE`, deleted after the runs) reported
+  65/65 checks in total. Harness 1 (53 checks): PNG encode/decode round-trip; a
+  1 kHz sine rendering as a bright line at the mathematically expected row in
+  both log (40 Hz–22 kHz) and linear scales, with the final 0.5 s silence gap and
+  seven faint time-grid columns; both rendered PNGs then opened in an external
+  image viewer showing the expected line position, gap, grid, and colormap;
+  event detection returning exactly two synthesized bursts with <30 ms timing
+  error and the correct peak; seam probing reporting small discontinuity, high
+  correlation, and a zero suggested offset on an aligned periodic loop (the
+  offset is only suggested when it improves correlation by at least 0.1) and a
+  large discontinuity when the interval was half a period off; loop rendering
+  with output shortened exactly by the crossfade, the first output sample landing
+  on consecutive source frames across the wrap, fade-with-loop rejection, and
+  byte-length-preserving plain trims; mono 16-bit clip WAV headers with exact
+  window/downmix and over-limit guidance text; Chat Completions
+  `image_url`/`input_audio` mapping preserving label-then-media order and
+  unchanged plain-text items; Anthropic base64 `image` blocks plus the
+  audio-omitted marker; context estimates (768×320 image = 328 tokens, 2 s WAV =
+  64 tokens) with the flag set and no base64 tokenization; tool registration,
+  capability gating (dropped for false flags, kept for unknown), schema bounds,
+  and the new instruction sections; and media eviction keeping exactly the newest
+  8 images / 3 clips with markers for the rest. Harness 2 (12 checks) drove the
+  real `MediaLibrary` path on a synthesized WAV in a temporary directory:
+  save → `spectrogram` (PNG magic bytes, mapping, option bounds honored) →
+  `clip` (exact mono window) → `analyze` with events (one event covering the
+  tone span) → `renderTrim` with a loop → SHA-256 integrity failure on a
+  tampered original → `commandSchemas.spectrogram`/`analyzeAudio` accept/reject.
+  Temporary directories and harness files were removed afterwards.
+- Live launch of the production bundle (`npx electron out/main/index.js`, real
+  profile, 15 s, then terminated): `app.started` recorded at
+  2026-09-22T06:56:57Z with no `start_failed` and no `operation.failed` entries
+  in the rotating diagnostics.
+- Not verified: no live provider turn was made, so whether Codex and the
+  configured generic providers accept `input_image`/`input_audio` parts in real
+  traffic, whether a hosted model actually selects the new tools and reads the
+  images/clips as described, and real vision acceptance of the rendered PNGs
+  remain live acceptance checks — record outcomes here when exercised. The trim
+  editor's spectrogram panel and its `spectrogram` IPC path were not driven in a
+  running app (verified by typecheck and the shared renderer logic only). No
+  generation was billed, no credential changed, and no listener judgment is
+  claimed: pixel measurements and waveform checks are not audition evidence.
+
 ## Projects and session titles (2026-09-22)
 
 Added schema v2 projects (conversations and assets scoped by a `project_id` column with one

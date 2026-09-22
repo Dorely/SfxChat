@@ -24,7 +24,10 @@ The fixed `chatContext` IPC operation estimates selected-conversation context in
 the main process using bundled `js-tiktoken`/`o200k_base`. It shares the turn's
 instruction builder and uses repaired persisted history or active in-memory
 history, plus streamed text and the trimmed composer draft. Display-only activity
-and errors do not inflate the count. The renderer throttles updates and rejects
+and errors do not inflate the count. Media parts in history are stripped before
+tokenization and replaced by documented estimates (PNG pixels/750, WAV duration ×
+32 tokens per second, flat 1000 fallback) flagged by `includesEstimatedMedia`.
+The renderer throttles updates and rejects
 stale responses. Model metadata supplies default Codex context sizes; unknown
 models show an unknown limit. The approximate meter is advisory, with encrypted
 reasoning omitted and flagged. See [evidence and limits](research/chat-context.md).
@@ -97,6 +100,17 @@ labels, perceptual-silence claims, or hearing are inferred. The assistant is ins
 to inspect an overview, zoom near boundaries, and ask for timing hints if semantic
 identity is needed. See the [research note](research/agentic-audio-editing.md).
 
+Two optional analysis probes extend this. `events:true` runs energy-based
+detection (5 ms RMS envelope; adaptive threshold at the 20th-percentile noise
+floor +12 dB with a −60 dBFS floor; 30 ms minimum event, 50 ms minimum gap) and
+returns up to 64 candidate intervals with exact frames, peak, and RMS — candidate
+cut regions, never identified sounds. `seamProbe` measures how a candidate
+loop's end wraps to its start: the single-sample splice step, 50 ms head/tail
+RMS, Pearson correlation between the last and first window, zero-crossing
+distances, and `suggestedOffsetFrames`, which slides both endpoints (length
+preserved) within ±50 ms and is only reported when it improves correlation by
+at least 0.1, so phase noise never nudges an aligned loop.
+
 Trims retain a half-open interval `[startFrame,endFrame)` after rounding seconds to
 nearest frames. Optional linear fade lengths round to frames and cannot overlap.
 The shared renderer writes float32 WAV with a fact chunk. A preview returns its
@@ -109,6 +123,62 @@ generation records remain on the parent; the original prompt is retained for sea
 Older JSON asset records without `edit` remain readable without a schema migration.
 Float32 conversion can reduce precision of imported 32-bit integer/64-bit float WAV;
 MP3 always requires decoding. Originals remain byte-identical for export.
+
+`trim_asset` also renders loop outputs. `loop: true` wrap-crossfades the selection's
+tail into its head over `crossfadeMs` (0–5000 ms) and shortens the output by the
+crossfade length, so wrapped playback continues at consecutive source frames; fades
+are rejected with a loop, and `TrimEdit.loop` records `crossfadeFrames` and
+`outputFrames`. The interval fields keep naming the source selection, and records
+without `loop` stay readable.
+
+## Multimodal assistant context
+
+Two capability-gated tools let the model use sight and sound on library assets when
+the active chat model supports them. `spectrogram_view` renders a spectrogram PNG
+and attaches it; `audio_listen` attaches a bounded audio clip. `TOOL_CAPABILITIES`
+maps them to `vision` and `audio`, `toolsForModel` withholds them when the saved
+flag is `false`, and `capabilityNote` amends the instructions, so degradation is
+mechanical as well as epistemic.
+
+Images are rendered in the main process by self-authored code with no new
+dependencies: `png.ts` is a minimal 8-bit RGB encoder over Node's zlib, and
+`spectrogram.ts` is an iterative radix-2 FFT with a Hann window (2048 samples
+default, halving down to 256 for short intervals), one-sided magnitudes
+normalized to full-scale-sine dB with an −80 dB floor, and a 256-entry
+perceptual colormap over a faint tenth-of-width time grid. Width (256–1024,
+default 768) and height (128–512, default 384) are bounded; log frequency
+(default) or linear rows map to exact frequency edges, and the tool result
+returns that mapping instead of drawing text into pixels. PNGs are transient:
+regenerated per request on the serialized decode queue, never written to disk,
+and shared by the tool and the renderer's trim-editor spectrogram panel (the
+fixed `spectrogram` IPC operation returns the same bytes the model sees).
+
+Clips are mono-downmixed 16-bit PCM WAV at the source sample rate, at most 30
+seconds and about 3 MiB; `renderClip` fails with a suggested shorter window
+rather than exceeding the bound.
+
+Attached media enters model history as a labeled user item pushed immediately
+after the tool's `function_call_output`: a text part naming the tool call and
+asset, then the `input_image` data URL or `input_audio` WAV. The tool ledger
+stores only the lean JSON result (attachment id, dimensions/duration, mapping,
+note), never bytes. Responses and Codex transports pass the parts through
+verbatim; Chat Completions maps them to `image_url`/`input_audio` content parts;
+Anthropic maps images to base64 `image` blocks and replaces audio with an
+explicit "this provider accepts no audio input" marker, because the Messages API
+has no audio input. Persisted history keeps only the newest 8 images and 3 audio
+clips; older parts become a marker text telling the model to re-attach, bounding
+both the settings table and per-turn resend cost. The runtime instructions frame
+the three evidence channels: measurements are exact but non-semantic, the image
+is a secondary view whose pixels never set cut points, and attached audio is
+listening at the provider model's fidelity — observations, with the user's
+audition remaining the authority.
+
+Capability probes now test what they claim: the responses-kind audio probe sends
+a real `input_audio` part (it previously sent text only and could report false
+positives), and the Anthropic kind records `audio: false` deterministically
+instead of probing an input the Messages API does not have. Whether the hosted
+Codex backend and configured generic providers accept media parts in live traffic
+is a verification item, not an assumption.
 
 ## Jobs and turns
 

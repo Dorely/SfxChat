@@ -58,7 +58,7 @@ is recorded in [verification](docs/verification.md).
 | [src/shared/music-models.ts](src/shared/music-models.ts) | Music provider presets, reviewed model catalogs, and app-side duration bounds. |
 | [src/main/chat-registry.ts](src/main/chat-registry.ts) | Generic provider/model registry, combined selection, test-gated saves, and active chat resolution. |
 | [src/main/music-registry.ts](src/main/music-registry.ts) | Independent music provider registry, active/override resolution, and `music-key` credential names. |
-| [src/main/chat-context.ts](src/main/chat-context.ts) | Cached local tiktoken context estimates with encrypted-reasoning exclusion. |
+| [src/main/chat-context.ts](src/main/chat-context.ts) | Cached local tiktoken context estimates with encrypted-reasoning exclusion and estimated media substitution. |
 | [src/main/providers/generic/sse.ts](src/main/providers/generic/sse.ts) | Shared SSE frame splitting for generic chat adapters. |
 | [src/main/providers/generic/chat.ts](src/main/providers/generic/chat.ts) | Chat Completions transport, history conversion, and reasoning-effort fallback. |
 | [src/main/providers/generic/responses.ts](src/main/providers/generic/responses.ts) | Generic Responses transport without Codex-only headers. |
@@ -67,9 +67,11 @@ is recorded in [verification](docs/verification.md).
 | [src/main/providers/generic/capabilities.ts](src/main/providers/generic/capabilities.ts) | Capability probes, max-tokens discovery, vision/audio flags, and tool filtering. |
 | [src/main/store.ts](src/main/store.ts) | SQLite schema v2 migration, projects, per-project scoping, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
 | [src/main/media.ts](src/main/media.ts) | Original storage/import/export, integrity checks, serialized editing/analysis, and bounded decoded cache. |
-| [src/main/audio.ts](src/main/audio.ts) | Bounded MP3/WAV decode, timestamped amplitude windows, exact sample-frame trims, fades, and float32 WAV rendering. |
+| [src/main/audio.ts](src/main/audio.ts) | Bounded MP3/WAV decode, timestamped amplitude windows, energy event detection, loop-seam probing, exact sample-frame trims, loop crossfades, fades, mono WAV clip rendering, and float32 WAV rendering. |
+| [src/main/png.ts](src/main/png.ts) | Minimal 8-bit RGB PNG encoder over Node zlib (filter 0 scanlines, hand-rolled CRC32 and chunks). |
+| [src/main/spectrogram.ts](src/main/spectrogram.ts) | Self-contained STFT spectrogram rendering: radix-2 FFT, Hann window, full-scale-dB scaling, colormap, time/frequency grid, and exact mapping. |
 | [src/main/validation.ts](src/main/validation.ts) | Runtime validation of privileged operations and generation inputs. |
-| [src/main/service.ts](src/main/service.ts) | Shared library operations, project-scoped snapshots, sequential generation jobs, chat turns, and tool execution. |
+| [src/main/service.ts](src/main/service.ts) | Shared library operations, project-scoped snapshots, sequential generation jobs, chat turns, capability-gated media attachments with history eviction, and tool execution. |
 | [src/main/diagnostics.ts](src/main/diagnostics.ts) | Rotating local JSONL records, diagnostic references, and credential redaction. |
 | [src/main/providers/errors.ts](src/main/providers/errors.ts) | Bounded provider error parsing, request IDs, readable failures, and safe diagnostic fields. |
 | [src/main/assistant.ts](src/main/assistant.ts) | Runtime sound-design, ElevenLabs SFX, and per-provider music prompting/revision instructions, session naming guidance, plus assistant tool definitions. |
@@ -84,6 +86,6 @@ is recorded in [verification](docs/verification.md).
 | [src/renderer/index.html](src/renderer/index.html), [src/renderer/main.tsx](src/renderer/main.tsx) | Renderer entrypoint and content security policy. |
 | [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Project switcher, session renaming, chat, effects and music libraries, Playground generation, audition, inspector, settings, and styling. |
 | [src/renderer/Icon.tsx](src/renderer/Icon.tsx) | Shared inline SVG icon set drawn for this project, replacing font glyph icons. |
-| [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Waveform trim selection, fine-window zoom, fades, exact rendered preview, and derived-asset saving. |
+| [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Waveform trim selection, fine-window zoom, fades, spectrogram panel, exact rendered preview, and derived-asset saving. |
 | [src/renderer/ChatContextMeter.tsx](src/renderer/ChatContextMeter.tsx) | Throttled composer context indicator, threshold styling, and estimate details. |
 | [.github/workflows/windows.yml](.github/workflows/windows.yml) | Credential-free Windows typecheck and installer artifact build. |

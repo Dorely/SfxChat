@@ -60,6 +60,10 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .trim-range-inputs input:focus-visible::-webkit-slider-thumb { outline: 2px solid #fff; outline-offset: 2px; }
 .trim-range-inputs input:focus-visible::-moz-range-thumb { outline: 2px solid #fff; outline-offset: 2px; }
 .trim-time-labels { margin: 6px 1px 12px; color: var(--quiet); font: 11px 'DM Mono', monospace; }
+.trim-spectrogram-toggle { margin-left: auto; }
+.trim-spectrogram-wrap { margin-bottom: 12px; }
+.trim-spectrogram { display: block; width: 100%; border: 1px solid #43503e; border-radius: 6px; background: #000; }
+.trim-spectrogram-placeholder { min-height: 120px; display: flex; align-items: center; justify-content: center; border: 1px solid #43503e; border-radius: 6px; background: #141814; color: var(--quiet); font: 11px 'DM Mono', monospace; }
 .trim-zoom-controls { justify-content: center; margin-bottom: 16px; }
 .trim-selection-summary { justify-content: flex-start; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); font: 11px 'DM Mono', monospace; }
 .trim-selection-summary span + span { padding-left: 10px; border-left: 1px solid var(--line); }
