@@ -1,10 +1,16 @@
 export type Review = 'unreviewed' | 'accepted' | 'rejected';
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'uncertain';
 export type AssetKind = 'effect' | 'music';
-export interface Conversation { id: string; title: string; createdAt: string }
+/** Who set a session title last: the app from the first message, the user, or the assistant. */
+export type TitleSource = 'default' | 'user' | 'assistant';
+export interface Project { id: string; name: string; createdAt: string }
+export interface Conversation {
+  id: string; title: string; createdAt: string; projectId: string;
+  titleSource?: TitleSource;
+}
 export interface Message { id: string; conversationId: string; role: 'user' | 'assistant' | 'tool'; text: string; status: 'running' | 'completed' | 'failed' | 'cancelled'; createdAt: string }
 export interface Asset {
-  id: string; name: string; description: string; tags: string[]; collections: string[];
+  id: string; projectId: string; name: string; description: string; tags: string[]; collections: string[];
   review: Review; feedback: string; source: 'generated' | 'imported' | 'edited'; kind: AssetKind;
   format: 'mp3' | 'wav'; hash: string; bytes: number; duration: number | null;
   prompt: string; provider: string | null; model: string | null; requestId: string | null;
@@ -49,7 +55,8 @@ export type MusicProviderKind = 'elevenlabs-music' | 'gemini-lyria';
 export interface MusicProviderEntry { id: string; label: string; kind: MusicProviderKind; model: string; ready: boolean }
 export interface SettingsStatus { codexReady: boolean; elevenLabsReady: boolean; secureStorageAvailable: boolean; loginPending: boolean; model: string; error: string | null; chatModels: ChatModelOption[]; activeChat: ActiveChatSelection; providers: ChatProviderEntry[]; musicProviders: MusicProviderEntry[]; activeMusicId: string | null }
 export interface ChatContext { model: string; tokens: number; limit: number | null; includesHiddenReasoning: boolean }
-export interface Snapshot { conversations: Conversation[]; messages: Message[]; assets: Asset[]; jobs: Job[]; playground: Record<string, string[]>; settings: SettingsStatus; activeTurns: string[] }
+/** Every list below is scoped to `activeProjectId`; other projects' rows never reach the renderer. */
+export interface Snapshot { projects: Project[]; activeProjectId: string; conversations: Conversation[]; messages: Message[]; assets: Asset[]; jobs: Job[]; playground: Record<string, string[]>; settings: SettingsStatus; activeTurns: string[] }
 export interface AssetPatch { name?: string; description?: string; tags?: string[]; collections?: string[]; review?: Review; feedback?: string }
 export interface ModelCapabilityResult {
   perEffort: Record<string, 'pass' | 'fail'>; failedEfforts: string[];
@@ -60,6 +67,10 @@ export interface SfxApi {
   chatContext(conversationId: string, draft: string): Promise<ChatContext>;
   openLogs(): Promise<void>;
   createConversation(): Promise<string>;
+  renameConversation(conversationId: string, title: string): Promise<void>;
+  createProject(name: string): Promise<Project>;
+  renameProject(projectId: string, name: string): Promise<Project>;
+  setActiveProject(projectId: string): Promise<void>;
   sendMessage(conversationId: string, text: string): Promise<void>;
   cancelTurn(conversationId: string): Promise<void>;
   generate(conversationId: string, input: GenerationInput): Promise<void>;

@@ -53,7 +53,7 @@ is recorded in [verification](docs/verification.md).
 | [package.json](package.json), [package-lock.json](package-lock.json) | Pinned runtime/development dependencies and build/package commands. |
 | [tsconfig.json](tsconfig.json) | Strict TypeScript configuration. |
 | [electron.vite.config.ts](electron.vite.config.ts), [electron-builder.yml](electron-builder.yml) | Desktop builds and unsigned Windows NSIS packaging. |
-| [src/shared/types.ts](src/shared/types.ts) | Renderer/preload/application operation and snapshot contracts. |
+| [src/shared/types.ts](src/shared/types.ts) | Renderer/preload/application operation, project, and snapshot contracts. |
 | [src/shared/chat-models.ts](src/shared/chat-models.ts) | Configured model IDs, Codex effort lists, default context sizes, and legacy/default resolution. |
 | [src/shared/music-models.ts](src/shared/music-models.ts) | Music provider presets, reviewed model catalogs, and app-side duration bounds. |
 | [src/main/chat-registry.ts](src/main/chat-registry.ts) | Generic provider/model registry, combined selection, test-gated saves, and active chat resolution. |
@@ -65,14 +65,14 @@ is recorded in [verification](docs/verification.md).
 | [src/main/providers/generic/anthropic.ts](src/main/providers/generic/anthropic.ts) | Anthropic Messages transport with tool_use/tool_result translation. |
 | [src/main/providers/generic/registry.ts](src/main/providers/generic/registry.ts) | Provider/model validation, base-URL normalization, and effort parsing. |
 | [src/main/providers/generic/capabilities.ts](src/main/providers/generic/capabilities.ts) | Capability probes, max-tokens discovery, vision/audio flags, and tool filtering. |
-| [src/main/store.ts](src/main/store.ts) | SQLite schema migration, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
+| [src/main/store.ts](src/main/store.ts) | SQLite schema v2 migration, projects, per-project scoping, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
 | [src/main/media.ts](src/main/media.ts) | Original storage/import/export, integrity checks, serialized editing/analysis, and bounded decoded cache. |
 | [src/main/audio.ts](src/main/audio.ts) | Bounded MP3/WAV decode, timestamped amplitude windows, exact sample-frame trims, fades, and float32 WAV rendering. |
 | [src/main/validation.ts](src/main/validation.ts) | Runtime validation of privileged operations and generation inputs. |
-| [src/main/service.ts](src/main/service.ts) | Shared library operations, sequential generation jobs, chat turns, and tool execution. |
+| [src/main/service.ts](src/main/service.ts) | Shared library operations, project-scoped snapshots, sequential generation jobs, chat turns, and tool execution. |
 | [src/main/diagnostics.ts](src/main/diagnostics.ts) | Rotating local JSONL records, diagnostic references, and credential redaction. |
 | [src/main/providers/errors.ts](src/main/providers/errors.ts) | Bounded provider error parsing, request IDs, readable failures, and safe diagnostic fields. |
-| [src/main/assistant.ts](src/main/assistant.ts) | Runtime sound-design, ElevenLabs SFX, and per-provider music prompting/revision instructions, plus assistant tool definitions. |
+| [src/main/assistant.ts](src/main/assistant.ts) | Runtime sound-design, ElevenLabs SFX, and per-provider music prompting/revision instructions, session naming guidance, plus assistant tool definitions. |
 | [src/main/index.ts](src/main/index.ts) | Electron lifecycle, validated IPC, media protocol, provider wiring, and native dialogs. |
 | [src/preload/index.ts](src/preload/index.ts) | Isolated renderer bridge with fixed operations and change notifications. |
 | [src/main/providers/auth.ts](src/main/providers/auth.ts) | Codex browser OAuth/PKCE, refresh serialization, and login lifecycle. |
@@ -82,7 +82,7 @@ is recorded in [verification](docs/verification.md).
 | [src/main/providers/gemini-music.ts](src/main/providers/gemini-music.ts) | Lyria prompt composition, Interactions requests with `store:false`, step/lyrics parsing, and fixed-length guards. |
 | [src/main/providers/secrets.ts](src/main/providers/secrets.ts) | Atomic encrypted credential storage using injected OS protection and store-safe secret names. |
 | [src/renderer/index.html](src/renderer/index.html), [src/renderer/main.tsx](src/renderer/main.tsx) | Renderer entrypoint and content security policy. |
-| [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Chat, effects and music libraries, Playground generation, audition, inspector, settings, and styling. |
+| [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Project switcher, session renaming, chat, effects and music libraries, Playground generation, audition, inspector, settings, and styling. |
 | [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Waveform trim selection, fine-window zoom, fades, exact rendered preview, and derived-asset saving. |
 | [src/renderer/ChatContextMeter.tsx](src/renderer/ChatContextMeter.tsx) | Throttled composer context indicator, threshold styling, and estimate details. |
 | [.github/workflows/windows.yml](.github/workflows/windows.yml) | Credential-free Windows typecheck and installer artifact build. |

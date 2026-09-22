@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { Asset, AssetKind, AssetPatch, ChatModelOption, GenerationInput, Job, MusicGenerationInput, MusicProviderKind, Review, Snapshot } from '../shared/types'
+import type { Asset, AssetKind, AssetPatch, ChatModelOption, GenerationInput, Job, MusicGenerationInput, MusicProviderKind, Project, Review, Snapshot } from '../shared/types'
 import type { GenericProviderKind, ModelCapabilityResult, TrimInput } from '../shared/types'
 import { MUSIC_DURATION_MAX_MS, MUSIC_DURATION_MIN_MS, MUSIC_MODELS, MUSIC_PROVIDER_PRESETS } from '../shared/music-models'
 import TrimEditor from './TrimEditor'
@@ -8,7 +8,7 @@ import ChatContextMeter from './ChatContextMeter'
 type Tab = AssetKind | 'playground'
 
 const emptySnapshot: Snapshot = {
-  conversations: [], messages: [], assets: [], jobs: [], playground: {},
+  projects: [], activeProjectId: '', conversations: [], messages: [], assets: [], jobs: [], playground: {},
   settings: { codexReady: false, elevenLabsReady: false, secureStorageAvailable: false, loginPending: false, model: 'backend default', error: null, chatModels: [], activeChat: { modelId: 'codex:gpt-5.6-sol', effort: 'medium' }, providers: [], musicProviders: [], activeMusicId: null },
   activeTurns: [],
 }
@@ -123,8 +123,48 @@ function AudioCard({ asset, onSelect, selected, onPlay, playerKey, isPlaying, co
   </article>
 }
 
-function ChatSidebar({ snapshot, selectedId, onSelect, onNew, onSend, onStop, onSettings }: { snapshot: Snapshot; selectedId: string | null; onSelect: (id: string) => void; onNew: () => void; onSend: (text: string) => Promise<boolean>; onStop: () => void; onSettings: () => void }) {
+function TitleInput({ value, className, ariaLabel, onCommit, onCancel }: { value: string; className: string; ariaLabel: string; onCommit: (value: string) => void; onCancel: () => void }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select() }, [])
+  const commit = (next: string) => { const trimmed = next.trim(); if (trimmed && trimmed !== value) onCommit(trimmed); else onCancel() }
+  return <input ref={inputRef} className={className} defaultValue={value} aria-label={ariaLabel} maxLength={70}
+    onKeyDown={event => { if (event.key === 'Enter') commit(event.currentTarget.value); if (event.key === 'Escape') onCancel() }}
+    onBlur={event => commit(event.currentTarget.value)} onClick={event => event.stopPropagation()} />
+}
+
+function EditableTitle({ value, onCommit }: { value: string; onCommit: (value: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  if (editing) return <TitleInput value={value} className="breadcrumb-title breadcrumb-title-edit" ariaLabel="Session title" onCommit={title => { setEditing(false); onCommit(title) }} onCancel={() => setEditing(false)} />
+  return <button type="button" className="breadcrumb-title" title="Rename session" onClick={() => setEditing(true)}>{value}</button>
+}
+
+function ProjectDialog({ mode, project, onClose, onCreate, onRename }: { mode: 'create' | 'rename'; project: Project | null; onClose: () => void; onCreate: (name: string) => void; onRename: (id: string, name: string) => void }) {
+  const [name, setName] = useState(mode === 'rename' ? project?.name ?? '' : '')
+  const submit = () => { const trimmed = name.trim(); if (!trimmed) return; if (mode === 'create') onCreate(trimmed); else if (project) onRename(project.id, trimmed) }
+  return <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
+    <section className="settings-dialog project-dialog" role="dialog" aria-modal="true" aria-label={mode === 'create' ? 'New project' : 'Rename project'}>
+      <div className="drawer-header"><div><p className="eyebrow">Project</p><h2>{mode === 'create' ? 'New project' : 'Rename project'}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close project dialog"><Icon name="close" /></button></div>
+      <div className="project-dialog-body">
+        <label>Project name<input autoFocus value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') submit() }} maxLength={60} placeholder="Client work" aria-label="Project name" /></label>
+        <div className="model-row"><button className="primary-button" onClick={submit} disabled={!name.trim()}>{mode === 'create' ? 'Create project' : 'Save name'}</button><button className="secondary-button" onClick={onClose}>Cancel</button></div>
+      </div>
+    </section>
+  </div>
+}
+
+function ProjectSwitcher({ snapshot, onSwitch, onCreate, onRename }: { snapshot: Snapshot; onSwitch: (id: string) => void; onCreate: () => void; onRename: () => void }) {
+  return <span className="project-switcher">
+    <select aria-label="Project" value={snapshot.activeProjectId} onChange={event => onSwitch(event.target.value)}>
+      {snapshot.projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}
+    </select>
+    <button className="icon-button" onClick={onCreate} aria-label="New project" title="New project"><Icon name="plus" /></button>
+    <button className="icon-button" onClick={onRename} aria-label="Rename project" title="Rename project"><Icon name="edit" /></button>
+  </span>
+}
+
+function ChatSidebar({ snapshot, projectName, selectedId, onSelect, onNew, onRename, onSend, onStop, onSettings }: { snapshot: Snapshot; projectName: string; selectedId: string | null; onSelect: (id: string) => void; onNew: () => void; onRename: (id: string, title: string) => void; onSend: (text: string) => Promise<boolean>; onStop: () => void; onSettings: () => void }) {
   const [text, setText] = useState('')
+  const [renamingId, setRenamingId] = useState<string | null>(null)
   const historyRef = useRef<HTMLDivElement>(null)
   const followOutput = useRef(true)
   const previousConversation = useRef(selectedId)
@@ -147,9 +187,9 @@ function ChatSidebar({ snapshot, selectedId, onSelect, onNew, onSend, onStop, on
   }
   return <aside className="chat-sidebar">
     <div className="brand-row"><div className="brand-mark"><Icon name="spark" /></div><div><strong>SFXCHAT</strong><span>sound workbench</span></div><span className="live-indicator" title="Local workbench ready" /></div>
-    <div className="sidebar-heading"><span>Conversations</span><button className="icon-button" onClick={onNew} aria-label="New conversation"><Icon name="plus" /></button></div>
+    <div className="sidebar-heading"><span>Conversations <small>{projectName}</small></span><button className="icon-button" onClick={onNew} aria-label="New conversation"><Icon name="plus" /></button></div>
     <div className="conversation-list">
-      {snapshot.conversations.length === 0 ? <div className="empty-conversations"><div className="empty-icon"><Icon name="chat" /></div><p>Your sound design sessions will appear here.</p><button className="text-button" onClick={onNew}>Start a conversation <Icon name="arrow" /></button></div> : snapshot.conversations.map(conversation => <button key={conversation.id} className={`conversation-row ${conversation.id === selectedId ? 'conversation-active' : ''}`} onClick={() => onSelect(conversation.id)}><span className="conversation-dot" /><span className="conversation-copy"><strong>{conversation.title || 'Untitled conversation'}</strong><small>{timeLabel(conversation.createdAt)}</small></span><span className="conversation-chevron">›</span></button>)}
+      {snapshot.conversations.length === 0 ? <div className="empty-conversations"><div className="empty-icon"><Icon name="chat" /></div><p>Your sound design sessions will appear here.</p><button className="text-button" onClick={onNew}>Start a conversation <Icon name="arrow" /></button></div> : snapshot.conversations.map(conversation => renamingId === conversation.id ? <div key={conversation.id} className="conversation-row conversation-renaming"><span className="conversation-dot" /><span className="conversation-copy"><TitleInput value={conversation.title} className="conversation-title-input" ariaLabel="Session title" onCommit={title => { setRenamingId(null); onRename(conversation.id, title) }} onCancel={() => setRenamingId(null)} /></span></div> : <button key={conversation.id} onDoubleClick={() => setRenamingId(conversation.id)} title="Double-click to rename" className={`conversation-row ${conversation.id === selectedId ? 'conversation-active' : ''}`} onClick={() => onSelect(conversation.id)}><span className="conversation-dot" /><span className="conversation-copy"><strong>{conversation.title || 'Untitled conversation'}</strong><small>{timeLabel(conversation.createdAt)}</small></span><span className="conversation-chevron">›</span></button>)}
     </div>
     <div className="sidebar-chat">
       {selectedId ? <>
@@ -384,13 +424,15 @@ export default function App() {
   const [playingKey, setPlayingKey] = useState<string | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [projectDialog, setProjectDialog] = useState<'create' | 'rename' | null>(null)
   const [sidebarWidth, setSidebarWidth] = useState(34)
   const refreshSerial = useRef(0)
+  const lastProject = useRef<string | null>(null)
   const resizingRef = useRef(false)
 
   const refresh = useCallback(async () => {
     const serial = ++refreshSerial.current
-    try { const next = await api()?.snapshot(); if (next && serial === refreshSerial.current) { setSnapshot(next); setConversationId(current => current && next.conversations.some(item => item.id === current) ? current : (next.conversations[0]?.id || null)); setSelectedAssetId(current => current && next.assets.some(item => item.id === current) ? current : null) } } catch (error) { setUiError(error instanceof Error ? error.message : 'Unable to refresh the workbench.') }
+    try { const next = await api()?.snapshot(); if (next && serial === refreshSerial.current) { const projectChanged = lastProject.current !== null && lastProject.current !== next.activeProjectId; lastProject.current = next.activeProjectId; setSnapshot(next); if (projectChanged) { setPlayingKey(null); setQuery('') }; setConversationId(current => current && next.conversations.some(item => item.id === current) ? current : (next.conversations[0]?.id || null)); setSelectedAssetId(current => current && next.assets.some(item => item.id === current) ? current : null) } } catch (error) { setUiError(error instanceof Error ? error.message : 'Unable to refresh the workbench.') }
   }, [])
   useEffect(() => { void refresh(); const unsubscribe = api()?.onChanged?.(() => void refresh()); return () => unsubscribe?.() }, [refresh])
   useEffect(() => { const handle = (event: MouseEvent) => { if (!resizingRef.current || event.buttons !== 1) return; const next = Math.min(48, Math.max(24, (event.clientX / window.innerWidth) * 100)); setSidebarWidth(next) }; const stop = () => { resizingRef.current = false; document.body.classList.remove('resizing') }; const start = () => { resizingRef.current = true; document.body.classList.add('resizing') }; const handleEl = document.getElementById('resize-handle'); handleEl?.addEventListener('mousedown', start); window.addEventListener('mousemove', handle); window.addEventListener('mouseup', stop); return () => { handleEl?.removeEventListener('mousedown', start); window.removeEventListener('mousemove', handle); window.removeEventListener('mouseup', stop) } }, [])
@@ -400,6 +442,11 @@ export default function App() {
   const effectCount = snapshot.assets.filter(asset => (asset.kind ?? 'effect') === 'effect').length
   const musicCount = snapshot.assets.length - effectCount
   const call = async (action: () => Promise<unknown>): Promise<boolean> => { try { await action(); void refresh(); return true } catch (error) { setUiError(error instanceof Error ? error.message : 'Operation failed.'); return false } }
+  const conversation = snapshot.conversations.find(item => item.id === conversationId) ?? null
+  const activeProject = snapshot.projects.find(project => project.id === snapshot.activeProjectId) ?? null
+  const switchProject = (id: string) => { if (id !== snapshot.activeProjectId) void call(() => api().setActiveProject(id)) }
+  const renameSession = (id: string, title: string) => void call(() => api().renameConversation(id, title))
+  const projectAction = async (action: () => Promise<unknown>) => { if (await call(action)) setProjectDialog(null) }
   const createConversation = async () => { try { const id = await api()?.createConversation(); if (id) { await refresh(); setConversationId(id) } } catch (error) { setUiError(error instanceof Error ? error.message : 'Unable to create a conversation.') } }
   const selectAsset = (id: string) => { setSelectedAssetId(id) }
   const play = useCallback((key: string, playing: boolean) => setPlayingKey(current => playing ? key : current === key ? null : current), [])
@@ -423,5 +470,5 @@ export default function App() {
       throw error
     }
   }
-  return <div className="app-shell" style={{ '--sidebar-width': `${sidebarWidth}%` } as React.CSSProperties}><ChatSidebar snapshot={snapshot} selectedId={conversationId} onSelect={setConversationId} onNew={createConversation} onSend={sendMessage} onStop={() => { if (conversationId) void call(() => api().cancelTurn(conversationId)) }} onSettings={() => setSettingsOpen(true)} />{uiError && <div className="error-banner" role="alert"><Icon name="info" /><span>{uiError}</span><button className="icon-button" onClick={() => setUiError(null)} aria-label="Dismiss error"><Icon name="close" /></button></div>}<div className="resize-handle" id="resize-handle" role="separator" aria-label="Resize chat sidebar" tabIndex={0} onKeyDown={event => { if (event.key === 'ArrowLeft') setSidebarWidth(value => Math.max(24, value - 2)); if (event.key === 'ArrowRight') setSidebarWidth(value => Math.min(48, value + 2)) }}><span /></div><main className="main-workspace"><header className="topbar"><div className="breadcrumb"><span className="breadcrumb-muted">Workspace</span><Icon name="arrow" /><strong>{snapshot.conversations.find(item => item.id === conversationId)?.title || 'New session'}</strong></div><div className="topbar-actions"><TopbarChatSelector snapshot={snapshot} onChange={(modelId, effort) => { void call(() => api().setActiveChat({ modelId, effort })) }} /><span className="host-status"><i /> {snapshot.settings.codexReady ? 'Connected' : 'Local only'}</span><button className="icon-button" onClick={() => setSettingsOpen(true)} aria-label="Open settings"><Icon name="settings" /></button></div></header><nav className="workspace-tabs" aria-label="Workspace view"><button className={tab === 'effect' ? 'tab-active' : ''} onClick={() => setTab('effect')}><Icon name="library" /> Effects Library <span>{effectCount}</span></button><button className={tab === 'music' ? 'tab-active' : ''} onClick={() => setTab('music')}><Icon name="waveform" /> Music Library <span>{musicCount}</span></button><button className={tab === 'playground' ? 'tab-active' : ''} onClick={() => setTab('playground')}><Icon name="play" /> Playground <span>{playgroundIds.length}</span></button></nav>{tab === 'playground' ? <Playground assets={snapshot.assets} jobs={snapshot.jobs} conversationId={conversationId} selectedId={selectedAssetId} playgroundIds={playgroundIds} musicProviders={snapshot.settings.musicProviders} activeMusicId={snapshot.settings.activeMusicId} onSelect={selectAsset} onPlay={play} playingId={playingId} onGenerate={generateSound} onGenerateMusic={generateMusic} onCancelJob={id => void call(() => api().cancelJob(id))} onRemove={removeAsset} onMove={moveAsset} onOpenInspector={() => setInspectorOpen(true)} /> : <Library kind={tab} assets={snapshot.assets} selectedId={selectedAssetId} query={query} setQuery={setQuery} onSelect={selectAsset} onImport={() => conversationId && void call(() => api().importAudio(conversationId, tab))} onPlay={play} playingId={playingId} onOpenInspector={() => setInspectorOpen(true)} onAddToPlayground={() => { if (selectedAssetId) updatePlayground([...playgroundIds, selectedAssetId]) }} inPlayground={selectedAssetId ? playgroundIds.includes(selectedAssetId) : false} />}</main>{inspectorOpen && <Inspector asset={selectedAsset} onClose={() => setInspectorOpen(false)} onSave={async patch => { if (selectedAsset && await call(() => api().updateAsset(selectedAsset.id, patch, conversationId || undefined))) setInspectorOpen(false) }} onExport={() => selectedAsset && void call(() => api().exportAsset(selectedAsset.id))} onPlay={play} isPlaying={playingKey === selectedAssetId} playingKey={playingKey} onRegenerate={input => { if (conversationId) void call(() => input.kind === 'music' ? api().generateMusic(conversationId, input) : api().generate(conversationId, input)) }} onTrim={trimAsset} />}{settingsOpen && <SettingsDialog snapshot={snapshot} onClose={() => setSettingsOpen(false)} onLogin={() => void call(() => api().startLogin())} onCancelLogin={() => void call(() => api().cancelLogin())} onLogout={() => void call(() => api().logout())} onSaveKey={key => void call(() => api().saveElevenLabsKey(key))} onOpenLogs={() => void call(() => api().openLogs())} onSaveMusicProvider={input => call(() => api().saveMusicProvider(input))} onDeleteMusicProvider={id => void call(() => api().deleteMusicProvider(id))} onSetActiveMusic={id => void call(() => api().setActiveMusic(id))} />}</div>
+  return <div className="app-shell" style={{ '--sidebar-width': `${sidebarWidth}%` } as React.CSSProperties}><ChatSidebar snapshot={snapshot} projectName={activeProject?.name ?? 'Project'} selectedId={conversationId} onSelect={setConversationId} onNew={createConversation} onRename={renameSession} onSend={sendMessage} onStop={() => { if (conversationId) void call(() => api().cancelTurn(conversationId)) }} onSettings={() => setSettingsOpen(true)} />{uiError && <div className="error-banner" role="alert"><Icon name="info" /><span>{uiError}</span><button className="icon-button" onClick={() => setUiError(null)} aria-label="Dismiss error"><Icon name="close" /></button></div>}<div className="resize-handle" id="resize-handle" role="separator" aria-label="Resize chat sidebar" tabIndex={0} onKeyDown={event => { if (event.key === 'ArrowLeft') setSidebarWidth(value => Math.max(24, value - 2)); if (event.key === 'ArrowRight') setSidebarWidth(value => Math.min(48, value + 2)) }}><span /></div><main className="main-workspace"><header className="topbar"><div className="breadcrumb"><ProjectSwitcher snapshot={snapshot} onSwitch={switchProject} onCreate={() => setProjectDialog('create')} onRename={() => setProjectDialog('rename')} /><span className="breadcrumb-muted">Workspace</span><Icon name="arrow" />{conversation ? <EditableTitle value={conversation.title} onCommit={title => void renameSession(conversation.id, title)} /> : <strong>New session</strong>}</div><div className="topbar-actions"><TopbarChatSelector snapshot={snapshot} onChange={(modelId, effort) => { void call(() => api().setActiveChat({ modelId, effort })) }} /><span className="host-status"><i /> {snapshot.settings.codexReady ? 'Connected' : 'Local only'}</span><button className="icon-button" onClick={() => setSettingsOpen(true)} aria-label="Open settings"><Icon name="settings" /></button></div></header><nav className="workspace-tabs" aria-label="Workspace view"><button className={tab === 'effect' ? 'tab-active' : ''} onClick={() => setTab('effect')}><Icon name="library" /> Effects Library <span>{effectCount}</span></button><button className={tab === 'music' ? 'tab-active' : ''} onClick={() => setTab('music')}><Icon name="waveform" /> Music Library <span>{musicCount}</span></button><button className={tab === 'playground' ? 'tab-active' : ''} onClick={() => setTab('playground')}><Icon name="play" /> Playground <span>{playgroundIds.length}</span></button></nav>{tab === 'playground' ? <Playground assets={snapshot.assets} jobs={snapshot.jobs} conversationId={conversationId} selectedId={selectedAssetId} playgroundIds={playgroundIds} musicProviders={snapshot.settings.musicProviders} activeMusicId={snapshot.settings.activeMusicId} onSelect={selectAsset} onPlay={play} playingId={playingId} onGenerate={generateSound} onGenerateMusic={generateMusic} onCancelJob={id => void call(() => api().cancelJob(id))} onRemove={removeAsset} onMove={moveAsset} onOpenInspector={() => setInspectorOpen(true)} /> : <Library kind={tab} assets={snapshot.assets} selectedId={selectedAssetId} query={query} setQuery={setQuery} onSelect={selectAsset} onImport={() => conversationId && void call(() => api().importAudio(conversationId, tab))} onPlay={play} playingId={playingId} onOpenInspector={() => setInspectorOpen(true)} onAddToPlayground={() => { if (selectedAssetId) updatePlayground([...playgroundIds, selectedAssetId]) }} inPlayground={selectedAssetId ? playgroundIds.includes(selectedAssetId) : false} />}</main>{inspectorOpen && <Inspector asset={selectedAsset} onClose={() => setInspectorOpen(false)} onSave={async patch => { if (selectedAsset && await call(() => api().updateAsset(selectedAsset.id, patch, conversationId || undefined))) setInspectorOpen(false) }} onExport={() => selectedAsset && void call(() => api().exportAsset(selectedAsset.id))} onPlay={play} isPlaying={playingKey === selectedAssetId} playingKey={playingKey} onRegenerate={input => { if (conversationId) void call(() => input.kind === 'music' ? api().generateMusic(conversationId, input) : api().generate(conversationId, input)) }} onTrim={trimAsset} />}{settingsOpen && <SettingsDialog snapshot={snapshot} onClose={() => setSettingsOpen(false)} onLogin={() => void call(() => api().startLogin())} onCancelLogin={() => void call(() => api().cancelLogin())} onLogout={() => void call(() => api().logout())} onSaveKey={key => void call(() => api().saveElevenLabsKey(key))} onOpenLogs={() => void call(() => api().openLogs())} onSaveMusicProvider={input => call(() => api().saveMusicProvider(input))} onDeleteMusicProvider={id => void call(() => api().deleteMusicProvider(id))} onSetActiveMusic={id => void call(() => api().setActiveMusic(id))} />}{projectDialog && <ProjectDialog mode={projectDialog} project={activeProject} onClose={() => setProjectDialog(null)} onCreate={name => void projectAction(() => api().createProject(name))} onRename={(id, name) => void projectAction(() => api().renameProject(id, name))} />}</div>
 }

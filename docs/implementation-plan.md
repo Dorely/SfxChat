@@ -18,7 +18,7 @@ when intent changes. Implementation evidence belongs in README and architecture.
    type checking, production builds, and live/manual runs. Real login/generation/listener
    checks are recorded separately and must not be inferred from compilation.
 
-One library per Windows user; Playground membership/order belongs to a conversation.
+Libraries and conversations are scoped to a project; Playground membership/order belongs to a conversation.
 Default chat model follows Lorekeeper (`gpt-5.6-sol`), configurable in settings.
 Default SFX model is `eleven_text_to_sound_v2`, MP3 output, one candidate unless
 otherwise requested. No approval dialogs, spending caps, or artificial count limits.
@@ -37,6 +37,17 @@ assistant prompt per active provider and recorded in
 streaming, stem separation, image-to-music input, and provider-side metadata (word
 timestamps, waveform visuals) remain deferred, as do new assistant tools for inspecting
 or modifying music files.
+
+## Projects and session titles (added after v0.1)
+
+Accepted 2026-09-22. Projects sequester work: each project owns its conversations, messages,
+jobs, Playground ordering, and its effects and music libraries, switched by a dropdown in the
+top bar next to the Workspace label. Existing libraries migrate to one Default project
+(schema v2). Provider configuration and credentials stay app-level, and originals/ stays a
+flat asset-id store. Session and project titles are editable in place; a rename_session tool
+plus explicit prompt guidance keep each session labeled as its scope evolves. Deferred:
+project deletion, cross-project copy or move of assets and conversations, per-project
+providers and keys, and assistant-side project creation or switching.
 
 Use focused reviewed commits and CI that runs the type check and package build without
 live credentials. Produce an unsigned installer locally. Preserve the ElevenLabs vendored

@@ -14,6 +14,11 @@ names, descriptions, tags, collections, and review status. WAV/MP3 imports and e
 preserve original bytes. Search includes original prompts and feedback. Local library
 use needs no provider login.
 
+Work is organized into projects. The project dropdown in the top bar switches between them,
+and each project holds its own conversations plus its own effects and music libraries,
+while provider configuration and credentials stay app-level. Session titles are editable in
+place, and the assistant names each session as the scope of the work becomes clear.
+
 The Playground generates either kind. Sound effects use the ElevenLabs key from
 Settings; music uses the active **music provider**, which is configured independently of
 chat providers and of the effects key — choosing Gemini for chat does not configure
@@ -129,7 +134,7 @@ This version does not send audio to a listening model or claim aesthetic approva
 
 The per-user `%APPDATA%/SfxChat` directory contains `library.sqlite`, `originals/`, and
 encrypted `secrets/`. Do not publish this directory. Uninstalling does not
-intentionally delete library data. See verification for the tested installed path.
+intentionally delete library data. See verification for the tested installed path. What the app lists is scoped to the active project; switching projects changes the listing, not where files live.
 
 Renderer reloads leave jobs and turns running. Closing the app stops active work.
 On restart, undispatched jobs can run, while interrupted dispatched requests become

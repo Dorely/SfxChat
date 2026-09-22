@@ -27,6 +27,15 @@ Generated sound effects and music should become first-class library assets, not 
 
 Users should be able to search by traits, tags, descriptions, and initial generation prompts; inspect source and revision history; and manually correct the assistant's organization. Assistant actions should be visible and understandable. Organizing a sound must preserve its original generation record and file identity.
 
+## Projects
+
+Work is organized into projects. A project holds its own conversations and its own effects
+and music libraries, so unrelated briefs, assets, and comparisons stay separate, and the top
+bar switches between them. Provider configuration and credentials stay app-level because
+they belong to the account rather than to the work. Sessions stay labeled: the assistant
+names a session as soon as the goal is clear and renames it when the subject materially
+changes, and the user can rename any session or project in place.
+
 ## Product character
 
 SfxChat is a focused creative tool for building, testing, and managing audio. It should make iteration approachable while retaining enough provenance and control for serious production work. Library management is a core assistant responsibility.

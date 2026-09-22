@@ -39,8 +39,11 @@ export const musicGenerationSchema = z.object({ kind: z.literal('music').optiona
 /** Agent-facing tool schema: the kind is implied by the tool, so it is not exposed to the model. */
 export const musicToolSchema = z.object(musicInputFields).strict();
 export const patchSchema = z.object({ name: z.string().trim().min(1).optional(), description: z.string().optional(), tags: z.array(z.string().trim().min(1)).optional(), collections: z.array(z.string().trim().min(1)).optional(), review: z.enum(['unreviewed','accepted','rejected']).optional(), feedback: z.string().optional() }).strict();
+export const projectNameSchema = z.string().trim().min(1).max(60);
+export const titleSchema = z.string().trim().min(1).max(70);
 export const commandSchemas = {
-  snapshot: z.tuple([]), createConversation: z.tuple([]),
+  snapshot: z.tuple([]), createConversation: z.tuple([]), renameConversation: z.tuple([idSchema, titleSchema]),
+  createProject: z.tuple([projectNameSchema]), renameProject: z.tuple([idSchema, projectNameSchema]), setActiveProject: z.tuple([idSchema]),
   chatContext: z.tuple([idSchema, z.string()]),
   openLogs: z.tuple([]),
   sendMessage: z.tuple([idSchema, z.string().trim().min(1)]), cancelTurn: z.tuple([idSchema]),

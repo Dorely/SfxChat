@@ -105,3 +105,18 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .provider-choice strong { overflow: hidden; color: var(--cream); text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .provider-choice small { color: var(--quiet); font: 9px 'DM Mono', monospace; }
 .lyrics-value { white-space: pre-wrap; }
+/* Projects and session titles */
+.project-switcher { display: inline-flex; align-items: center; gap: 4px; }
+.project-switcher select { max-width: 170px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--cream); background: #1b1e1c; font-size: 10px; }
+.project-switcher .icon-button { width: 26px; height: 26px; font-size: 14px; }
+.breadcrumb-title { max-width: 40ch; padding: 2px 6px; overflow: hidden; border: 1px solid transparent; border-radius: 6px; color: var(--cream); background: transparent; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; }
+.breadcrumb-title:hover { border-color: var(--line); background: #202420; }
+.breadcrumb-title-edit { width: 40ch; border-color: var(--lime-dark); background: #1b1e1c; }
+.conversation-renaming { cursor: default; }
+.conversation-renaming:hover { background: transparent; }
+.conversation-title-input { width: 100%; padding: 4px 6px; border: 1px solid var(--lime-dark); border-radius: 5px; outline: 0; color: var(--cream); background: #1b1e1c; font-size: 12px; font-weight: 600; }
+.sidebar-heading small { color: var(--quiet); text-transform: none; letter-spacing: 0; font-size: 9px; margin-left: 6px; }
+.project-dialog { width: min(420px, 90vw); }
+.project-dialog-body { display: grid; gap: 14px; padding: 5px 25px 25px; }
+.project-dialog-body label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 10px; }
+.project-dialog-body input { width: 100%; padding: 9px 10px; border: 1px solid #3c453c; border-radius: 5px; outline: 0; color: var(--cream); background: #20241f; font-size: 11px; }

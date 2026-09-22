@@ -107,13 +107,13 @@ else {
       safeError
     };
     service = new WorkbenchService(store, media, livePorts, changed, diagnostics);
-    store.recover(); if (!store.conversations().length) store.createConversation();
+    store.recover(); store.ensureConversation(store.activeProjectId());
 
     protocol.handle('sfx-media', async request => {
       try {
         const url = new URL(request.url);
         if (url.hostname !== 'asset' || request.method !== 'GET') return new Response(null, { status: 404 });
-        const id = idSchema.parse(url.pathname.slice(1)); const asset = store.asset(id);
+        const id = idSchema.parse(url.pathname.slice(1)); const asset = store.asset(id, store.activeProjectId());
         const bytes = await readFile(media.path(asset));
         const headers: Record<string, string> = { 'content-type': asset.format === 'mp3' ? 'audio/mpeg' : 'audio/wav', 'accept-ranges': 'bytes', 'access-control-allow-origin': '*', 'cache-control': 'private, max-age=31536000, immutable' };
         const range = request.headers.get('range');
@@ -131,22 +131,26 @@ else {
 
     const handlers: Record<string, (...args: any[]) => unknown> = {
       snapshot: () => service!.snapshot(), createConversation: () => store.createConversation(),
+      renameConversation: (id, title) => { store.renameConversation(id, title, 'user'); },
+      createProject: name => { const project = store.createProject(name); store.setActiveProject(project.id); store.ensureConversation(project.id); return project; },
+      renameProject: (id, name) => store.renameProject(id, name),
+      setActiveProject: id => { store.setActiveProject(id); store.ensureConversation(id); },
       chatContext: (id, draft) => service!.chatContext(id, draft),
       openLogs: async () => { const directory = join(root, 'logs'); await mkdir(directory, { recursive: true }); const error = await shell.openPath(directory); if (error) throw new Error(error); },
       sendMessage: (id, text) => service!.sendMessage(id, text), cancelTurn: id => service!.cancelTurn(id),
       generate: (id, input) => service!.generate(id, input).then(() => undefined), cancelJob: id => service!.cancelJob(id),
       generateMusic: (id, input) => service!.generateMusic(id, input).then(() => undefined),
       updateAsset: (id, patch, conversationId) => service!.updateAsset(id, patch, conversationId),
-      analyzeAudio: (id, input) => service!.analyzeAudio(id, input), trimAsset: (conversationId, id, input) => service!.trimAsset(conversationId, id, input),
-      previewTrim: (id, input) => service!.previewTrim(id, input),
+      analyzeAudio: (id, input) => service!.analyzeAudio(id, input, store.activeProjectId()), trimAsset: (conversationId, id, input) => service!.trimAsset(conversationId, id, input),
+      previewTrim: (id, input) => service!.previewTrim(id, input, store.activeProjectId()),
       setPlayground: (id, ids) => { store.setPlayground(id, ids); store.addMessage(id, 'tool', 'Updated the comparison playground.'); },
-      searchAssets: query => store.search(query),
+      searchAssets: query => store.search(query, store.activeProjectId()),
       importAudio: async (id, kind) => {
         const result = await dialog.showOpenDialog(window!, { title: 'Import audio', filters: [{ name: 'Audio', extensions: ['wav', 'mp3'] }], properties: ['openFile', 'multiSelections'] });
         if (!result.canceled) await service!.importFiles(id, result.filePaths, kind ?? 'effect');
       },
       exportAsset: async id => {
-        const asset = store.asset(id);
+        const asset = store.asset(id, store.activeProjectId());
         const result = await dialog.showSaveDialog(window!, { title: 'Export original audio', defaultPath: `${asset.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')}.${asset.format}`, filters: [{ name: 'Original audio', extensions: [asset.format] }] });
         if (!result.canceled && result.filePath) await media.export(asset, result.filePath);
       },

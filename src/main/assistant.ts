@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { MusicProviderEntry } from '../shared/types';
 import { musicProviderLabel } from '../shared/music-models';
-import { analysisSchema, generationSchema, idSchema, musicToolSchema, patchSchema, trimSchema } from './validation';
+import { analysisSchema, generationSchema, idSchema, musicToolSchema, patchSchema, titleSchema, trimSchema } from './validation';
 
 export const instructions = `You are SfxChat, a specialist sound-design assistant.
 Help users create, compare, refine, and organize useful sound effects and music. A user request
@@ -126,7 +126,18 @@ Further refinement can use prompt-based regeneration. Sound effects are generate
 through ElevenLabs and music through the configured music provider; listening to
 audio, mixing tracks, and assembling a scene are not available.
 You cannot read arbitrary files or execute shell
-commands. Manual controls and your tools share the same library operations.`;
+commands. Manual controls and your tools share the same library operations.
+
+Session titles are labels the user sees in the workspace header and the session list.
+Call rename_session once the goal of this session is clear, before or alongside the first
+substantive work, with a short specific title of about 3-7 words in sentence case - never
+a greeting, a tool name, a generic label, or a mention of your own name. Call it again only
+when the work moves to a materially different subject: replace the title rather than
+extending it so it keeps describing the current scope. If the title already describes the
+current work, leave it alone. A title set by the user is theirs: keep it unless the work has
+clearly moved on, and use their exact wording when they ask for a name. Announce a rename
+in a few words at most; it is a label, not a deliverable.
+`;
 
 const elevenlabsMusicInstructions = `ElevenLabs Music specifics. The prompt is the whole score: it carries genre, mood,
 instrumentation, tempo, key, era, production notes, structure, and lyrics, and it may
@@ -188,6 +199,7 @@ export const toolSchemas = {
   analyze_audio: analysisSchema.extend({ id: idSchema }),
   trim_asset: trimSchema.extend({ id: idSchema }),
   update_asset: z.object({ id: idSchema, patch: patchSchema }).strict(),
+  rename_session: z.object({ title: titleSchema.describe('Short, specific session title of about 3-7 words in sentence case, naming the subject and deliverable; no greeting, no generic label, no trailing period.') }).strict(),
   set_playground: z.object({ assetIds: z.array(idSchema) }).strict(),
   inspect_jobs: z.object({}).strict()
 };
@@ -199,6 +211,7 @@ const descriptions: Record<keyof typeof toolSchemas, string> = {
   analyze_audio: 'Measure decoded audio locally. Returns absolute seconds, sample frames, sample rate, channel count and linear full-scale min/max/peak/RMS bins across all channels. Default 96 bins, maximum 512. Optional startSeconds/endSeconds zoom into a smaller absolute source interval. Source files and decoded audio are bounded to 64 MiB. These measurements are not semantic hearing.',
   trim_asset: 'Create a new trimmed float32 WAV from a known asset, preserving the original and exact source lineage. startSeconds/endSeconds use the decoded source timeline from analyze_audio; end is exclusive. Optional fadeInMs/fadeOutMs are linear edge fades (default 0, combined length must fit selection). name is optional. Returns the new asset and adds it to the current playground; uses no audio-generation provider.',
   update_asset: 'Rename, tag, organize into collections, record feedback, or set review status. Does not change original bytes.',
+  rename_session: 'Rename this chat session so it stays well labeled with the subject and deliverable of the current work. Call it once early in a session and again when the subject changes materially. Renames only the title; it never changes the library, jobs, or history.',
   set_playground: 'Set the current conversation comparison board to these asset IDs in the requested order. Membership changes do not delete assets.',
   inspect_jobs: 'Read current conversation generation progress and resulting asset IDs. Do not repeatedly poll unfinished jobs.'
 };

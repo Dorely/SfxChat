@@ -1,3 +1,37 @@
+## Projects and session titles (2026-09-22)
+
+Added schema v2 projects (conversations and assets scoped by a `project_id` column with one
+persisted `project-active` setting), a project dropdown in the top bar next to the Workspace
+label, in-place renaming of sessions (topbar and sidebar) and projects, a `rename_session`
+assistant tool, and per-turn prompt text naming the project, the session title, and who set it.
+
+- `npm run typecheck` (`npx tsc --noEmit`): passed.
+- `npm run build`: passed (main 200.34 kB, preload 2.51 kB, renderer 754.31 kB, CSS 31.92 kB).
+- Migration evidence against this app's own profile (`%APPDATA%/SfxChat/library.sqlite`): the
+  file was copied to the session scratchpad before the first launch of the new build. A
+  read-only inspection of that copy reported `user_version` 1, 4 conversations, 378 messages,
+  75 assets (75 FTS rows), and no `projects` table. After the first launch the live file
+  reported `user_version` 2, exactly one `projects` row (`Default`, created at migration time),
+  `project-active` pointing at it, and all 4 conversations plus all 75 assets carrying that
+  `project_id`; conversation, message, asset, and FTS counts were unchanged. Diagnostics
+  recorded `app.started` with no `start_failed` and no `operation.failed` entries.
+- Idempotency: a second launch of the production bundle (`npx electron out/main/index.js`)
+  recorded another `app.started`; the database still reported `user_version` 2, exactly one
+  project with its original `createdAt`, and unchanged counts, so the v1 to v2 block did not run
+  again. Every process started for these checks was stopped afterwards.
+- Inspection used a read-only `better-sqlite3` handle through Electron's own Node, from a
+  temporary script kept outside the repository and deleted after the run. No repository-local
+  harness, fixture, or test infrastructure was added.
+
+Not verified: no UI interaction was driven, because this project carries no end-to-end test
+suite. Project switching, creating, and renaming; topbar and sidebar session renaming
+(Enter, blur, Escape); per-project scoping of the libraries, search, and playground in the UI;
+playback, trim, and export of migrated assets; and assistant tool visibility for a
+cross-project asset id were not exercised. No live chat turn was made, so whether the hosted
+model calls `rename_session` early, keeps a user-chosen title, and stays scoped when the user
+switches projects mid-turn remain acceptance checks. No generation, provider request, or
+credential change was made, and no listener judgment is claimed.
+
 # v0.1 verification
 
 ## Music providerId mismatch fixed (2026-09-21)

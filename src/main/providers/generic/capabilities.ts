@@ -195,6 +195,7 @@ export const TOOL_CAPABILITIES: Record<string, ToolCapability> = {
   analyze_audio: 'text',
   trim_asset: 'text',
   update_asset: 'text',
+  rename_session: 'text',
   set_playground: 'text',
   inspect_jobs: 'text',
   spectrogram_view: 'vision',

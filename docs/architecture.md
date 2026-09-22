@@ -31,9 +31,20 @@ reasoning omitted and flagged. See [evidence and limits](research/chat-context.m
 
 ## Persistence and originals
 
-SQLite uses WAL, foreign keys, transactional migrations, and FTS5 search. Schema v1
+SQLite uses WAL, foreign keys, transactional migrations, and FTS5 search. Schema v2
 stores conversations, messages, assets, jobs, Playground ordering, settings/wire
 history, turn state, and a tool-call ledger. Newer schema versions are rejected.
+
+Schema v2 adds projects: every conversation and asset carries a project_id column, and one
+setting (project-active) names the active project. A library written before projects is
+migrated in one transaction into a single Default project. project_id deliberately carries no
+REFERENCES clause, because SQLite cannot add a NOT NULL foreign key to an existing table when
+foreign keys are enabled, and project rows are never deleted. The snapshot the renderer
+receives is the active project's slice, and every asset lookup carries an explicit project
+scope - the conversation's project when the call has one, otherwise the active project - so
+an id from another project fails exactly like a missing one, including on the empty-query
+search path. Provider configuration, credentials, and the flat originals/<asset-id> store
+stay app-level and shared across projects.
 Search covers names, descriptions, tags, collections, prompts, reviews, and feedback.
 
 Assets and jobs carry `kind` (`effect` or `music`). Records written before music
@@ -125,6 +136,14 @@ an earlier generation. Manual
 regeneration uses an editable Generation prompt, prefilled from the original, separately
 from review feedback, and reuses requested duration rather than measured file duration.
 Markdown/skill snapshots are not injected into the assistant at runtime.
+
+Per turn, chatInstructions also states the current project, the current session title, and
+who set it, together with the rule that only this project's conversations and library are
+visible. The assistant keeps labels current through a rename_session tool: it names a session
+once the goal is clear, renames it when the subject materially changes, and leaves a title
+the user chose alone unless the work has moved on. A user rename records titleSource "user"
+and always wins over the automatic first-message title; creating and switching projects are
+user actions with no assistant tool.
 The generation tools wait for results so the assistant can organize returned assets.
 Their initial job IDs are recorded atomically with creation. Duplicate tool calls
 return durable results; conflicting IDs are rejected. Stopping a turn stops its wait;

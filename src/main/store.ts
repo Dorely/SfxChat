@@ -1,12 +1,27 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import type { Asset, AssetKind, AssetPatch, Conversation, GenerationInput, Job, Message, MusicGenerationInput } from '../shared/types';
+import type { Asset, AssetKind, AssetPatch, Conversation, GenerationInput, Job, Message, MusicGenerationInput, Project, TitleSource } from '../shared/types';
 
 const now = () => new Date().toISOString();
 const decode = <T>(row: unknown): T => JSON.parse((row as { json: string }).json) as T;
 // Records written before music existed carry no kind; they are sound effects.
 const normalizeAsset = (asset: Asset): Asset => asset.kind ? asset : { ...asset, kind: 'effect' };
 const normalizeJob = (job: Job): Job => job.kind ? job : { ...job, kind: 'effect' };
+// The project_id column is authoritative; JSON written by an older version may not carry it.
+const decodeConversation = (row: unknown): Conversation => {
+  const record = row as { json: string; project_id: string };
+  return { ...JSON.parse(record.json) as Conversation, projectId: record.project_id };
+};
+const decodeAsset = (row: unknown): Asset => {
+  const record = row as { json: string; project_id: string };
+  return normalizeAsset({ ...JSON.parse(record.json) as Asset, projectId: record.project_id });
+};
+
+const ACTIVE_PROJECT_KEY = 'project-active';
+const DEFAULT_PROJECT_NAME = 'Default';
+const PROJECT_NAME_MAX = 60;
+const TITLE_MAX = 70;
+const IN_PROJECT = 'conversation_id IN (SELECT id FROM conversations WHERE project_id=?)';
 
 export class Store {
   readonly db: Database.Database;
@@ -15,37 +30,113 @@ export class Store {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 1) { this.db.close(); throw new Error('This library was created by a newer SfxChat version.'); }
+    if (version > 2) { this.db.close(); throw new Error('This library was created by a newer SfxChat version.'); }
     if (version === 0) this.db.transaction(() => {
+      // Fresh library gets the complete v2 shape. project_id carries no REFERENCES clause so a
+      // fresh and an upgraded database stay structurally identical; projects are never deleted.
       this.db.exec(`
-        CREATE TABLE conversations (id TEXT PRIMARY KEY, json TEXT NOT NULL);
+        CREATE TABLE projects (id TEXT PRIMARY KEY, json TEXT NOT NULL);
+        CREATE TABLE conversations (id TEXT PRIMARY KEY, json TEXT NOT NULL, project_id TEXT NOT NULL DEFAULT '');
         CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), json TEXT NOT NULL);
-        CREATE TABLE assets (id TEXT PRIMARY KEY, json TEXT NOT NULL);
+        CREATE TABLE assets (id TEXT PRIMARY KEY, json TEXT NOT NULL, project_id TEXT NOT NULL DEFAULT '');
         CREATE VIRTUAL TABLE asset_search USING fts5(id UNINDEXED, text, tokenize='unicode61');
         CREATE TABLE jobs (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), status TEXT NOT NULL, json TEXT NOT NULL);
         CREATE TABLE playground (conversation_id TEXT PRIMARY KEY REFERENCES conversations(id), json TEXT NOT NULL);
         CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE tool_calls (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id), name TEXT NOT NULL, args TEXT NOT NULL, status TEXT NOT NULL, result TEXT);
         CREATE TABLE turns (conversation_id TEXT PRIMARY KEY REFERENCES conversations(id), status TEXT NOT NULL);
-        PRAGMA user_version = 1;
+        PRAGMA user_version = 2;
       `);
+      const project: Project = { id: randomUUID(), name: DEFAULT_PROJECT_NAME, createdAt: now() };
+      this.db.prepare('INSERT INTO projects (id,json) VALUES (?,?)').run(project.id, JSON.stringify(project));
+      this.db.prepare('INSERT INTO settings (key,value) VALUES (?,?)').run(ACTIVE_PROJECT_KEY, project.id);
+    })();
+    if (version === 1) this.db.transaction(() => {
+      // v2 adds projects. Every existing conversation and asset joins one default project.
+      this.db.exec(`
+        CREATE TABLE projects (id TEXT PRIMARY KEY, json TEXT NOT NULL);
+        ALTER TABLE conversations ADD COLUMN project_id TEXT NOT NULL DEFAULT '';
+        ALTER TABLE assets ADD COLUMN project_id TEXT NOT NULL DEFAULT '';
+        PRAGMA user_version = 2;
+      `);
+      const project: Project = { id: randomUUID(), name: DEFAULT_PROJECT_NAME, createdAt: now() };
+      this.db.prepare('INSERT INTO projects (id,json) VALUES (?,?)').run(project.id, JSON.stringify(project));
+      this.db.prepare('UPDATE conversations SET project_id=?').run(project.id);
+      this.db.prepare('UPDATE assets SET project_id=?').run(project.id);
+      this.db.prepare('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(ACTIVE_PROJECT_KEY, project.id);
     })();
   }
   close() { this.db.close(); }
-  conversations(): Conversation[] { return this.db.prepare('SELECT json FROM conversations ORDER BY rowid DESC').all().map(decode<Conversation>); }
-  createConversation(): string {
-    const c: Conversation = { id: randomUUID(), title: 'New conversation', createdAt: now() };
-    this.db.prepare('INSERT INTO conversations VALUES (?,?)').run(c.id, JSON.stringify(c));
-    this.changed(); return c.id;
+  projects(): Project[] { return this.db.prepare('SELECT json FROM projects ORDER BY rowid').all().map(decode<Project>); }
+  project(id: string): Project {
+    const row = this.db.prepare('SELECT json FROM projects WHERE id=?').get(id);
+    if (!row) throw new Error('Project not found.'); return decode<Project>(row);
+  }
+  createProject(name: string): Project {
+    const trimmed = name.trim().slice(0, PROJECT_NAME_MAX);
+    if (!trimmed) throw new Error('A project name cannot be empty.');
+    const project: Project = { id: randomUUID(), name: trimmed, createdAt: now() };
+    this.db.prepare('INSERT INTO projects (id,json) VALUES (?,?)').run(project.id, JSON.stringify(project));
+    this.changed(); return project;
+  }
+  renameProject(id: string, name: string): Project {
+    const trimmed = name.trim().slice(0, PROJECT_NAME_MAX);
+    if (!trimmed) throw new Error('A project name cannot be empty.');
+    const renamed = { ...this.project(id), name: trimmed };
+    this.db.prepare('UPDATE projects SET json=? WHERE id=?').run(JSON.stringify(renamed), id);
+    this.changed(); return renamed;
+  }
+  /** The persisted active project, healed back to an existing project when the stored id is stale. */
+  activeProjectId(): string {
+    const stored = this.setting(ACTIVE_PROJECT_KEY, '');
+    const projects = this.projects();
+    const found = projects.find(project => project.id === stored);
+    if (found) return found.id;
+    const fallback = projects[0] ?? this.createProject(DEFAULT_PROJECT_NAME);
+    this.setSetting(ACTIVE_PROJECT_KEY, fallback.id);
+    return fallback.id;
+  }
+  setActiveProject(id: string): string { this.project(id); this.setSetting(ACTIVE_PROJECT_KEY, id); return id; }
+  conversations(projectId?: string): Conversation[] {
+    return (projectId
+      ? this.db.prepare('SELECT json, project_id FROM conversations WHERE project_id=? ORDER BY rowid DESC').all(projectId)
+      : this.db.prepare('SELECT json, project_id FROM conversations ORDER BY rowid DESC').all()).map(decodeConversation);
+  }
+  conversation(id: string): Conversation {
+    const row = this.db.prepare('SELECT json, project_id FROM conversations WHERE id=?').get(id);
+    if (!row) throw new Error('Conversation not found.'); return decodeConversation(row);
   }
   requireConversation(id: string) { if (!this.db.prepare('SELECT 1 FROM conversations WHERE id=?').get(id)) throw new Error('Conversation not found.'); }
-  titleConversation(id: string, title: string) {
-    const c = decode<Conversation>(this.db.prepare('SELECT json FROM conversations WHERE id=?').get(id));
-    if (c.title !== 'New conversation') return;
-    c.title = title.slice(0, 70); this.db.prepare('UPDATE conversations SET json=? WHERE id=?').run(JSON.stringify(c), id);
+  /** Guarantees the project holds at least one conversation and returns its id. */
+  ensureConversation(projectId: string): string {
+    this.project(projectId);
+    const existing = this.db.prepare('SELECT id FROM conversations WHERE project_id=? ORDER BY rowid DESC').get(projectId) as { id: string } | undefined;
+    return existing?.id ?? this.createConversation(projectId);
   }
-  messages(conversationId?: string): Message[] {
-    return (conversationId ? this.db.prepare('SELECT json FROM messages WHERE conversation_id=? ORDER BY rowid').all(conversationId) : this.db.prepare('SELECT json FROM messages ORDER BY rowid').all()).map(decode<Message>);
+  createConversation(projectId?: string): string {
+    const project = projectId ?? this.activeProjectId();
+    this.project(project);
+    const c: Conversation = { id: randomUUID(), title: 'New conversation', createdAt: now(), projectId: project, titleSource: 'default' };
+    this.db.prepare('INSERT INTO conversations (id,project_id,json) VALUES (?,?,?)').run(c.id, c.projectId, JSON.stringify(c));
+    this.changed(); return c.id;
+  }
+  renameConversation(id: string, title: string, source: TitleSource): Conversation {
+    const renamed = { ...this.conversation(id), title: title.trim().slice(0, TITLE_MAX), titleSource: source };
+    if (!renamed.title) throw new Error('A session title cannot be empty.');
+    this.db.prepare('UPDATE conversations SET json=? WHERE id=?').run(JSON.stringify(renamed), id);
+    this.changed(); return renamed;
+  }
+  /** Auto-names an untouched session from its first message; an explicit title always wins. */
+  titleConversation(id: string, title: string) {
+    const c = this.conversation(id);
+    if (c.title !== 'New conversation' || (c.titleSource ?? 'default') !== 'default') return;
+    c.title = title.slice(0, TITLE_MAX); c.titleSource = 'default';
+    this.db.prepare('UPDATE conversations SET json=? WHERE id=?').run(JSON.stringify(c), id);
+  }
+  messages(projectId?: string): Message[] {
+    return (projectId
+      ? this.db.prepare(`SELECT json FROM messages WHERE ${IN_PROJECT} ORDER BY rowid`).all(projectId)
+      : this.db.prepare('SELECT json FROM messages ORDER BY rowid').all()).map(decode<Message>);
   }
   addMessage(conversationId: string, role: Message['role'], text: string, status: Message['status'] = 'completed'): Message {
     this.requireConversation(conversationId);
@@ -54,43 +145,62 @@ export class Store {
     this.changed(); return message;
   }
   updateMessage(message: Message) { this.db.prepare('UPDATE messages SET json=? WHERE id=?').run(JSON.stringify(message), message.id); this.changed(); }
-  assets(): Asset[] { return this.db.prepare('SELECT json FROM assets ORDER BY rowid DESC').all().map(decode<Asset>).map(normalizeAsset); }
-  asset(id: string): Asset {
-    const row = this.db.prepare('SELECT json FROM assets WHERE id=?').get(id);
-    if (!row) throw new Error('Asset not found.'); return normalizeAsset(decode<Asset>(row));
+  assets(projectId?: string): Asset[] {
+    return (projectId
+      ? this.db.prepare('SELECT json, project_id FROM assets WHERE project_id=? ORDER BY rowid DESC').all(projectId)
+      : this.db.prepare('SELECT json, project_id FROM assets ORDER BY rowid DESC').all()).map(decodeAsset);
+  }
+  /** Project-scoped lookup; an asset from another project fails exactly like a missing one. */
+  asset(id: string, projectId: string): Asset {
+    const row = this.db.prepare('SELECT json, project_id FROM assets WHERE id=?').get(id);
+    if (!row) throw new Error('Asset not found.');
+    const asset = decodeAsset(row);
+    if (asset.projectId !== projectId) throw new Error('Asset not found.');
+    return asset;
   }
   private indexAsset(asset: Asset) {
     this.db.prepare('DELETE FROM asset_search WHERE id=?').run(asset.id);
     this.db.prepare('INSERT INTO asset_search(id,text) VALUES (?,?)').run(asset.id, [asset.name, asset.description, ...asset.tags, ...asset.collections, asset.prompt, asset.feedback, asset.review].join(' '));
   }
   insertAsset(asset: Asset) {
-    this.db.transaction(() => { this.db.prepare('INSERT INTO assets VALUES (?,?)').run(asset.id, JSON.stringify(asset)); this.indexAsset(asset); })();
+    this.db.transaction(() => {
+      this.db.prepare('INSERT INTO assets (id,project_id,json) VALUES (?,?,?)').run(asset.id, asset.projectId, JSON.stringify(asset));
+      this.indexAsset(asset);
+    })();
     this.changed();
   }
-  updateAsset(id: string, patch: AssetPatch, conversationId?: string): Asset {
-    const asset = { ...this.asset(id), ...patch };
+  updateAsset(id: string, patch: AssetPatch, projectId: string, conversationId?: string): Asset {
+    const asset = { ...this.asset(id, projectId), ...patch };
     this.db.transaction(() => {
       this.db.prepare('UPDATE assets SET json=? WHERE id=?').run(JSON.stringify(asset), id); this.indexAsset(asset);
       if (conversationId) this.addMessage(conversationId, 'tool', `Updated “${asset.name}”: ${Object.keys(patch).join(', ')}.`);
     })();
     this.changed(); return asset;
   }
-  search(query: string): Asset[] {
+  search(query: string, projectId: string): Asset[] {
     const words = query.trim().split(/\s+/).filter(Boolean);
-    if (!words.length) return this.assets();
+    if (!words.length) return this.assets(projectId);
     const match = words.map(w => `"${w.replaceAll('"', '""')}"*`).join(' AND ');
-    return this.db.prepare('SELECT a.json FROM asset_search s JOIN assets a ON a.id=s.id WHERE asset_search MATCH ? ORDER BY rank').all(match).map(decode<Asset>).map(normalizeAsset);
+    return this.db.prepare('SELECT a.json, a.project_id FROM asset_search s JOIN assets a ON a.id=s.id WHERE asset_search MATCH ? AND a.project_id=? ORDER BY rank').all(match, projectId).map(decodeAsset);
   }
-  playground(): Record<string, string[]> {
-    return Object.fromEntries((this.db.prepare('SELECT * FROM playground').all() as { conversation_id: string; json: string }[]).map(r => [r.conversation_id, JSON.parse(r.json)]));
+  playground(projectId?: string): Record<string, string[]> {
+    const rows = (projectId
+      ? this.db.prepare(`SELECT conversation_id, json FROM playground WHERE ${IN_PROJECT}`).all(projectId)
+      : this.db.prepare('SELECT conversation_id, json FROM playground').all()) as { conversation_id: string; json: string }[];
+    return Object.fromEntries(rows.map(r => [r.conversation_id, JSON.parse(r.json)]));
   }
   setPlayground(conversationId: string, ids: string[]) {
-    this.requireConversation(conversationId); for (const id of ids) this.asset(id);
+    const projectId = this.conversation(conversationId).projectId;
+    for (const id of ids) this.asset(id, projectId);
     this.db.prepare('INSERT INTO playground VALUES (?,?) ON CONFLICT(conversation_id) DO UPDATE SET json=excluded.json').run(conversationId, JSON.stringify([...new Set(ids)]));
     this.changed();
   }
   addToPlayground(conversationId: string, ids: string[]) { this.setPlayground(conversationId, [...(this.playground()[conversationId] ?? []), ...ids]); }
-  jobs(): Job[] { return this.db.prepare('SELECT json FROM jobs ORDER BY rowid').all().map(decode<Job>).map(normalizeJob); }
+  jobs(projectId?: string): Job[] {
+    return (projectId
+      ? this.db.prepare(`SELECT json FROM jobs WHERE ${IN_PROJECT} ORDER BY rowid`).all(projectId)
+      : this.db.prepare('SELECT json FROM jobs ORDER BY rowid').all()).map(decode<Job>).map(normalizeJob);
+  }
   job(id: string): Job {
     const row = this.db.prepare('SELECT json FROM jobs WHERE id=?').get(id); if (!row) throw new Error('Generation not found.'); return normalizeJob(decode<Job>(row));
   }
