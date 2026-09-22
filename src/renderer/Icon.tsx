@@ -4,7 +4,6 @@ const paths: Record<string, ReactNode> = {
   spark: <path d="M12 2.5 L14 9.5 L21 12 L14 14.5 L12 21.5 L10 14.5 L3 12 L10 9.5 Z" fill="currentColor" stroke="none" />,
   plus: <path d="M12 5.5 V18.5 M5.5 12 H18.5" strokeWidth={2.4} />,
   search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.3 15.3 L20.5 20.5" /></>,
-  settings: <><circle cx="12" cy="12" r="3.6" /><path d="M15.5 12 H20.5 M8.5 12 H3.5 M12 15.5 V20.5 M12 8.5 V3.5 M14.47 14.47 L18.01 18.01 M9.53 9.53 L5.99 5.99 M9.53 14.47 L5.99 18.01 M14.47 9.53 L18.01 5.99" strokeWidth={2.8} /></>,
   send: <path d="M21 3 L10.5 13.5 M21 3 L14.5 21 L10.5 13.5 L3 9.5 Z" />,
   stop: <rect x="6.5" y="6.5" width="11" height="11" rx="1.5" fill="currentColor" stroke="none" />,
   play: <path d="M8.5 5.5 L18.5 12 L8.5 18.5 Z" fill="currentColor" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" />,
@@ -30,8 +29,12 @@ const paths: Record<string, ReactNode> = {
   lock: <><rect x="5" y="10.5" width="14" height="9.5" rx="2" /><path d="M8.5 10.5 V7.5 A3.5 3.5 0 0 1 15.5 7.5 V10.5" /><circle cx="12" cy="15.2" r="1.2" fill="currentColor" stroke="none" /></>,
 }
 
+const glyphs: Record<string, ReactNode> = {
+  settings: '⚙',
+}
+
 export default function Icon({ name }: { name: string }) {
   return <span className={`icon icon-${name}`} aria-hidden="true">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">{paths[name] ?? <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />}</svg>
+    {glyphs[name] ?? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">{paths[name] ?? <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />}</svg>}
   </span>
 }

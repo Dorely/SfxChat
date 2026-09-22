@@ -59,6 +59,10 @@ lime rings on the scrollable regions.
   than by eye: the scroll region's ring sampled as the platform amber (R229 G151 B0) before
   the focus rules existed and exactly `--lime` (R196 G242 B100) after; a temporary
   magenta `*:focus` diagnostic confirmed author CSS owns the ring and was then removed.
+- Follow-up: the settings icon was restored to the original `⚙` text glyph after review
+  feedback that the drawn gear read as a sun; `npm run typecheck` and `npm run build` were
+  re-run, and a PrintWindow capture pixel-sampled the rendered glyph at 18px in `--muted`
+  (R150 G153 B145 core color, subpixel antialiasing at the edges) on the topbar button.
 - Not verified: no provider request, generation, playback audition, trim, or credential
   change was made and no listener judgment is claimed. The inspector, trim editor, settings
   dialogs, and project dialog were not opened during these runs, so their restyled text and

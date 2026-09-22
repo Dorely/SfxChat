@@ -15,7 +15,7 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .sidebar-heading { padding: 26px 20px 12px 24px; display: flex; align-items: center; justify-content: space-between; color: var(--muted); font: 12px 'DM Mono', monospace; text-transform: uppercase; letter-spacing: .1em; }
 .icon-button { position: relative; display: inline-grid; place-items: center; width: 34px; height: 34px; border: 0; color: var(--muted); background: transparent; border-radius: 6px; font-size: 18px; }
 .icon-button:hover { color: var(--cream); background: #282c28; }
-.icon { display: inline-flex; width: 1em; height: 1em; line-height: 1; flex: 0 0 auto; vertical-align: middle; }
+.icon { display: inline-flex; align-items: center; justify-content: center; width: 1em; height: 1em; line-height: 1; flex: 0 0 auto; vertical-align: middle; }
 .conversation-list { padding: 0 10px; max-height: 215px; overflow-y: auto; }
 .conversation-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 12px; color: var(--cream); border: 1px solid transparent; background: transparent; border-radius: 7px; text-align: left; }
 .conversation-row:hover { background: #202420; }.conversation-active { background: #272c25; border-color: #3d4937; }
