@@ -83,6 +83,7 @@ is recorded in [verification](docs/verification.md).
 | [src/main/providers/secrets.ts](src/main/providers/secrets.ts) | Atomic encrypted credential storage using injected OS protection and store-safe secret names. |
 | [src/renderer/index.html](src/renderer/index.html), [src/renderer/main.tsx](src/renderer/main.tsx) | Renderer entrypoint and content security policy. |
 | [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Project switcher, session renaming, chat, effects and music libraries, Playground generation, audition, inspector, settings, and styling. |
+| [src/renderer/Icon.tsx](src/renderer/Icon.tsx) | Shared inline SVG icon set drawn for this project, replacing font glyph icons. |
 | [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Waveform trim selection, fine-window zoom, fades, exact rendered preview, and derived-asset saving. |
 | [src/renderer/ChatContextMeter.tsx](src/renderer/ChatContextMeter.tsx) | Throttled composer context indicator, threshold styling, and estimate details. |
 | [.github/workflows/windows.yml](.github/workflows/windows.yml) | Credential-free Windows typecheck and installer artifact build. |

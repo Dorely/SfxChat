@@ -32,7 +32,39 @@ model calls `rename_session` early, keeps a user-chosen title, and stays scoped 
 switches projects mid-turn remain acceptance checks. No generation, provider request, or
 credential change was made, and no listener judgment is claimed.
 
-# v0.1 verification
+## UI legibility and iconography pass (2026-09-22)
+
+Presentation-only pass on the renderer: the Unicode glyph icon map was replaced by a shared
+inline SVG set (`src/renderer/Icon.tsx`, paths drawn for this project, no new dependencies),
+play/pause buttons grew from 31px/glyph to 40px with 18px SVG triangles and bars, the New
+project and New conversation "+" buttons gained visible "New" labels and button chrome,
+mini-buttons grew from 23x22 to 28px with expanded hit areas on icon buttons, review marks
+became SVG check/x/dot shapes with text labels, and the type scale was raised (9px to 11px,
+10px to 12px, 11px to 13px, 12px to 14px) with dark-background weight kept. `--quiet` text
+moved from `#6d736d` (about 3.6:1 on the shell background, failing AA) to `#8d938a` (about
+5.0:1 on the lightest small-text surface), and the darker hard-coded grays were raised to the
+same token. Focus styling is now a global 2px `--lime` `:focus-visible` ring plus explicit
+lime rings on the scrollable regions.
+
+- `npm run typecheck` (`npx tsc --noEmit`): passed.
+- `npm run build`: passed (main 200.34 kB, preload 2.51 kB, renderer 760.75 kB, CSS 33.21 kB).
+- Live runs of the production bundle (`npx electron out/main/index.js`, real profile,
+  several launches, each process tree stopped afterwards) with window captures reviewed at
+  full resolution: effects and music libraries including an empty state, the playground with
+  candidate cards in idle and playing states, the generation form, chat history and composer,
+  tabs, project switcher, and sidebar. Play, pause (playing state), the labeled "+ New"
+  buttons, move/remove arrows, and the settings/search/send icons were identified correctly
+  at a glance in the captures.
+- Keyboard focus was exercised with Tab and verified by pixel-sampling the captures rather
+  than by eye: the scroll region's ring sampled as the platform amber (R229 G151 B0) before
+  the focus rules existed and exactly `--lime` (R196 G242 B100) after; a temporary
+  magenta `*:focus` diagnostic confirmed author CSS owns the ring and was then removed.
+- Not verified: no provider request, generation, playback audition, trim, or credential
+  change was made and no listener judgment is claimed. The inspector, trim editor, settings
+  dialogs, and project dialog were not opened during these runs, so their restyled text and
+  controls were checked from the stylesheet values only, not visually.
+
+
 
 ## Music providerId mismatch fixed (2026-09-21)
 
