@@ -40,6 +40,19 @@ function safeError(error: unknown) {
   const text = error instanceof Error ? error.message : 'Operation failed.';
   return redactText(text);
 }
+function bytesResponse(bytes: Buffer, contentType: string, request: Request): Response {
+  const headers: Record<string, string> = { 'content-type': contentType, 'accept-ranges': 'bytes', 'access-control-allow-origin': '*', 'cache-control': 'private, max-age=31536000, immutable' };
+  const range = request.headers.get('range');
+  if (range) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    if (!match || (!match[1] && !match[2])) return new Response(null, { status: 416 });
+    const start = match[1] ? Number(match[1]) : Math.max(0, bytes.length - Number(match[2]));
+    const end = match[1] && match[2] ? Math.min(Number(match[2]), bytes.length - 1) : bytes.length - 1;
+    if (start > end || start >= bytes.length) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${bytes.length}` } });
+    return new Response(new Uint8Array(bytes.subarray(start, end + 1)), { status: 206, headers: { ...headers, 'content-range': `bytes ${start}-${end}/${bytes.length}`, 'content-length': String(end - start + 1) } });
+  }
+  return new Response(new Uint8Array(bytes), { headers: { ...headers, 'content-length': String(bytes.length) } });
+}
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { window?.show(); window?.focus(); });
@@ -47,7 +60,7 @@ else {
     const root = app.getPath('userData'); await mkdir(root, { recursive: true });
     diagnostics.record('app.started', { version: app.getVersion(), packaged: app.isPackaged });
     const store = new Store(join(root, 'library.sqlite'), changed);
-    const media = new MediaLibrary(join(root, 'originals'));
+    const media = new MediaLibrary(join(root, 'originals'), join(root, 'chat-media'));
     const secrets = new SecureStore({ directory: join(root, 'secrets'), encrypt: value => safeStorage.encryptString(value), decrypt: value => safeStorage.decryptString(value), isAvailable: () => safeStorage.isEncryptionAvailable() && (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text') });
     auth = new CodexAuth({ store: secrets, openExternal: url => shell.openExternal(url), onChange: status => { if (status.error) diagnostics.record('auth.failed', { message: status.error }); changed(); } });
     let credentialError: string | null = null;
@@ -112,20 +125,22 @@ else {
     protocol.handle('sfx-media', async request => {
       try {
         const url = new URL(request.url);
-        if (url.hostname !== 'asset' || request.method !== 'GET') return new Response(null, { status: 404 });
-        const id = idSchema.parse(url.pathname.slice(1)); const asset = store.asset(id, store.activeProjectId());
-        const bytes = await readFile(media.path(asset));
-        const headers: Record<string, string> = { 'content-type': asset.format === 'mp3' ? 'audio/mpeg' : 'audio/wav', 'accept-ranges': 'bytes', 'access-control-allow-origin': '*', 'cache-control': 'private, max-age=31536000, immutable' };
-        const range = request.headers.get('range');
-        if (range) {
-          const match = /^bytes=(\d*)-(\d*)$/.exec(range);
-          if (!match || (!match[1] && !match[2])) return new Response(null, { status: 416 });
-          const start = match[1] ? Number(match[1]) : Math.max(0, bytes.length - Number(match[2]));
-          const end = match[1] && match[2] ? Math.min(Number(match[2]), bytes.length - 1) : bytes.length - 1;
-          if (start > end || start >= bytes.length) return new Response(null, { status: 416, headers: { 'content-range': `bytes */${bytes.length}` } });
-          return new Response(new Uint8Array(bytes.subarray(start, end + 1)), { status: 206, headers: { ...headers, 'content-range': `bytes ${start}-${end}/${bytes.length}`, 'content-length': String(end - start + 1) } });
+        if (request.method !== 'GET') return new Response(null, { status: 404 });
+        if (url.hostname === 'asset') {
+          const id = idSchema.parse(url.pathname.slice(1)); const asset = store.asset(id, store.activeProjectId());
+          const bytes = await readFile(media.path(asset));
+          return bytesResponse(bytes, asset.format === 'mp3' ? 'audio/mpeg' : 'audio/wav', request);
         }
-        return new Response(new Uint8Array(bytes), { headers: { ...headers, 'content-length': String(bytes.length) } });
+        if (url.hostname === 'chat') {
+          const [messageId, attachmentId] = url.pathname.slice(1).split('/');
+          if (!messageId || !attachmentId) return new Response(null, { status: 404 });
+          const message = store.message(idSchema.parse(messageId), store.activeProjectId());
+          const attachment = (message.attachments ?? []).find(entry => entry.id === idSchema.parse(attachmentId));
+          if (!attachment) return new Response(null, { status: 404 });
+          const bytes = await readFile(media.chatAttachmentPath(attachment.id, attachment.kind === 'image' ? 'png' : 'wav'));
+          return bytesResponse(bytes, attachment.mediaType, request);
+        }
+        return new Response(null, { status: 404 });
       } catch { return new Response(null, { status: 404 }); }
     });
 

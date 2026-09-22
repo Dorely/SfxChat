@@ -336,14 +336,19 @@ export class WorkbenchService {
           const { id, ...input } = args as SpectrogramInput & { id: string };
           const asset = this.store.asset(id, projectId);
           const { png, mapping } = await this.media.spectrogram(asset, input);
+          const attachmentId = randomUUID();
+          await this.media.saveChatAttachment(attachmentId, png, 'png');
+          const interval = `${mapping.startSeconds.toFixed(2)}–${mapping.endSeconds.toFixed(2)} s`;
+          this.store.addMessage(conversationId, 'tool', `Rendered a ${mapping.freqScale}-scale spectrogram of “${asset.name}” (${interval}).`, 'completed', [
+            { id: attachmentId, kind: 'image', label: `Spectrogram of “${asset.name}” (${interval})`, mediaType: 'image/png', bytes: png.length, startSeconds: mapping.startSeconds, endSeconds: mapping.endSeconds }
+          ]);
           result = {
-            attachmentId: randomUUID(),
+            attachmentId,
             image: { mediaType: 'image/png', bytes: png.length, width: mapping.width, height: mapping.height },
             mapping,
             note: `The attached PNG spans exactly ${mapping.startSeconds.toFixed(3)}–${mapping.endSeconds.toFixed(3)} decoded-source seconds across its width and ${Math.round(mapping.freqMin)}–${Math.round(mapping.freqMax)} Hz from bottom to top (${mapping.freqScale} scale), with faint grid lines every tenth of the width. Treat the image as a secondary view; take exact cut points from analyze_audio sample frames.`
           };
-          this.store.addMessage(conversationId, 'tool', `Rendered a ${mapping.freqScale}-scale spectrogram of “${asset.name}” (${mapping.startSeconds.toFixed(2)}–${mapping.endSeconds.toFixed(2)} s).`);
-          attachments.push({ label: `spectrogram of “${asset.name}” (${mapping.startSeconds.toFixed(2)}–${mapping.endSeconds.toFixed(2)} s)`, kind: 'image', mime: 'image/png', base64: png.toString('base64') });
+          attachments.push({ label: `spectrogram of “${asset.name}” (${interval})`, kind: 'image', mime: 'image/png', base64: png.toString('base64') });
           break;
         }
         case 'audio_listen': {
@@ -352,12 +357,16 @@ export class WorkbenchService {
           const clip = await this.media.clip(asset, { ...(startSeconds === undefined ? {} : { startSeconds }), ...(endSeconds === undefined ? {} : { endSeconds }) });
           const clipStart = clip.startFrame / clip.sampleRate;
           const clipEnd = clip.endFrame / clip.sampleRate;
+          const attachmentId = randomUUID();
+          await this.media.saveChatAttachment(attachmentId, clip.bytes, 'wav');
+          this.store.addMessage(conversationId, 'tool', `Attached ${(clipEnd - clipStart).toFixed(2)} s of “${asset.name}” for listening (${clipStart.toFixed(2)}–${clipEnd.toFixed(2)} s).`, 'completed', [
+            { id: attachmentId, kind: 'audio', label: `Audio clip of “${asset.name}” (${clipStart.toFixed(2)}–${clipEnd.toFixed(2)} s)`, mediaType: 'audio/wav', bytes: clip.bytes.length, startSeconds: clipStart, endSeconds: clipEnd, duration: clipEnd - clipStart, sampleRate: clip.sampleRate }
+          ]);
           result = {
-            attachmentId: randomUUID(),
+            attachmentId,
             clip: { startSeconds: clipStart, endSeconds: clipEnd, duration: clipEnd - clipStart, sampleRate: clip.sampleRate, channels: 1, encoding: 'wav16', bytes: clip.bytes.length },
             note: 'The attached WAV covers exactly this decoded-source window, downmixed to mono 16-bit PCM. Listening through the provider is an observation at its fidelity; the user audition decides quality.'
           };
-          this.store.addMessage(conversationId, 'tool', `Attached ${(clipEnd - clipStart).toFixed(2)} s of “${asset.name}” for listening (${clipStart.toFixed(2)}–${clipEnd.toFixed(2)} s).`);
           attachments.push({ label: `audio clip of “${asset.name}” (${clipStart.toFixed(2)}–${clipEnd.toFixed(2)} s)`, kind: 'audio', mime: 'audio/wav', base64: clip.bytes.toString('base64') });
           break;
         }

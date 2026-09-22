@@ -10,7 +10,8 @@ import { renderSpectrogram, type SpectrogramRender } from './spectrogram';
 export class MediaLibrary {
   private audioQueue: Promise<unknown> = Promise.resolve();
   private decoded: { hash: string; audio: DecodedAudio } | null = null;
-  constructor(readonly root: string) {}
+  /** `root` holds immutable originals; `chatRoot` holds durable chat attachment media. */
+  constructor(readonly root: string, readonly chatRoot: string) {}
   private withAudio<T>(asset: Asset, operation: (audio: DecodedAudio) => Promise<T>): Promise<T> {
     const pending = this.audioQueue.then(async () => {
       if ((await stat(this.path(asset))).size > MAX_AUDIO_BYTES) throw new Error('Editing supports source files up to 64 MiB.');
@@ -39,6 +40,14 @@ export class MediaLibrary {
   }
   async idle() { await this.audioQueue; }
   path(asset: Pick<Asset, 'id' | 'format'>) { return join(this.root, `${asset.id}.${asset.format}`); }
+  chatAttachmentPath(id: string, format: 'png' | 'wav') { return join(this.chatRoot, `${id}.${format}`); }
+  async saveChatAttachment(id: string, bytes: Buffer, format: 'png' | 'wav'): Promise<void> {
+    await mkdir(this.chatRoot, { recursive: true });
+    const path = this.chatAttachmentPath(id, format);
+    const temp = path + '.partial';
+    await writeFile(temp, bytes, { flag: 'wx' });
+    await rename(temp, path);
+  }
   async save(bytes: Buffer, format: 'mp3' | 'wav', fields: Partial<Asset> & { projectId: string }): Promise<Asset> {
     await mkdir(this.root, { recursive: true });
     const id = randomUUID();

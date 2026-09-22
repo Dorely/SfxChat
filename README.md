@@ -119,7 +119,8 @@ section or renders a seamless loop with a wrap crossfade. These local operations
 need no audio-provider key or paid generation. When the configured chat model
 supports image and audio input, the assistant can also attach a spectrogram view
 and a bounded listening clip of a library asset — those are observations at the
-model's fidelity, never approval. Give timing hints when the desired event is
+model's fidelity, never approval. Each attachment stays visible and playable in
+the chat history for your own inspection. Give timing hints when the desired event is
 ambiguous, and audition every result yourself.
 
 Editing supports MP3 and RIFF PCM/float WAV, up to 64 MiB each for source bytes and
@@ -139,7 +140,9 @@ approval is claimed.
 
 ## Data and recovery
 
-The per-user `%APPDATA%/SfxChat` directory contains `library.sqlite`, `originals/`, and
+The per-user `%APPDATA%/SfxChat` directory contains `library.sqlite`, `originals/`,
+`chat-media/` (the spectrogram images and listening clips the assistant attached in
+chat, kept for the transcript), and
 encrypted `secrets/`. Do not publish this directory. Uninstalling does not
 intentionally delete library data. See verification for the tested installed path. What the app lists is scoped to the active project; switching projects changes the listing, not where files live.
 

@@ -68,6 +68,16 @@ and refuses existing destinations. Playback gain never changes files.
 The `sfx-media://asset/<uuid>` protocol resolves only known assets and supports byte
 ranges. The UI never supplies arbitrary local paths for media access.
 
+Chat attachment media lives at `chat-media/<attachment-id>.<png|wav>`, written with
+the same unique-temp rename and referenced by `ChatAttachment` metadata on the tool
+activity message. The `sfx-media://chat/<message-id>/<attachment-id>` form serves
+it, resolving only attachments recorded on a message in the active project and
+supporting byte ranges. A crash between file write and message insert leaves an
+unreferenced attachment file that startup does not delete. Transcript attachments
+deliberately outlive model-context eviction: history eviction bounds what the
+model resends, while the chat record keeps every attached image and clip the user
+may want to inspect.
+
 ## Local trimming and audio evidence
 
 `WorkbenchService.analyzeAudio`, `previewTrim`, and `trimAsset` own audio editing;
@@ -179,6 +189,13 @@ positives), and the Anthropic kind records `audio: false` deterministically
 instead of probing an input the Messages API does not have. Whether the hosted
 Codex backend and configured generic providers accept media parts in live traffic
 is a verification item, not an assumption.
+
+Every attachment is also recorded for the user. The tool activity message carries
+a `ChatAttachment` (id, kind, label, media type, size, interval) and the
+transcript renders it as a card — spectrogram image or playable clip with its
+label — under the activity text. Snapshots carry attachment metadata only; bytes
+stream lazily from `sfx-media://chat/...` with byte ranges, so seeking works and
+message payloads stay light.
 
 ## Jobs and turns
 

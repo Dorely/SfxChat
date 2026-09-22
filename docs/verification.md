@@ -1,3 +1,32 @@
+## Chat transcript media cards (2026-09-22)
+
+Every spectrogram image and listening clip the assistant attaches is now an
+inspectable transcript record: the tool activity message carries `ChatAttachment`
+metadata (id, kind, label, media type, size, interval) and the chat history renders
+it as a card — image preview or playable clip with its label. Bytes live at
+`chat-media/<attachment-id>.<png|wav>` (unique-temp rename) and serve through
+`sfx-media://chat/<message-id>/<attachment-id>`, which resolves only attachments
+recorded on a message in the active project and supports byte ranges (seeking);
+snapshots carry metadata only. Transcript attachments deliberately persist after
+model-context eviction.
+
+- `npm run typecheck` (`npx tsc --noEmit`): passed.
+- `npm run build`: passed (main 237.19 kB, preload 2.57 kB, renderer 764.47 kB, CSS 34.10 kB).
+- A third temporary harness outside the repository (esbuild bundle under Electron's
+  Node with `ELECTRON_RUN_AS_NODE`, deleted after the run) reported 9/9 checks:
+  messages without attachments keep their exact JSON shape; an attachment
+  round-trips through `addMessage` to the project-scoped `store.message` lookup;
+  cross-project and unknown lookups fail exactly like missing; `saveChatAttachment`
+  writes `chat-media/<id>.<ext>` with bytes intact and both PNG/WAV paths resolve;
+  and snapshots carry the attachment metadata.
+- Live launch of the production bundle (`npx electron out/main/index.js`, real
+  profile, 15 s, then terminated): `app.started` at 2026-09-22T15:11:01Z with no
+  `start_failed` and no `operation.failed` entries in the rotating diagnostics.
+- Not verified: card rendering in the chat sidebar, image display, and audio
+  playback/seeking over `sfx-media://chat/...` were not driven in a running app
+  (covered by typecheck and the store/media harness only). No live provider turn
+  was made and no listener judgment is claimed.
+
 ## Multimodal assistant: spectrograms, listening clips, loops, clip spots (2026-09-22)
 
 Added capability-gated `spectrogram_view` and `audio_listen` assistant tools with

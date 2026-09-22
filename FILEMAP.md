@@ -66,12 +66,12 @@ is recorded in [verification](docs/verification.md).
 | [src/main/providers/generic/registry.ts](src/main/providers/generic/registry.ts) | Provider/model validation, base-URL normalization, and effort parsing. |
 | [src/main/providers/generic/capabilities.ts](src/main/providers/generic/capabilities.ts) | Capability probes, max-tokens discovery, vision/audio flags, and tool filtering. |
 | [src/main/store.ts](src/main/store.ts) | SQLite schema v2 migration, projects, per-project scoping, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
-| [src/main/media.ts](src/main/media.ts) | Original storage/import/export, integrity checks, serialized editing/analysis, and bounded decoded cache. |
+| [src/main/media.ts](src/main/media.ts) | Original and chat-attachment storage, import/export, integrity checks, serialized editing/analysis, and bounded decoded cache. |
 | [src/main/audio.ts](src/main/audio.ts) | Bounded MP3/WAV decode, timestamped amplitude windows, energy event detection, loop-seam probing, exact sample-frame trims, loop crossfades, fades, mono WAV clip rendering, and float32 WAV rendering. |
 | [src/main/png.ts](src/main/png.ts) | Minimal 8-bit RGB PNG encoder over Node zlib (filter 0 scanlines, hand-rolled CRC32 and chunks). |
 | [src/main/spectrogram.ts](src/main/spectrogram.ts) | Self-contained STFT spectrogram rendering: radix-2 FFT, Hann window, full-scale-dB scaling, colormap, time/frequency grid, and exact mapping. |
 | [src/main/validation.ts](src/main/validation.ts) | Runtime validation of privileged operations and generation inputs. |
-| [src/main/service.ts](src/main/service.ts) | Shared library operations, project-scoped snapshots, sequential generation jobs, chat turns, capability-gated media attachments with history eviction, and tool execution. |
+| [src/main/service.ts](src/main/service.ts) | Shared library operations, project-scoped snapshots, sequential generation jobs, chat turns, capability-gated media attachments (transcript cards, history eviction), and tool execution. |
 | [src/main/diagnostics.ts](src/main/diagnostics.ts) | Rotating local JSONL records, diagnostic references, and credential redaction. |
 | [src/main/providers/errors.ts](src/main/providers/errors.ts) | Bounded provider error parsing, request IDs, readable failures, and safe diagnostic fields. |
 | [src/main/assistant.ts](src/main/assistant.ts) | Runtime sound-design, ElevenLabs SFX, and per-provider music prompting/revision instructions, session naming guidance, plus assistant tool definitions. |

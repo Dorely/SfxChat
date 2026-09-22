@@ -8,7 +8,12 @@ export interface Conversation {
   id: string; title: string; createdAt: string; projectId: string;
   titleSource?: TitleSource;
 }
-export interface Message { id: string; conversationId: string; role: 'user' | 'assistant' | 'tool'; text: string; status: 'running' | 'completed' | 'failed' | 'cancelled'; createdAt: string }
+/** Media a tool attached for the model, kept as an inspectable transcript record. */
+export interface ChatAttachment {
+  id: string; kind: 'image' | 'audio'; label: string; mediaType: string; bytes: number;
+  startSeconds?: number; endSeconds?: number; duration?: number; sampleRate?: number;
+}
+export interface Message { id: string; conversationId: string; role: 'user' | 'assistant' | 'tool'; text: string; status: 'running' | 'completed' | 'failed' | 'cancelled'; createdAt: string; attachments?: ChatAttachment[] }
 export interface Asset {
   id: string; projectId: string; name: string; description: string; tags: string[]; collections: string[];
   review: Review; feedback: string; source: 'generated' | 'imported' | 'edited'; kind: AssetKind;

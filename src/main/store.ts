@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
-import type { Asset, AssetKind, AssetPatch, Conversation, GenerationInput, Job, Message, MusicGenerationInput, Project, TitleSource } from '../shared/types';
+import type { Asset, AssetKind, AssetPatch, ChatAttachment, Conversation, GenerationInput, Job, Message, MusicGenerationInput, Project, TitleSource } from '../shared/types';
 
 const now = () => new Date().toISOString();
 const decode = <T>(row: unknown): T => JSON.parse((row as { json: string }).json) as T;
@@ -138,11 +138,19 @@ export class Store {
       ? this.db.prepare(`SELECT json FROM messages WHERE ${IN_PROJECT} ORDER BY rowid`).all(projectId)
       : this.db.prepare('SELECT json FROM messages ORDER BY rowid').all()).map(decode<Message>);
   }
-  addMessage(conversationId: string, role: Message['role'], text: string, status: Message['status'] = 'completed'): Message {
+  addMessage(conversationId: string, role: Message['role'], text: string, status: Message['status'] = 'completed', attachments?: ChatAttachment[]): Message {
     this.requireConversation(conversationId);
-    const message: Message = { id: randomUUID(), conversationId, role, text, status, createdAt: now() };
+    const message: Message = { id: randomUUID(), conversationId, role, text, status, createdAt: now(), ...(attachments?.length ? { attachments } : {}) };
     this.db.prepare('INSERT INTO messages VALUES (?,?,?)').run(message.id, conversationId, JSON.stringify(message));
     this.changed(); return message;
+  }
+  /** Project-scoped message lookup for attachment serving; other projects fail like missing ones. */
+  message(id: string, projectId: string): Message {
+    const row = this.db.prepare('SELECT json, conversation_id FROM messages WHERE id=?').get(id) as { json: string; conversation_id: string } | undefined;
+    if (!row) throw new Error('Message not found.');
+    const conversation = this.db.prepare('SELECT project_id FROM conversations WHERE id=?').get(row.conversation_id) as { project_id: string } | undefined;
+    if (!conversation || conversation.project_id !== projectId) throw new Error('Message not found.');
+    return decode<Message>(row);
   }
   updateMessage(message: Message) { this.db.prepare('UPDATE messages SET json=? WHERE id=?').run(JSON.stringify(message), message.id); this.changed(); }
   assets(projectId?: string): Asset[] {
