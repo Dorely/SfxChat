@@ -23,6 +23,15 @@ non-secret model metadata. No account credentials or conversations were read.
 | `gpt-5.6-luna` | 272,000 | 872,000 | 95 |
 | `gpt-5.6-sol` | 272,000 | 872,000 | 95 |
 | `gpt-6-astra` | 272,000 | 872,000 | 95 |
+| `gpt-6-luna` | 272,000 | 872,000 | 95 |
+| `gpt-6-sol` | 272,000 | 872,000 | 95 |
+
+The GPT-6 Luna and Sol rows were rechecked against the local non-secret Codex model
+catalog fetched 2026-09-23T01:05:22Z (client 0.155.0). The official
+[Codex model page](https://learn.chatgpt.com/docs/models) confirms both IDs and
+their availability in Codex, subject to rollout and account access. The catalog
+lists low through max for both; Sol also lists ultra. This app offers low through
+max and has not verified a live turn with either new model.
 
 Use **272,000** as the requested base denominator. The 95% effective-window
 reservation is not the model's base size. The checked values are pinned in

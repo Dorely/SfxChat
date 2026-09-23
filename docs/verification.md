@@ -420,3 +420,16 @@ instead of invoking `audio.play()` from the test. It verifies playback of the
 selected duration, stop/reset, replay, natural completion, and a new selected
 duration after changing the in point and fades. Tests used only the synthetic
 fixture; temporary app instances and profiles were closed/removed.
+
+## GPT-6 Sol and Luna built-in choices (2026-09-22)
+
+OpenAI's Codex model documentation confirms `gpt-6-sol` and `gpt-6-luna` as
+selectable IDs, subject to account availability. The local non-secret Codex
+model catalog (fetched 2026-09-23 UTC, client 0.155.0) reports a 272,000 default
+context window for each; details are in [chat-context research](research/chat-context.md).
+Both were added to the built-in picker. The existing `gpt-5.6-sol` fallback was
+left unchanged.
+
+- `npm run typecheck`: passed.
+- `npm run build`: passed for main, preload, and renderer.
+- No live Codex turn or account-access check was run for either new model.

@@ -8,7 +8,9 @@ export const CODEX_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export const CHAT_MODELS = [
   { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna', contextLimit: 272_000, efforts: [...CODEX_EFFORTS] },
   { id: 'gpt-5.6-sol', label: 'GPT-5.6 Sol', contextLimit: 272_000, efforts: [...CODEX_EFFORTS] },
-  { id: 'gpt-6-astra', label: 'GPT-6 Astra', contextLimit: 272_000, efforts: [...CODEX_EFFORTS] }
+  { id: 'gpt-6-astra', label: 'GPT-6 Astra', contextLimit: 272_000, efforts: [...CODEX_EFFORTS] },
+  { id: 'gpt-6-luna', label: 'GPT-6 Luna', contextLimit: 272_000, efforts: [...CODEX_EFFORTS] },
+  { id: 'gpt-6-sol', label: 'GPT-6 Sol', contextLimit: 272_000, efforts: [...CODEX_EFFORTS] }
 ] as const;
 
 export function resolveChatModel(model?: string): string {
