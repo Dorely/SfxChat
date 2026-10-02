@@ -1,3 +1,14 @@
+# Review card alignment (2026-10-02)
+
+- The supplied screenshot showed the reference card above adjacent candidates.
+  Source inspection traced this to the reference label lacking the candidates'
+  28px remove button. All review slot labels now reserve the same 36px minimum
+  height (button plus 8px bottom padding), aligning the card starts and shared
+  playback sections without adding a dummy control.
+- `npm run typecheck` and `npm run package` passed, including the production
+  build and Windows installer. Post-fix visual alignment has not been verified
+  in the running desktop.
+
 # Playground review cards (2026-10-02)
 
 - `npm run typecheck` and `npm run build` passed after the card extraction and
