@@ -47,6 +47,11 @@ and use persistent cue reviews for audition, explicit playback, selections, feed
 and export. The desktop starts on demand; disconnecting a client leaves admitted
 jobs running. Generation request IDs prevent accidental repeat purchases.
 
+Opening a review displays cue-grouped sound cards in the Playground results area.
+Candidate notes and selection controls sit under each card, with cue feedback and
+repeat settings alongside or below. The Playground header and generation form stay
+in place; **All Playground sounds** returns to the session’s regular results.
+
 ```powershell
 sfxchat guidance
 sfxchat skill install --scope project --project C:\work\game --target codex --target claude --mcp --dry-run

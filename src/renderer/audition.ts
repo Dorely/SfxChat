@@ -2,12 +2,13 @@ import type { UiCommand, PlaybackState } from '../shared/workbench';
 
 /** One exclusive WebAudio owner; preview gain never alters originals. */
 export class AuditionPlayer {
+  constructor(private onState: (state: PlaybackState) => void) {}
   private context: AudioContext | null = null;
   private sources = new Map<AudioBufferSourceNode, GainNode>();
   private timer: ReturnType<typeof setInterval> | null = null;
   private epoch = 0;
   private sessionId: string | null = null;
-  private report(state: Omit<PlaybackState, 'updatedAt'>) { if (this.sessionId) void window.sfx.playbackReport(this.sessionId, { ...state, updatedAt: new Date().toISOString() }).catch(() => {}); }
+  private report(state: Omit<PlaybackState, 'updatedAt'>) { const next = { ...state, updatedAt: new Date().toISOString() }; this.onState(next); if (this.sessionId) void window.sfx.playbackReport(this.sessionId, next).catch(() => {}); }
   stop() {
     this.epoch++;
     if (this.timer) clearInterval(this.timer); this.timer = null;

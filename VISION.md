@@ -42,7 +42,9 @@ The desktop also serves local agents through a bundled CLI and stdio MCP. Agents
 should reuse its provider operations, durable projects/sessions, library and jobs,
 then open the same audition UI instead of building temporary audition apps. Explicit
 playback, cue-specific selections, rejection and notes make human decisions available
-to the agent without conflating playback with listening evidence.
+to the agent without conflating playback with listening evidence. Reviews use the
+Playground results themselves: familiar sound cards grouped by cue, with additional
+controls and notes underneath or alongside them.
 
 Installable skills support project and harness-wide scopes and contain the complete
 sound-design guidance used by the app assistant. One maintained source covers design,

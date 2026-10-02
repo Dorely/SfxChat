@@ -346,6 +346,15 @@ every saved revision has origin/time, with per-cue decision and notes stamps ret
 across unrelated edits. Candidate-note stamps and `review_history` preserve feedback
 attribution independently of general asset reviews. UI drafts survive stale-save errors.
 
+ReviewPanel occupies the existing Playground results slot. AudioCardFrame supplies
+the same title, waveform, format, duration and tags as library/inspector cards; review
+cards attach cue selection, preview gain and candidate notes underneath. Cue controls
+and feedback sit beside the cards, moving below at narrower container widths. The
+Playground header, generation form and jobs remain in place. ReviewLauncher opens or
+creates a board from the header; returning to all sounds restores regular results.
+The WebAudio player reports state to the card presentation as well as RendererPort;
+review cards do not introduce a second native audio player.
+
 RendererPort acknowledges UI commands and reports actual player state. Open commands
 never autoplay. Conflicting simultaneous switches return UI_BUSY. The renderer's
 AuditionPlayer owns one WebAudio context, bounded scheduling (32 voices, short lookahead),

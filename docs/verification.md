@@ -1,3 +1,29 @@
+# Playground review cards (2026-10-02)
+
+- `npm run typecheck` and `npm run build` passed after the card extraction and
+  Playground results integration, including the final native-preview reset on
+  view/review changes. No automated test infrastructure was added.
+- `npm run package` rebuilt the production app and Windows NSIS installer with
+  the revised cards. Nothing was published.
+- A fresh development desktop was started through the bundled CLI. A temporary
+  project/session imported a locally synthesized calibration WAV and opened a cue
+  review. Playback status remained stopped on open.
+- The live accessibility tree showed a single Playground heading and audition
+  results group, with a shared sound-card article (name, format, duration, kind,
+  date, play control), candidate notes/selection and cue feedback controls. The
+  existing generation form followed those results in the same Playground.
+- Explicit CLI repeat playback changed the card action to Stop; explicit stop
+  restored Play. Saving a selected cue through the CLI updated the card to
+  “Selected for this cue”. Editing candidate notes through accessibility enabled
+  Save review and Discard/reload and disabled navigation/play until saved.
+- Screenshot capture failed with `FrameArrived timed out`; direct card clicks
+  failed with `coordinate input geometry is unavailable`. Visual appearance,
+  responsive layout, UI save/export clicks and the return-to-all-sounds click are
+  therefore not manually verified. Accessibility structure and player status are
+  not listening or creative-quality evidence. No provider generation was invoked.
+- The validation desktop was closed, its temporary records/audio/input directory
+  removed, and the original active project restored.
+
 # Agent workbench (2026-10-02)
 
 SfxChat 0.2 was verified without adding automated test infrastructure or invoking
