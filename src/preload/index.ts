@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { SfxApi } from '../shared/types';
 const call = (method: string, ...args: unknown[]) => ipcRenderer.invoke('sfx:call', method, args);
 const api: SfxApi = {
+  operation: (name, args) => call('operation', name, args),
+  installIntegration: input => call('installIntegration', input), chooseDirectory: () => call('chooseDirectory'),
+  uiReady: () => call('uiReady'), uiAcknowledge: (id, error) => call('uiAcknowledge', id, error),
+  playbackReport: (sessionId, state) => call('playbackReport', sessionId, state),
+  onUiCommand: callback => { const listener = (_event: unknown, command: import('../shared/workbench').UiCommand) => callback(command); ipcRenderer.on('sfx:ui-command', listener); return () => ipcRenderer.removeListener('sfx:ui-command', listener); },
   snapshot: () => call('snapshot'), createConversation: () => call('createConversation'),
   renameConversation: (id, title) => call('renameConversation', id, title),
   createProject: name => call('createProject', name), renameProject: (id, name) => call('renameProject', id, name),
@@ -14,7 +19,7 @@ const api: SfxApi = {
   analyzeAudio: (id, input) => call('analyzeAudio', id, input), trimAsset: (conversationId, id, input) => call('trimAsset', conversationId, id, input),
   previewTrim: (id, input) => call('previewTrim', id, input),
   spectrogram: (id, input) => call('spectrogram', id, input),
-  importAudio: (id, kind) => call('importAudio', id, kind), exportAsset: id => call('exportAsset', id), searchAssets: query => call('searchAssets', query),
+  importAudio: (id, kind) => call('importAudio', id, kind), exportAsset: (id, format) => call('exportAsset', id, format), searchAssets: query => call('searchAssets', query),
   startLogin: () => call('startLogin'), cancelLogin: () => call('cancelLogin'), logout: () => call('logout'),
   saveElevenLabsKey: key => call('saveElevenLabsKey', key), saveModel: model => call('saveModel', model),
   saveChatProvider: input => call('saveChatProvider', input), deleteChatProvider: id => call('deleteChatProvider', id),

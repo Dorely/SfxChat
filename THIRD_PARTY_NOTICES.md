@@ -25,3 +25,17 @@ The decoder is unpacked separately for replacement with a compatible rebuilt ver
 
 Generated audio is governed by the provider's terms and the user's account.
 SfxChat's software license does not assign an MIT license to that audio.
+
+The agent command redistributes Node.js 24.21.0 for Windows x64 under its upstream
+[license bundle](third-party/node-LICENSE.txt). The CLI includes the MIT-licensed
+MCP TypeScript SDK and Zod, and ISC-licensed @iarna/toml; their notices also remain
+with application dependencies. Bundled skill guidance is SfxChat-authored material
+extracted from the app's assistant instructions, under the project's MIT license.
+
+The native encoder statically links unmodified libogg 1.3.6 and libvorbis 1.3.7,
+copyright Xiph.Org Foundation and contributors, under their preserved
+[libogg](third-party/encoding/libogg-LICENSE.txt) and
+[libvorbis](third-party/encoding/libvorbis-LICENSE.txt) BSD license notices.
+Pinned source archives, hashes and upstream checksum listings are retained under
+`third-party/encoding` and shipped with the app. [Build/provenance instructions](docs/research/agent-runtime.md)
+describe the helper and runtime; this bookkeeping does not license generated media.

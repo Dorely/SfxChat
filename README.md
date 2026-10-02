@@ -4,7 +4,7 @@ A Windows desktop workbench for creating, comparing, and organizing sound effect
 music with a chat assistant. [Public source](https://github.com/Dorely/SfxChat) ·
 [MIT license](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md).
 
-## v0.1
+## v0.2
 
 Chat occupies a resizable left sidebar. Effects Library, Music Library, and
 conversation-specific Playground views share the right workspace. Generate sound
@@ -32,18 +32,39 @@ tokens for the configured models). The meter is advisory; hidden reasoning and
 server accounting can differ. See [context counter evidence](docs/research/chat-context.md).
 
 The assistant uses direct Codex OAuth and Responses streaming adapted from the
-Lorekeeper and PixelChat references. There is no CLI prerequisite. Source and mock
-tests alone do not establish that a particular account can log in or use a model;
+Lorekeeper and PixelChat references. There is no CLI prerequisite. Source and builds alone do not establish that a particular account can log in or use a model;
 see [verification](docs/verification.md) for actual evidence and live acceptance.
 
-Music, Gemini analysis, mixing and edits beyond trimming/fades, cloud sync, multiple
-libraries, automatic updates, signed installers, and other platform packages are
+Remote services, Gemini analysis, mixing and edits beyond trimming/loop processing,
+cloud sync, automatic updates, signed installers, and other platform packages are
 deferred. Composition plans, audio reference, inpainting, streaming, and stem separation
 are available from the providers but not exposed by this app.
 
+## Agent integration
+
+The installer includes `sfxchat` and `sfxchat mcp`. Agents share the desktop library
+and use persistent cue reviews for audition, explicit playback, selections, feedback,
+and export. The desktop starts on demand; disconnecting a client leaves admitted
+jobs running. Generation request IDs prevent accidental repeat purchases.
+
+```powershell
+sfxchat guidance
+sfxchat skill install --scope project --project C:\work\game --target codex --target claude --mcp --dry-run
+sfxchat skill install --scope user --target codex --target claude --mcp
+```
+
+Settings → Agent integrations provides the same controls. Skills contain the full
+app audio-design guidance and check its version against the running app. See the
+[CLI/MCP and installation guide](docs/agent-workbench.md) and
+[Chimera migration recipe](docs/chimera-integration.md). Actual verification and
+remaining platform/provider gaps are recorded in [verification](docs/verification.md).
+
 ## Development on Windows x64
 
-Use Node.js 22.12 or newer in the 22 release line, npm, and Git.
+Use Node.js 22.12+ in the 22 line (or Node 24), npm, Git, and Visual Studio C++
+Build Tools with the Windows SDK and CMake. The agent build downloads a checksum-pinned
+Node 24 runtime for distribution; installed users need no Node installation. See
+[rebuild details](docs/research/agent-runtime.md).
 
 ```powershell
 npm ci
@@ -80,8 +101,8 @@ only one running instance.
    without a separate spending approval and uses your provider account's credits.
 5. Audition candidates, record feedback, and regenerate. Metadata edits preserve
    original prompts, hashes, requests, and files.
-6. Export original audio through the inspector. Choose a new destination filename;
-   v0.1 refuses to overwrite an existing file.
+6. Export original bytes, PCM WAV, or Ogg Vorbis through the inspector, or export
+   selected cues as a pack. Choose a new destination; existing files are refused.
 
 For manual regeneration, edit **Generation prompt** in the inspector to describe
 the complete desired sound. It starts with the original prompt; **Feedback** is

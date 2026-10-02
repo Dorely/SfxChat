@@ -2,7 +2,7 @@
 
 ## Runtime and ownership
 
-v0.1 uses Electron, React/TypeScript, electron-vite, and electron-builder with a
+v0.2 uses Electron, React/TypeScript, electron-vite, and electron-builder with a
 Windows x64 NSIS target. Exact versions live in the lockfile. This document describes
 implementation; [verification](verification.md) records actual checks.
 [VISION](../VISION.md) remains product intent.
@@ -11,8 +11,9 @@ The main process owns persistence, media, providers, credentials, jobs, and turn
 React owns presentation, selection, forms, and audition controls. The sandboxed,
 isolated preload exposes fixed typed operations. Every IPC call validates arguments
 and verifies the requesting main frame. The renderer has no Node integration or
-general filesystem/shell tool. UI and assistant tools share `WorkbenchService`
-and `Store`; provider-specific transports sit behind service ports.
+general filesystem/shell tool. The shared operation registry owns external schemas/descriptions and delegates to
+`WorkbenchService`, `Store`, media, review playback and export owners. UI and internal
+assistant adapters use these owners too; provider transports remain behind service ports.
 
 The shell is constrained to the window height. Conversation history and workspace
 content scroll inside their panels, keeping the chat composer and headers visible.
@@ -34,7 +35,7 @@ reasoning omitted and flagged. See [evidence and limits](research/chat-context.m
 
 ## Persistence and originals
 
-SQLite uses WAL, foreign keys, transactional migrations, and FTS5 search. Schema v2
+SQLite uses WAL, foreign keys, transactional migrations, and FTS5 search. Schema v3
 stores conversations, messages, assets, jobs, Playground ordering, settings/wire
 history, turn state, and a tool-call ledger. Newer schema versions are rejected.
 
@@ -215,14 +216,16 @@ Runtime instructions and tool field descriptions provide sound-design guidance,
 [reviewed ElevenLabs prompting practices](knowledge/elevenlabs.md), and
 [reviewed music prompting practices](knowledge/elevenlabs-music.md). Per turn,
 `chatInstructions` appends the configured music providers with their exact IDs, the
-active choice, and the provider-specific block (`musicInstructions` in `assistant.ts`),
+active choice, and each configured provider-kind block (`musicInstructions` in `assistant.ts`),
 so the model sees provider-accurate limits and prompting advice and copies a real
 provider ID rather than one it guesses. Provider generation receives no parent audio
-or chat history; `parentId` is local lineage only, and no music provider can continue
-an earlier generation. Manual
+or chat history; `parentId` is local lineage only. These app adapters expose no
+continuation/editing of an earlier generation. Manual
 regeneration uses an editable Generation prompt, prefilled from the original, separately
 from review feedback, and reuses requested duration rather than measured file duration.
-Markdown/skill snapshots are not injected into the assistant at runtime.
+Canonical packaged references under `resources/skill/references` are embedded by the
+build and composed into assistant instructions. The installed skill receives the
+same text, with harness-specific instructions in its concise SKILL.md.
 
 Per turn, chatInstructions also states the current project, the current session title, and
 who set it, together with the rule that only this project's conversations and library are
@@ -296,6 +299,70 @@ parses `steps[]` for the audio block plus any returned lyrics. Provider errors k
 provider's own message, code, and any suggested prompt rewrite. Both adapters record
 the provider label and model on the asset, and neither retries a failed or uncertain
 generation.
+
+## Local agent interfaces
+
+`src/main/operations.ts` defines validated operations with discoverable JSON schemas,
+descriptions, and handlers. CLI and MCP call the same registry over one authenticated
+Windows named pipe. The desktop remains the only database/provider-credential owner.
+External requests provide explicit project/session IDs; review open/play additionally
+selects that context in the UI. Ordinary external operations never consult the visible
+project. The original fixed IPC remains an adapter for dialogs and UI actions, while
+`operation` accepts only registry names and validates their argument schema in main.
+Internal assistant adapters retain durable tool ledgers and modality attachments.
+
+The bridge uses a random 256-bit pipe name and bearer token. Discovery contains the
+endpoint/token/PID, is DPAPI-encrypted for the current user, and lives under a protected
+user/SYSTEM-only directory DACL. Secrets never enter returned discovery diagnostics.
+This is a trusted local-user interface, not a sandbox against other processes running
+as that same user. No TCP listener or separate daemon exists. One newline-delimited
+request per connection is capped at 2 MiB; replies are capped at 32 MiB in the client.
+A disconnected socket does not abort the admitted operation. Shutdown stops admission,
+closes the bridge, aborts provider transport, and waits for owners before closing SQLite.
+
+The CLI bundles its own pinned Node runtime, starts the desktop if discovery is absent
+or stale, and outputs JSON envelopes with stable error codes. MCP uses the official
+SDK's stdio transport, discovered tool schemas, structured results, native PNG/WAV
+content, and a guidance resource. Installation is a separate local operation and
+requires no running desktop. The shared installer supports scoped skills and explicit
+MCP registration, all-target preflight, per-file backups, identical no-ops, and
+explicit conflict replacement. Its config writes preserve unrelated entries.
+
+Schema v3 transactionally adds `reviews`, immutable `review_history`, and
+`external_requests`. A caller generation UUID is bound to normalized input, operation,
+project and session. Each job-admission transaction also persists its job IDs to the
+request row (and the internal waiting tool if applicable). Replays return existing
+IDs; changed input/scope conflicts. Failed/partial admission remains incomplete;
+startup marks unfinished admission interrupted. There is no silent second purchase.
+Music requests record the resolved provider ID at admission rather than following
+subsequent active-provider UI changes. Existing queued/running job recovery is retained.
+
+## Cue reviews, playback and export
+
+Reviews belong to one project/session and store ordered cue briefs, candidate/reference
+IDs, preview gain, repeat settings, decisions and notes. Candidate membership is checked
+against that project. Updates compare expected revisions in the write transaction;
+every saved revision has origin/time, with per-cue decision and notes stamps retained
+across unrelated edits. Candidate-note stamps and `review_history` preserve feedback
+attribution independently of general asset reviews. UI drafts survive stale-save errors.
+
+RendererPort acknowledges UI commands and reports actual player state. Open commands
+never autoplay. Conflicting simultaneous switches return UI_BUSY. The renderer's
+AuditionPlayer owns one WebAudio context, bounded scheduling (32 voices, short lookahead),
+optional single-voice retrigger, and preview gain nodes. Explicit stop and view/session/
+project/review changes clear scheduled and active sources; visibility and native
+hide/minimize events also stop. Other native audio players stop the review player.
+Playback status is not an observation about audio content or listener decisions.
+
+Exporter verifies source integrity and creates exclusive new files/directories. PCM16
+conversion uses the serialized decoded-media owner and existing source/decoded bounds;
+Vorbis runs the bundled helper with a timeout and output cap, quality 5 and mono/stereo
+8–192 kHz bounds. Conversion preserves rate/count and excludes preview gain. Original
+export preserves bytes. Single assets get sidecars; packs get saved decisions (including
+unresolved cues), feedback, source/ancestor records, hashes and conversion settings.
+Failed packs report EXPORT_INCOMPLETE and retain an incomplete manifest. Windows reserved
+filenames are refused before pack creation. See [agent guide](agent-workbench.md) and
+[rebuild/provenance](research/agent-runtime.md).
 
 ## Diagnostics
 

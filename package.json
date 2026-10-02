@@ -1,19 +1,23 @@
 {
   "name": "sfxchat",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A desktop AI sound-effects workbench",
   "author": "Dorely",
   "license": "MIT",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build": "electron-vite build && node scripts/build-agent.mjs",
     "typecheck": "tsc --noEmit",
     "rebuild": "electron-builder install-app-deps",
     "package": "npm run build && electron-builder --win nsis --x64 --publish never",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps",
+    "build:agent": "node scripts/build-agent.mjs",
+    "predev": "node scripts/build-agent.mjs"
   },
   "dependencies": {
+    "@iarna/toml": "2.2.5",
+    "@modelcontextprotocol/server": "2.2.0",
     "better-sqlite3": "13.0.3",
     "js-tiktoken": "1.0.21",
     "mpg123-decoder": "1.0.3",
@@ -24,6 +28,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "9.6.0",
+    "@types/iarna__toml": "2.0.5",
     "@types/node": "24.13.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
@@ -31,6 +36,7 @@
     "electron": "44.3.0",
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
+    "esbuild": "0.25.12",
     "typescript": "7.0.2",
     "vite": "7.3.6"
   }

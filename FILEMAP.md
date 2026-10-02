@@ -1,6 +1,6 @@
 # SfxChat file map
 
-Current state: v0.1 Windows desktop application. Actual platform/provider evidence
+Current state: v0.2 Windows desktop and local agent workbench. Actual platform/provider evidence
 is recorded in [verification](docs/verification.md).
 
 ## Root
@@ -65,8 +65,8 @@ is recorded in [verification](docs/verification.md).
 | [src/main/providers/generic/anthropic.ts](src/main/providers/generic/anthropic.ts) | Anthropic Messages transport with tool_use/tool_result translation. |
 | [src/main/providers/generic/registry.ts](src/main/providers/generic/registry.ts) | Provider/model validation, base-URL normalization, and effort parsing. |
 | [src/main/providers/generic/capabilities.ts](src/main/providers/generic/capabilities.ts) | Capability probes, max-tokens discovery, vision/audio flags, and tool filtering. |
-| [src/main/store.ts](src/main/store.ts) | SQLite schema v2 migration, projects, per-project scoping, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
-| [src/main/media.ts](src/main/media.ts) | Original and chat-attachment storage, import/export, integrity checks, serialized editing/analysis, and bounded decoded cache. |
+| [src/main/store.ts](src/main/store.ts) | SQLite schema v3 migrations, review history and request replay, projects, per-project scoping, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
+| [src/main/media.ts](src/main/media.ts) | Original/chat storage, import, integrity checks, PCM16 conversion, serialized editing/analysis, and bounded decoded cache. |
 | [src/main/audio.ts](src/main/audio.ts) | Bounded MP3/WAV decode, timestamped amplitude windows, energy event detection, loop-seam probing, exact sample-frame trims, loop crossfades, fades, mono WAV clip rendering, and float32 WAV rendering. |
 | [src/main/png.ts](src/main/png.ts) | Minimal 8-bit RGB PNG encoder over Node zlib (filter 0 scanlines, hand-rolled CRC32 and chunks). |
 | [src/main/spectrogram.ts](src/main/spectrogram.ts) | Self-contained STFT spectrogram rendering: radix-2 FFT, Hann window, full-scale-dB scaling, colormap, time/frequency grid, and exact mapping. |
@@ -74,7 +74,7 @@ is recorded in [verification](docs/verification.md).
 | [src/main/service.ts](src/main/service.ts) | Shared library operations, project-scoped snapshots, sequential generation jobs, chat turns, capability-gated media attachments (transcript cards, history eviction), and tool execution. |
 | [src/main/diagnostics.ts](src/main/diagnostics.ts) | Rotating local JSONL records, diagnostic references, and credential redaction. |
 | [src/main/providers/errors.ts](src/main/providers/errors.ts) | Bounded provider error parsing, request IDs, readable failures, and safe diagnostic fields. |
-| [src/main/assistant.ts](src/main/assistant.ts) | Runtime sound-design, ElevenLabs SFX, and per-provider music prompting/revision instructions, session naming guidance, plus assistant tool definitions. |
+| [src/main/assistant.ts](src/main/assistant.ts) | Composition of canonical guidance and internal assistant tool adapters. |
 | [src/main/index.ts](src/main/index.ts) | Electron lifecycle, validated IPC, media protocol, provider wiring, and native dialogs. |
 | [src/preload/index.ts](src/preload/index.ts) | Isolated renderer bridge with fixed operations and change notifications. |
 | [src/main/providers/auth.ts](src/main/providers/auth.ts) | Codex browser OAuth/PKCE, refresh serialization, and login lifecycle. |
@@ -89,3 +89,33 @@ is recorded in [verification](docs/verification.md).
 | [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Waveform trim selection, fine-window zoom, fades, spectrogram panel, exact rendered preview, and derived-asset saving. |
 | [src/renderer/ChatContextMeter.tsx](src/renderer/ChatContextMeter.tsx) | Throttled composer context indicator, threshold styling, and estimate details. |
 | [.github/workflows/windows.yml](.github/workflows/windows.yml) | Credential-free Windows typecheck and installer artifact build. |
+
+## Agent workbench
+
+| File | Responsibility |
+| --- | --- |
+| [docs/agent-workbench.md](docs/agent-workbench.md) | CLI/MCP operations, scopes, installation, review/export contracts and limits. |
+| [docs/chimera-integration.md](docs/chimera-integration.md) | Migration recipe for Chimera's raw API and HTML audition workflow; no sibling edits. |
+| [docs/research/agent-runtime.md](docs/research/agent-runtime.md) | Pinned runtime/encoder rebuild, official sources and guidance extraction provenance. |
+| [src/cli/index.ts](src/cli/index.ts) | JSON CLI, on-demand desktop startup, authenticated client, stdio MCP tools/media/resource. |
+| [src/main/operations.ts](src/main/operations.ts) | Shared operation schemas, descriptions, context validation and owning-operation dispatch. |
+| [src/main/bridge.ts](src/main/bridge.ts) | Private named-pipe endpoint, authenticated framing and protected discovery. |
+| [src/main/ui-port.ts](src/main/ui-port.ts) | Explicit renderer commands, acknowledgment, visibility stop and actual playback status. |
+| [src/main/exporter.ts](src/main/exporter.ts) | Integrity-checked original/WAV/Vorbis exports, cue packs, provenance and incomplete manifests. |
+| [src/shared/workbench.ts](src/shared/workbench.ts) | Review, revision attribution, playback, installation and error contracts. |
+| [src/shared/guidance.ts](src/shared/guidance.ts) | Canonical packaged guidance imports shared by app and CLI. |
+| [src/shared/install.ts](src/shared/install.ts) | Project/user/custom skills and Codex/Claude MCP config installation with conflict/backups. |
+| [src/shared/native.ts](src/shared/native.ts) | Narrow bounded helper transport for DPAPI and directory ACL operations. |
+| [src/renderer/ReviewPanel.tsx](src/renderer/ReviewPanel.tsx) | Cue boards, references, preview settings, decisions/notes, stale revisions and pack export. |
+| [src/renderer/audition.ts](src/renderer/audition.ts) | Exclusive WebAudio playback, repeats, overlap/retrigger, cancellation and state reports. |
+| [src/renderer/AgentSettings.tsx](src/renderer/AgentSettings.tsx) | Scoped integration installation, explicit MCP registration, status and previews. |
+| [resources/skill/SKILL.md](resources/skill/SKILL.md) | Installable workflow and required reference/version discovery instructions. |
+| [resources/skill/references/design.md](resources/skill/references/design.md), [workflow.md](resources/skill/references/workflow.md) | Complete shared creative direction, music brief examples, scope, jobs, session naming, reviews and export. |
+| [resources/skill/references/elevenlabs-sfx.md](resources/skill/references/elevenlabs-sfx.md) | Complete SFX prompting, controls, examples, constraints and revisions. |
+| [resources/skill/references/editing.md](resources/skill/references/editing.md) | Measurement/visual/listening evidence, exact trims, fades, seam probes and loops. |
+| [resources/skill/references/elevenlabs-music.md](resources/skill/references/elevenlabs-music.md), [gemini-lyria.md](resources/skill/references/gemini-lyria.md) | Complete supported-provider music guidance, controls and examples. |
+| [scripts/build-agent.mjs](scripts/build-agent.mjs) | CLI/runtime/skill packaging, pinned source verification and native helper build. |
+| [native/helper.cpp](native/helper.cpp), [native/CMakeLists.txt](native/CMakeLists.txt) | Windows DPAPI/ACL/PATH and bounded Vorbis encoder, linked against pinned sources. |
+| [installer/agent.nsh](installer/agent.nsh) | User command discovery installation/removal hooks. |
+| [third-party/encoding/](third-party/encoding/) | Unmodified libogg/libvorbis source archives, SHA-256 manifests, official listings and BSD notices. |
+| [third-party/node-LICENSE.txt](third-party/node-LICENSE.txt) | Pinned redistributed Node runtime and dependency license bundle. |

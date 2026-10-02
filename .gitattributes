@@ -16,3 +16,11 @@
 /third-party/*.txt text eol=lf
 # Preserve upstream COPYING bytes, including its original trailing whitespace.
 /third-party/LGPL-2.1-mpg123.txt -text whitespace=-blank-at-eol
+
+*.cpp text eol=lf
+*.nsh text eol=lf
+/native/CMakeLists.txt text eol=lf
+/third-party/encoding/*-LICENSE.txt -text whitespace=-blank-at-eol
+/third-party/node-LICENSE.txt -text whitespace=-blank-at-eol,-space-before-tab
+
+/third-party/encoding/*-checksums.txt -text

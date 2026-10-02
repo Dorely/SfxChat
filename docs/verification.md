@@ -1,3 +1,71 @@
+# Agent workbench (2026-10-02)
+
+SfxChat 0.2 was verified without adding automated test infrastructure or invoking
+paid generation. Temporary inputs/exports and scoped harness directories were created
+outside the repository; checks used the actual CLI, named-pipe owner and renderer.
+The app instances started for validation were closed, temporary projects/media and
+exports were removed, and the previously active project was restored.
+
+- `npm run typecheck`: passed, including the final review-revision stop change.
+- `npm run package`: production main/preload/renderer, bundled CLI and pinned runtime,
+  native helper and Windows NSIS installer built successfully. Source archives and
+  runtime SHA-256 pins were checked by the build. Unsigned output is
+  `release/SfxChat Setup 0.2.0.exe`; nothing was published.
+- CLI cold-started the development build, then the packaged `win-unpacked` desktop
+  after closing development. Each served status through encrypted discovery. The
+  discovery directory has a protected DACL with two rules; discovery is encrypted
+  and an invalid token returned `UNAUTHORIZED`.
+- Twenty-two live CLI checks passed: review persistence across restart, rejection,
+  stale revision conflict, six concurrent readers, bounded feedback wait waking on
+  change, decision attribution surviving unrelated edits, revision history, project/
+  session and asset isolation, absolute import-path enforcement, failed-admission
+  replay without jobs, conflicting request-ID reuse, no provider dispatch, review
+  opening without autoplay, explicit repeat/stop, complete selected-cue OGG manifest,
+  preview-gain exclusion, destination collision refusal, exact original hash, and
+  runtime/packaged/canonical guidance agreement.
+- Final packaged follow-up: saving a new review revision stopped scheduled playback.
+  Local analysis returned the source rate/channels, and a loop trim through the registry
+  retained its parent lineage.
+- Real MCP stdio initialization returned 36 tools; review inspection returned the
+  saved revision. Spectrogram and bounded clip calls returned native image/png and
+  audio/wav blocks plus structured results. The guidance resource returned all six
+  documents. Stderr was empty. Disconnecting MCP left the desktop available.
+- Scoped installations for Codex and Claude passed in temporary project and temporary
+  user-home roots. Checked dry-run with no writes, 18-file combined installation,
+  identical no-op, unrelated JSON/TOML configuration preservation, conflict refusal,
+  forced replacement with backup, and uninstall retaining unrelated entries. No real
+  personal harness configuration was changed by these checks.
+- A locally synthesized 0.5-second stereo 44.1 kHz calibration WAV was imported.
+  Original export retained SHA-256
+  `b658e6a715519733b87c408995282e5aa92c107039a57227524a40bf8c46e1ca`.
+  WAV and OGG metadata both retained 44.1 kHz, two channels and 0.5-second duration;
+  the OGG codec was Vorbis I. The encoder refused unsupported multichannel input with
+  its explicit limit. Actual renderer repeat/stop was checked on the WAV; container
+  inspection alone is not OGG playback or listening evidence.
+- The packaged review UI's accessibility tree contained the saved cue, preview gain,
+  revision, agent attribution, notes, decision controls, ordered-cue controls and
+  export controls. Setting cue feedback through accessibility made Save review
+  enabled. Direct clicks were blocked by the computer-control tool's unavailable
+  coordinate geometry; screenshots also timed out. UI save/export, visual layout,
+  native hide/minimize cancellation and Settings installation clicks remain unverified.
+- Compared all three old assistant instruction blocks against canonical references.
+  All quoted examples survived. Five paragraphs differ only for the reviewed
+  interface/modality adaptations and narrower app-provider editing claim. Complete
+  design, SFX, music, provider, editing, evidence and session-label guidance remains.
+  Package resources contain SKILL.md, guidance.json and all six references. Runtime
+  guidance hash and each returned document matched the source/build snapshot.
+- Documentation links and UTF-8 were checked; `git diff --check` passed. Production
+  dependency audit reported zero vulnerabilities. No provider/login success, semantic
+  audio quality or human selection approval is inferred from these checks.
+
+Remaining live coverage: paid generation completion, cancellation/recovery of actual
+provider jobs, partial large-batch admission under shutdown, uncertain billed outcomes,
+fresh NSIS install/uninstall and its PATH hook, consumption/trust by running Codex or
+Claude harnesses, and the UI gaps above. Replay was exercised with a nonexistent
+provider ID that failed before dispatch; it is evidence of durable request identity,
+not a billed-provider retry exercise. Existing queued/running recovery code was
+preserved and reviewed. Skill/media rights are not established by software licensing.
+
 ## Chat transcript media cards (2026-09-22)
 
 Every spectrogram image and listening clip the assistant attaches is now an

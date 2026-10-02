@@ -1,3 +1,4 @@
+import { operationDefinitions } from './operations';
 import { Store } from './store';
 import { MediaLibrary, generatedFields } from './media';
 import { analysisSchema, generationSchema, musicGenerationSchema, patchSchema, spectrogramSchema, trimSchema } from './validation';
@@ -35,6 +36,7 @@ export interface ServicePorts {
   safeError(error: unknown): string;
 }
 export class WorkbenchService {
+  operation?: (name: string, args: unknown) => Promise<unknown>;
   private contextCounter = new ContextTokenCounter();
   private liveContext = new Map<string, { input: unknown[]; text: string }>();
   private turns = new Map<string, AbortController>();
@@ -45,6 +47,7 @@ export class WorkbenchService {
   private stopped = false;
   constructor(readonly store: Store, readonly media: MediaLibrary, private ports: ServicePorts, private changed: () => void, private diagnostics?: Pick<DiagnosticLog, 'record'>) {}
   private requireOpen() { if (this.stopped) throw new Error('SfxChat is closing.'); }
+  settings() { return this.ports.settings(); }
   async snapshot(): Promise<Snapshot> {
     const projectId = this.store.activeProjectId();
     const visible = new Set(this.store.conversations(projectId).map(conversation => conversation.id));
@@ -52,7 +55,7 @@ export class WorkbenchService {
       projects: this.store.projects(), activeProjectId: projectId, conversations: this.store.conversations(projectId),
       messages: this.store.messages(projectId), assets: this.store.assets(projectId), jobs: this.store.jobs(projectId),
       playground: this.store.playground(projectId), settings: await this.ports.settings(),
-      activeTurns: [...this.turns.keys()].filter(id => visible.has(id))
+      activeTurns: [...this.turns.keys()].filter(id => visible.has(id)), reviews: this.store.reviews(projectId)
     };
   }
   private chatInstructions(conversationId: string, settings: SettingsStatus) {
@@ -102,7 +105,7 @@ export class WorkbenchService {
     const target = requested ?? settings.musicProviders.find(entry => entry.id === settings.activeMusicId) ?? settings.musicProviders.find(entry => entry.ready);
     if (!target) throw new Error('Configure a music provider in Settings first.');
     if (!target.ready) throw new Error(`Add the API key for ${target.label} in Settings first.`);
-    const input: MusicGenerationInput = { ...parsed, kind: 'music', providerId: parsed.providerId ?? null };
+    const input: MusicGenerationInput = { ...parsed, kind: 'music', providerId: target.id };
     const jobs = await this.queueCandidates(conversationId, input, 'music', callId);
     this.store.addMessage(conversationId, 'tool', `Queued ${jobs.length} track${jobs.length === 1 ? '' : 's'} on ${target.label} (${target.model}): ${input.prompt}`);
     this.pump(); return { jobIds: jobs.map(j => j.id) };
@@ -182,10 +185,13 @@ export class WorkbenchService {
     this.requireOpen();
     this.store.requireConversation(conversationId);
     const projectId = this.store.conversation(conversationId).projectId;
+    const imported: Asset[] = [];
     for (const path of paths) {
       const asset = await this.media.import(path, projectId, kind); this.requireOpen(); this.store.insertAsset(asset); this.store.addToPlayground(conversationId, [asset.id]);
       this.store.addMessage(conversationId, 'tool', `Imported “${asset.name}”.`);
+      imported.push(asset);
     }
+    return imported;
   }
   analyzeAudio(id: string, raw: AudioAnalysisInput, projectId: string) {
     this.requireOpen();
@@ -313,24 +319,37 @@ export class WorkbenchService {
       if (!schema) throw new Error('Unknown assistant tool.');
       const args = schema.parse(JSON.parse(call.arguments));
       const projectId = this.store.conversation(conversationId).projectId;
+      const operate = (name: string, fields: Record<string, unknown>) => {
+        if (!this.operation) throw new Error('Workbench operations are not ready.');
+        const definition = operationDefinitions[name as keyof typeof operationDefinitions];
+        const shape = definition.schema.shape;
+        return this.operation(name, { ...('projectId' in shape ? { projectId } : {}), ...('sessionId' in shape ? { sessionId: conversationId } : {}), ...fields });
+      };
       let result: unknown;
       const attachments: ToolAttachment[] = [];
       switch (call.name) {
         case 'generate_sounds': {
-          const queued = await this.generate(conversationId, args as GenerationInput, call.id);
+          const requestId = randomUUID();
+          this.store.waitTool(call.id, { requestId, message: 'Admission began; recover this request or inspect session jobs before generating again.' });
+          const queued = await operate('generate_sounds', { input: args, requestId }) as { jobIds: string[]; error?: string };
+          this.store.waitTool(call.id, queued);
+          if (queued.error) { result = queued; break; }
           const jobs = await this.waitForJobs(queued.jobIds, signal);
           result = { ...queued, jobs, assets: jobs.flatMap(job => job.assetId ? [this.store.asset(job.assetId, projectId)] : []) };
           break;
         }
         case 'generate_music': {
-          const queued = await this.generateMusic(conversationId, args as MusicGenerationInput, call.id);
+          const requestId = randomUUID();
+          this.store.waitTool(call.id, { requestId, message: 'Admission began; recover this request or inspect session jobs before generating again.' });
+          const queued = await operate('generate_music', { input: args, requestId }) as { jobIds: string[]; error?: string };
+          this.store.waitTool(call.id, queued);
+          if (queued.error) { result = queued; break; }
           const jobs = await this.waitForJobs(queued.jobIds, signal);
           result = { ...queued, jobs, assets: jobs.flatMap(job => job.assetId ? [this.store.asset(job.assetId, projectId)] : []) };
           break;
         }
-        case 'search_assets': result = this.store.search((args as { query: string }).query, projectId); break;
-        case 'inspect_asset': result = this.store.asset((args as { id: string }).id, projectId); break;
-        case 'analyze_audio': { const { id, ...input } = args as AudioAnalysisInput & { id: string }; result = await this.analyzeAudio(id, input, projectId); break; }
+        case 'search_assets': case 'inspect_asset': result = await operate(call.name, args); break;
+        case 'analyze_audio': { const { id, ...input } = args as AudioAnalysisInput & { id: string }; result = await operate(call.name, { id, input }); break; }
         case 'trim_asset': { const { id, ...input } = args as TrimInput & { id: string }; result = await this.trimAsset(conversationId, id, input, call.id, signal); break; }
         case 'spectrogram_view': {
           const { id, ...input } = args as SpectrogramInput & { id: string };
@@ -370,10 +389,11 @@ export class WorkbenchService {
           attachments.push({ label: `audio clip of “${asset.name}” (${clipStart.toFixed(2)}–${clipEnd.toFixed(2)} s)`, kind: 'audio', mime: 'audio/wav', base64: clip.bytes.toString('base64') });
           break;
         }
-        case 'update_asset': { const { id, patch } = args as { id: string; patch: AssetPatch }; result = this.store.updateAsset(id, patch, projectId, conversationId); break; }
+        case 'update_asset': result = await operate(call.name, args); break;
         case 'rename_session': { const { title } = args as { title: string }; const renamed = this.store.renameConversation(conversationId, title, 'assistant'); this.store.addMessage(conversationId, 'tool', `Renamed this session to “${renamed.title}”.`); result = { title: renamed.title }; break; }
         case 'set_playground': this.store.setPlayground(conversationId, (args as { assetIds: string[] }).assetIds); this.store.addMessage(conversationId, 'tool', 'Updated the comparison playground.'); result = { updated: true }; break;
         case 'inspect_jobs': result = this.store.jobs().filter(j => j.conversationId === conversationId); break;
+        default: result = await operate(call.name, args);
       }
       const output = JSON.stringify(result); this.store.finishTool(call.id, output);
       this.diagnostics?.record('tool.completed', { conversationId, callId: call.id, name: call.name }); return { output, attachments };

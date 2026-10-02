@@ -4,10 +4,19 @@ directories:
   output: release
 files:
   - out/**/*
+  - '!out/agent/**/*'
+  - '!out/skill/**/*'
+  - '!out/native-build/**/*'
+  - '!out/native-sources/**/*'
   - package.json
   - LICENSE
   - THIRD_PARTY_NOTICES.md
   - third-party/**/*
+extraResources:
+  - from: out/agent
+    to: agent
+  - from: out/skill
+    to: skill
 asarUnpack:
   - node_modules/better-sqlite3/**/*
   - node_modules/mpg123-decoder/**/*
@@ -21,4 +30,5 @@ nsis:
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
   license: LICENSE
+  include: installer/agent.nsh
 npmRebuild: true

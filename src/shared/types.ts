@@ -1,3 +1,4 @@
+import type { ReviewBoard, UiCommand, PlaybackState, OperationResponse, InstallationInput } from './workbench';
 export type Review = 'unreviewed' | 'accepted' | 'rejected';
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'uncertain';
 export type AssetKind = 'effect' | 'music';
@@ -80,13 +81,20 @@ export interface MusicProviderEntry { id: string; label: string; kind: MusicProv
 export interface SettingsStatus { codexReady: boolean; elevenLabsReady: boolean; secureStorageAvailable: boolean; loginPending: boolean; model: string; error: string | null; chatModels: ChatModelOption[]; activeChat: ActiveChatSelection; providers: ChatProviderEntry[]; musicProviders: MusicProviderEntry[]; activeMusicId: string | null }
 export interface ChatContext { model: string; tokens: number; limit: number | null; includesHiddenReasoning: boolean; includesEstimatedMedia: boolean }
 /** Every list below is scoped to `activeProjectId`; other projects' rows never reach the renderer. */
-export interface Snapshot { projects: Project[]; activeProjectId: string; conversations: Conversation[]; messages: Message[]; assets: Asset[]; jobs: Job[]; playground: Record<string, string[]>; settings: SettingsStatus; activeTurns: string[] }
+export interface Snapshot { projects: Project[]; activeProjectId: string; conversations: Conversation[]; messages: Message[]; assets: Asset[]; jobs: Job[]; playground: Record<string, string[]>; settings: SettingsStatus; activeTurns: string[]; reviews: ReviewBoard[] }
 export interface AssetPatch { name?: string; description?: string; tags?: string[]; collections?: string[]; review?: Review; feedback?: string }
 export interface ModelCapabilityResult {
   perEffort: Record<string, 'pass' | 'fail'>; failedEfforts: string[];
   maxTokens: number | null; vision: CapabilityFlag; audio: CapabilityFlag; error?: string;
 }
 export interface SfxApi {
+  operation(name: string, args: unknown): Promise<OperationResponse>;
+  installIntegration(input: InstallationInput): Promise<OperationResponse>;
+  chooseDirectory(): Promise<string | null>;
+  uiReady(): Promise<void>;
+  uiAcknowledge(id: string, error?: string): Promise<void>;
+  playbackReport(sessionId: string, state: PlaybackState): Promise<void>;
+  onUiCommand(callback: (command: UiCommand) => void): () => void;
   snapshot(): Promise<Snapshot>;
   chatContext(conversationId: string, draft: string): Promise<ChatContext>;
   openLogs(): Promise<void>;
@@ -107,7 +115,7 @@ export interface SfxApi {
   spectrogram(id: string, input: SpectrogramInput): Promise<Uint8Array>;
   setPlayground(conversationId: string, assetIds: string[]): Promise<void>;
   importAudio(conversationId: string, kind?: AssetKind): Promise<void>;
-  exportAsset(id: string): Promise<void>;
+  exportAsset(id: string, format?: 'original' | 'wav' | 'ogg'): Promise<void>;
   searchAssets(query: string): Promise<Asset[]>;
   startLogin(): Promise<void>;
   cancelLogin(): Promise<void>;

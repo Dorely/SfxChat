@@ -8,7 +8,7 @@ Its assistant should combine sound-design knowledge with skill in prompting AI a
 
 - Start from a description, a reference, an imported sound, or an existing library item.
 - Help translate intent into a clear brief and effective provider-specific prompts. Use small, informative sets of alternatives and preserve useful feedback between iterations.
-- Generate and refine sound effects and music through suitable provider capabilities. Let the assistant select and switch between configured services according to the task, available capabilities, and authorized spending. Music providers are configured separately from chat providers, and the assistant's runtime guidance follows whichever music provider is active.
+- Generate and refine sound effects and music through suitable provider capabilities. Let the assistant select and switch between configured services according to the task, available capabilities, and authorized spending. Music providers are configured separately from chat providers, and shared guidance covers every configured provider, including per-request overrides.
 - A request to create sounds should lead directly to generation, without separate spending approvals or app-imposed generation allowances.
 - Make audition and comparison central: playback, repeated-use testing, useful technical checks, and listener decisions should inform revisions.
 - Preserve originals, derived versions, exact generation prompts, provenance, and feedback so users can understand how a result was made and repeat useful workflows.
@@ -35,6 +35,21 @@ bar switches between them. Provider configuration and credentials stay app-level
 they belong to the account rather than to the work. Sessions stay labeled: the assistant
 names a session as soon as the goal is clear and renames it when the subject materially
 changes, and the user can rename any session or project in place.
+
+## Agent sound workbench
+
+The desktop also serves local agents through a bundled CLI and stdio MCP. Agents
+should reuse its provider operations, durable projects/sessions, library and jobs,
+then open the same audition UI instead of building temporary audition apps. Explicit
+playback, cue-specific selections, rejection and notes make human decisions available
+to the agent without conflating playback with listening evidence.
+
+Installable skills support project and harness-wide scopes and contain the complete
+sound-design guidance used by the app assistant. One maintained source covers design,
+provider prompting, revisions, analysis, trimming, loops and evidence limits. Agents
+can discover current guidance/capabilities and export originals or converted selected
+cue packs with provenance. Windows/local agents come first; remote services and a
+layered timeline editor are outside this milestone.
 
 ## Product character
 

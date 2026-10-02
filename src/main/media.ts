@@ -1,5 +1,4 @@
-import { mkdir, readFile, writeFile, rename, copyFile, stat } from 'node:fs/promises';
-import { constants } from 'node:fs';
+import { mkdir, readFile, writeFile, rename, stat } from 'node:fs/promises';
 import { join, extname, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { parseBuffer } from 'music-metadata';
@@ -27,6 +26,24 @@ export class MediaLibrary {
     return pending;
   }
   analyze(asset: Asset, input: AudioAnalysisInput) { return this.withAudio(asset, audio => analyzeAudio(audio, asset, input)); }
+  pcmWav(asset: Asset) {
+    return this.withAudio(asset, async audio => {
+      const channels = audio.channels.length, frames = audio.channels[0].length;
+      const bytes = Buffer.alloc(44 + frames * channels * 2);
+      bytes.write('RIFF', 0); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVE', 8);
+      bytes.write('fmt ', 12); bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(1, 20); bytes.writeUInt16LE(channels, 22);
+      bytes.writeUInt32LE(audio.sampleRate, 24); bytes.writeUInt32LE(audio.sampleRate * channels * 2, 28);
+      bytes.writeUInt16LE(channels * 2, 32); bytes.writeUInt16LE(16, 34); bytes.write('data', 36); bytes.writeUInt32LE(bytes.length - 44, 40);
+      for (let offset = 0; offset < frames; offset += 32768) {
+        for (let frame = offset; frame < Math.min(frames, offset + 32768); frame++) for (let ch = 0; ch < channels; ch++) {
+          const sample = Math.max(-1, Math.min(1, audio.channels[ch][frame]));
+          bytes.writeInt16LE(Math.round(sample * (sample < 0 ? 32768 : 32767)), 44 + (frame * channels + ch) * 2);
+        }
+        await new Promise<void>(resolve => setImmediate(resolve));
+      }
+      return bytes;
+    });
+  }
   renderTrim(asset: Asset, input: TrimInput) { return this.withAudio(asset, audio => renderTrim(audio, asset, input)); }
   clip(asset: Asset, input: { startSeconds?: number; endSeconds?: number }): Promise<ClipRender> {
     return this.withAudio(asset, audio => renderClip(audio, input));
@@ -69,11 +86,7 @@ export class MediaLibrary {
     if (!metadata.format.codec || !metadata.format.duration) throw new Error('The file does not contain playable audio.');
     return this.save(bytes, extension.slice(1) as 'mp3' | 'wav', { projectId, name: basename(path, extension), source: 'imported', kind });
   }
-  async export(asset: Asset, destination: string) {
-    const original = await readFile(this.path(asset));
-    if (createHash('sha256').update(original).digest('hex') !== asset.hash) throw new Error('Original file integrity check failed.');
-    await copyFile(this.path(asset), destination, constants.COPYFILE_EXCL);
-  }
+
 }
 
 export function generatedFields(input: GenerationInput | MusicGenerationInput, kind: AssetKind, projectId: string): Partial<Asset> & { projectId: string } {

@@ -137,3 +137,18 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .chat-attachment audio { display: block; width: 100%; height: 36px; background: transparent; }
 .chat-attachment figcaption { padding: 5px 9px; color: var(--quiet); font: 11px 'DM Mono', monospace; }
 .chat-history:focus, .chat-history:focus-visible, .workspace-panel:focus, .workspace-panel:focus-visible, .drawer-scroll:focus, .drawer-scroll:focus-visible, .conversation-list:focus, .conversation-list:focus-visible, .settings-dialog:focus, .settings-dialog:focus-visible, .trim-editor-scroll:focus, .trim-editor-scroll:focus-visible { outline: 2px solid var(--lime); outline-offset: -2px; }
+/* Cue reviews share the existing Playground and its application-owned operations. */
+.playground-with-reviews { overflow: auto; min-height: 0; flex: 1; }
+.playground-with-reviews .playground-panel { overflow: visible; }
+.review-panel { margin: 20px; padding: 20px; border: 1px solid #46534a; border-radius: 12px; background: #1d241f; }
+.review-toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+.review-panel label, .settings-section > label { display: flex; gap: 8px; flex-direction: column; margin: 8px 0; }
+.review-toolbar label { margin: 0; }
+.review-panel input, .review-panel textarea, .review-panel select, .review-toolbar select, .review-toolbar input { background: #141a16; border: 1px solid #48594d; border-radius: 5px; padding: 8px; color: #e7ece8; }
+.review-panel textarea { width: 100%; min-height: 52px; resize: vertical; }
+.review-panel button, .review-toolbar button { border: 1px solid #526358; border-radius: 5px; padding: 8px 12px; background: #29382e; color: #edf4ee; cursor: pointer; }
+.review-panel button:disabled, .review-toolbar button:disabled { opacity: .45; cursor: default; }
+.review-cue { padding: 16px; margin: 16px 0; border: 1px solid #405346; border-radius: 8px; }
+.review-candidate { padding: 12px; margin: 12px 0; background: #141a16; border-radius: 6px; }
+.review-toolbar input[type=number] { width: 105px; }
+.integration-result { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }

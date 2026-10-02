@@ -1,3 +1,9 @@
+import { Operations } from './operations';
+import { Exporter } from './exporter';
+import { startBridge, operationError } from './bridge';
+import { RendererPort } from './ui-port';
+import { installIntegration } from '../shared/install';
+import { randomUUID } from 'node:crypto';
 import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } from 'electron';
 import { join } from 'node:path';
 import { mkdir, readFile } from 'node:fs/promises';
@@ -29,6 +35,9 @@ let window: BrowserWindow | null = null;
 let service: WorkbenchService | null = null;
 let auth: CodexAuth | null = null;
 let quitting = false;
+let operations: Operations | null = null;
+let bridge: Awaited<ReturnType<typeof startBridge>> | null = null;
+let rendererPort: RendererPort | null = null;
 let eventTimer: ReturnType<typeof setTimeout> | null = null;
 const diagnostics = new DiagnosticLog(app.getPath('userData'));
 const changed = () => {
@@ -121,6 +130,13 @@ else {
     };
     service = new WorkbenchService(store, media, livePorts, changed, diagnostics);
     store.recover(); store.ensureConversation(store.activeProjectId());
+    const agentRoot = app.isPackaged ? join(process.resourcesPath, 'agent') : join(__dirname, '../agent');
+    rendererPort = new RendererPort(() => window, store);
+    const exporter = new Exporter(media, store, join(agentRoot, 'sfxchat-helper.exe'));
+    operations = new Operations(service, rendererPort, exporter);
+    service.operation = (name, args) => operations!.call(name, args);
+    bridge = await startBridge(root, join(agentRoot, 'sfxchat-helper.exe'), operations);
+    const context = (id: string) => ({ projectId: store.conversation(id).projectId, sessionId: id });
 
     protocol.handle('sfx-media', async request => {
       try {
@@ -145,6 +161,11 @@ else {
     });
 
     const handlers: Record<string, (...args: any[]) => unknown> = {
+      operation: async (name, args) => { try { return { ok: true, result: await operations!.call(name, args, 'user') }; } catch (e) { return operationError(e); } },
+      installIntegration: async input => { try { return { ok: true, result: await installIntegration(input, join(agentRoot, 'sfxchat-runtime.exe'), join(agentRoot, 'cli.cjs')) }; } catch (e) { return operationError(e); } },
+      chooseDirectory: async () => { const result = await dialog.showOpenDialog(window!, { properties: ['openDirectory'] }); return result.canceled ? null : result.filePaths[0]; },
+      uiReady: () => rendererPort!.markReady(), uiAcknowledge: (id, error) => rendererPort!.acknowledge(id, error),
+      playbackReport: (id, state) => { store.requireConversation(id); rendererPort!.report(id, state); },
       snapshot: () => service!.snapshot(), createConversation: () => store.createConversation(),
       renameConversation: (id, title) => { store.renameConversation(id, title, 'user'); },
       createProject: name => { const project = store.createProject(name); store.setActiveProject(project.id); store.ensureConversation(project.id); return project; },
@@ -153,22 +174,23 @@ else {
       chatContext: (id, draft) => service!.chatContext(id, draft),
       openLogs: async () => { const directory = join(root, 'logs'); await mkdir(directory, { recursive: true }); const error = await shell.openPath(directory); if (error) throw new Error(error); },
       sendMessage: (id, text) => service!.sendMessage(id, text), cancelTurn: id => service!.cancelTurn(id),
-      generate: (id, input) => service!.generate(id, input).then(() => undefined), cancelJob: id => service!.cancelJob(id),
-      generateMusic: (id, input) => service!.generateMusic(id, input).then(() => undefined),
-      updateAsset: (id, patch, conversationId) => service!.updateAsset(id, patch, conversationId),
-      analyzeAudio: (id, input) => service!.analyzeAudio(id, input, store.activeProjectId()), trimAsset: (conversationId, id, input) => service!.trimAsset(conversationId, id, input),
+      generate: (id, input) => operations!.call('generate_sounds', { ...context(id), requestId: randomUUID(), input }, 'user').then(requireAdmission), cancelJob: id => operations!.call('cancel_job', { ...context(store.job(id).conversationId), id }, 'user'),
+      generateMusic: (id, input) => { const { kind: _kind, ...fields } = input; return operations!.call('generate_music', { ...context(id), requestId: randomUUID(), input: fields }, 'user').then(requireAdmission); },
+      updateAsset: (id, patch, conversationId) => operations!.call('update_asset', { ...context(conversationId ?? store.ensureConversation(store.activeProjectId())), id, patch }, 'user'),
+      analyzeAudio: (id, input) => operations!.call('analyze_audio', { projectId: store.activeProjectId(), id, input }, 'user'), trimAsset: (conversationId, id, input) => operations!.call('trim_asset', { ...context(conversationId), id, input }, 'user'),
       previewTrim: (id, input) => service!.previewTrim(id, input, store.activeProjectId()),
       spectrogram: (id, input) => service!.spectrogram(id, input, store.activeProjectId()),
-      setPlayground: (id, ids) => { store.setPlayground(id, ids); store.addMessage(id, 'tool', 'Updated the comparison playground.'); },
-      searchAssets: query => store.search(query, store.activeProjectId()),
+      setPlayground: (id, ids) => operations!.call('set_playground', { ...context(id), assetIds: ids }, 'user'),
+      searchAssets: query => operations!.call('search_assets', { projectId: store.activeProjectId(), query }, 'user'),
       importAudio: async (id, kind) => {
         const result = await dialog.showOpenDialog(window!, { title: 'Import audio', filters: [{ name: 'Audio', extensions: ['wav', 'mp3'] }], properties: ['openFile', 'multiSelections'] });
-        if (!result.canceled) await service!.importFiles(id, result.filePaths, kind ?? 'effect');
+        if (!result.canceled) await operations!.call('import_audio', { ...context(id), paths: result.filePaths, kind: kind ?? 'effect' }, 'user');
       },
-      exportAsset: async id => {
+      exportAsset: async (id, format = 'original') => {
         const asset = store.asset(id, store.activeProjectId());
-        const result = await dialog.showSaveDialog(window!, { title: 'Export original audio', defaultPath: `${asset.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')}.${asset.format}`, filters: [{ name: 'Original audio', extensions: [asset.format] }] });
-        if (!result.canceled && result.filePath) await media.export(asset, result.filePath);
+        const extension = format === 'original' ? asset.format : format;
+        const result = await dialog.showSaveDialog(window!, { title: 'Export audio', defaultPath: `${asset.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')}.${extension}`, filters: [{ name: format === 'original' ? 'Original audio' : format === 'wav' ? 'PCM WAV' : 'Ogg Vorbis', extensions: [extension] }] });
+        if (!result.canceled && result.filePath) await operations!.call('export_asset', { projectId: asset.projectId, id, destination: result.filePath, format }, 'user');
       },
       startLogin: () => auth!.startLogin(), cancelLogin: () => auth!.cancelLogin(), logout: () => auth!.logout(),
       saveElevenLabsKey: async key => { if (key.trim()) await secrets.set('elevenlabs', key.trim()); else await secrets.delete('elevenlabs'); credentialError = null; changed(); },
@@ -197,6 +219,10 @@ else {
     });
     window = new BrowserWindow({ width: 1440, height: 940, minWidth: 1000, minHeight: 650, title: 'SfxChat', backgroundColor: '#191b19', show: false, webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
     window.removeMenu();
+    window.on('hide', () => rendererPort?.stopForVisibility());
+    window.on('minimize', () => rendererPort?.stopForVisibility());
+    window.on('closed', () => rendererPort?.unavailable());
+    window.webContents.on('render-process-gone', () => rendererPort?.unavailable());
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     window.webContents.on('render-process-gone', (_event, details) => diagnostics.record('renderer.stopped', { reason: details.reason, exitCode: details.exitCode }));
     window.webContents.on('will-navigate', event => event.preventDefault());
@@ -209,6 +235,9 @@ else {
   app.on('window-all-closed', () => app.quit());
   app.on('before-quit', event => {
     if (quitting) return; event.preventDefault(); quitting = true;
-    void Promise.all([service?.shutdown(), auth?.cancelLogin()]).finally(() => { if (eventTimer) clearTimeout(eventTimer); service?.store.close(); app.quit(); });
+    rendererPort?.unavailable();
+    void Promise.all([bridge?.close(), operations?.close(), service?.shutdown(), auth?.cancelLogin()]).finally(() => { if (eventTimer) clearTimeout(eventTimer); service?.store.close(); app.quit(); });
   });
 }
+
+function requireAdmission(value: unknown) { const result = value as { status: string; error?: string }; if (result.status !== 'admitted') throw new Error(result.error || 'Generation admission incomplete; inspect jobs before retrying.'); }

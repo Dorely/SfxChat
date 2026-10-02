@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
+import { WorkbenchError, type ReviewBoard, type ReviewContent } from '../shared/workbench';
 import type { Asset, AssetKind, AssetPatch, ChatAttachment, Conversation, GenerationInput, Job, Message, MusicGenerationInput, Project, TitleSource } from '../shared/types';
 
 const now = () => new Date().toISOString();
@@ -30,7 +31,7 @@ export class Store {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 2) { this.db.close(); throw new Error('This library was created by a newer SfxChat version.'); }
+    if (version > 3) { this.db.close(); throw new Error('This library was created by a newer SfxChat version.'); }
     if (version === 0) this.db.transaction(() => {
       // Fresh library gets the complete v2 shape. project_id carries no REFERENCES clause so a
       // fresh and an upgraded database stay structurally identical; projects are never deleted.
@@ -65,6 +66,71 @@ export class Store {
       this.db.prepare('UPDATE assets SET project_id=?').run(project.id);
       this.db.prepare('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(ACTIVE_PROJECT_KEY, project.id);
     })();
+    if (version < 3) this.db.transaction(() => {
+      this.db.exec(`
+        CREATE TABLE reviews (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, session_id TEXT NOT NULL REFERENCES conversations(id), revision INTEGER NOT NULL, json TEXT NOT NULL);
+        CREATE TABLE review_history (review_id TEXT NOT NULL REFERENCES reviews(id), revision INTEGER NOT NULL, json TEXT NOT NULL, PRIMARY KEY(review_id,revision));
+        CREATE TABLE external_requests (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, session_id TEXT NOT NULL REFERENCES conversations(id), operation TEXT NOT NULL, args TEXT NOT NULL, status TEXT NOT NULL, result TEXT NOT NULL);
+        PRAGMA user_version = 3;
+      `);
+    })();
+  }
+  reviews(projectId: string, sessionId?: string): ReviewBoard[] {
+    return (sessionId ? this.db.prepare('SELECT json FROM reviews WHERE project_id=? AND session_id=? ORDER BY rowid DESC').all(projectId, sessionId)
+      : this.db.prepare('SELECT json FROM reviews WHERE project_id=? ORDER BY rowid DESC').all(projectId)).map(decode<ReviewBoard>);
+  }
+  review(id: string, projectId: string): ReviewBoard {
+    const row = this.db.prepare('SELECT json FROM reviews WHERE id=? AND project_id=?').get(id, projectId);
+    if (!row) throw new WorkbenchError('NOT_FOUND', 'Review not found.');
+    return decode<ReviewBoard>(row);
+  }
+  saveReview(projectId: string, sessionId: string, content: ReviewContent, origin: 'user' | 'agent', id?: string, expectedRevision?: number): ReviewBoard {
+    if (this.conversation(sessionId).projectId !== projectId) throw new WorkbenchError('NOT_FOUND', 'Session not found in project.');
+    for (const cue of content.cues) {
+      for (const candidate of cue.candidates) this.asset(candidate.assetId, projectId);
+      if (cue.referenceId) this.asset(cue.referenceId, projectId);
+    }
+    const result = this.db.transaction(() => {
+      const old = id ? this.review(id, projectId) : undefined;
+      if (old && (old.sessionId !== sessionId || old.revision !== expectedRevision)) throw new WorkbenchError('REVISION_CONFLICT', 'Review changed; read it again and reconcile your edit.', { revision: old.revision });
+      const stamp = { origin, at: now(), revision: (old?.revision ?? 0) + 1 };
+      const cueAudit = Object.fromEntries(content.cues.map(cue => {
+        const previous = old?.cues.find(c => c.key === cue.key), audit = old?.cueAudit?.[cue.key];
+        const fallback = old ? { origin: old.origin, at: old.updatedAt, revision: old.revision } : stamp;
+        return [cue.key, {
+          decision: previous?.decision === cue.decision && previous?.selectedAssetId === cue.selectedAssetId ? audit?.decision ?? fallback : stamp,
+          notes: previous?.notes === cue.notes ? audit?.notes ?? fallback : stamp,
+          candidates: Object.fromEntries(cue.candidates.map(c => [c.assetId, previous?.candidates.find(p => p.assetId === c.assetId)?.notes === c.notes ? audit?.candidates[c.assetId] ?? fallback : stamp]))
+        }];
+      }));
+      const board: ReviewBoard = { ...content, cueAudit, id: old?.id ?? randomUUID(), projectId, sessionId, revision: (old?.revision ?? 0) + 1, createdAt: old?.createdAt ?? now(), updatedAt: now(), origin };
+      this.db.prepare('INSERT INTO reviews VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,json=excluded.json').run(board.id, projectId, sessionId, board.revision, JSON.stringify(board));
+      this.db.prepare('INSERT INTO review_history VALUES (?,?,?)').run(board.id, board.revision, JSON.stringify(board));
+      return board;
+    })();
+    this.changed(); return result;
+  }
+  reviewHistory(id: string, projectId: string): ReviewBoard[] {
+    this.review(id, projectId);
+    return this.db.prepare('SELECT json FROM review_history WHERE review_id=? ORDER BY revision').all(id).map(decode<ReviewBoard>);
+  }
+  beginExternal(id: string, projectId: string, sessionId: string, operation: string, args: string) {
+    const old = this.db.prepare('SELECT * FROM external_requests WHERE id=?').get(id) as { project_id: string; session_id: string; operation: string; args: string } | undefined;
+    if (old) {
+      if (old.project_id !== projectId || old.session_id !== sessionId || old.operation !== operation || old.args !== args) throw new WorkbenchError('REQUEST_CONFLICT', 'Request ID already belongs to different arguments.');
+      return false;
+    }
+    this.db.prepare('INSERT INTO external_requests VALUES (?,?,?,?,?,?,?)').run(id, projectId, sessionId, operation, args, 'admitting', JSON.stringify({ jobIds: [] }));
+    return true;
+  }
+  externalRequest(id: string) {
+    const row = this.db.prepare('SELECT status,result FROM external_requests WHERE id=?').get(id) as { status: string; result: string };
+    return { ...JSON.parse(row.result), status: row.status } as { status: string; jobIds: string[]; error?: string };
+  }
+  finishExternal(id: string, error?: string) {
+    const record = this.externalRequest(id);
+    this.db.prepare('UPDATE external_requests SET status=?,result=? WHERE id=?').run(error ? 'incomplete' : 'admitted', JSON.stringify({ ...record, ...(error ? { error } : {}) }), id);
+    this.changed();
   }
   close() { this.db.close(); }
   projects(): Project[] { return this.db.prepare('SELECT json FROM projects ORDER BY rowid').all().map(decode<Project>); }
@@ -220,7 +286,16 @@ export class Store {
         const job: Job = { id: randomUUID(), conversationId, kind, status: 'queued', input: { ...input, count: 1 }, assetId: null, error: null, createdAt: now() };
         this.db.prepare('INSERT INTO jobs VALUES (?,?,?,?)').run(job.id, conversationId, job.status, JSON.stringify(job)); jobs.push(job);
       }
-      if (toolCallId) {
+      if (toolCallId?.startsWith('external:')) {
+        const row = this.db.prepare('SELECT result FROM external_requests WHERE id=?').get(toolCallId) as { result: string };
+        const result = JSON.parse(row.result);
+        result.jobIds.push(...jobs.map(j => j.id));
+        this.db.prepare('UPDATE external_requests SET result=? WHERE id=?').run(JSON.stringify(result), toolCallId);
+        // Internal assistant admission records the caller ID before queueing. Keep its
+        // recoverable job IDs in the same transaction as each admitted batch.
+        this.db.prepare("UPDATE tool_calls SET result=? WHERE conversation_id=? AND status='waiting' AND json_extract(result,'$.requestId')=?")
+          .run(JSON.stringify({ ...result, requestId: toolCallId.slice(9) }), conversationId, toolCallId.slice(9));
+      } else if (toolCallId) {
         const row = this.db.prepare('SELECT result FROM tool_calls WHERE id=?').get(toolCallId) as { result: string | null } | undefined;
         const earlier = row?.result ? JSON.parse(row.result).jobIds ?? [] : [];
         this.db.prepare('UPDATE tool_calls SET status=?,result=? WHERE id=?').run('waiting', JSON.stringify({ jobIds: [...earlier, ...jobs.map(j => j.id)] }), toolCallId);
@@ -244,6 +319,7 @@ export class Store {
     return { fresh: true, result: null };
   }
   finishTool(id: string, result: string) { this.db.prepare('UPDATE tool_calls SET status=?,result=? WHERE id=?').run('completed', result, id); }
+  waitTool(id: string, result: unknown) { this.db.prepare('UPDATE tool_calls SET status=?,result=? WHERE id=?').run('waiting', JSON.stringify(result), id); }
   repairToolHistory(conversationId: string, input: unknown[]): { input: unknown[]; restoredCallIds: string[] } {
     this.requireConversation(conversationId);
     const repaired: unknown[] = [];
@@ -287,6 +363,7 @@ export class Store {
   }
   setTurn(conversationId: string, status: string) { this.db.prepare('INSERT INTO turns VALUES (?,?) ON CONFLICT(conversation_id) DO UPDATE SET status=excluded.status').run(conversationId, status); this.changed(); }
   recover() {
+    this.db.prepare("UPDATE external_requests SET status='interrupted' WHERE status='admitting'").run();
     this.db.transaction(() => {
       for (const j of this.jobs().filter(j => j.status === 'running')) this.updateJob({ ...j, status: 'uncertain', error: 'App stopped during the provider request. It was not replayed.' });
       for (const m of this.messages().filter(m => m.status === 'running')) this.updateMessage({ ...m, status: 'failed', text: m.text + '\n[Interrupted when the app closed.]' });

@@ -150,3 +150,17 @@ SHA-256 values below were computed during extraction. Paths are relative to the 
 | PixelChat | `AGENTS.md` | `534973ae479f47d119a7c86bab236640ab230bfc1b3c81e4a4e57890ab53011c` |
 | Shellmate | `FILEMAP.md` | `090e155e82e8dc75afff1c9443816b9a458f95bd36201ed7943117101dfd692b` |
 | Shellmate | `AGENTS.md` | `80aeeaa6573018a210ef17261a03bde86b7c76c5a308ff83e53af2445b9a5f65` |
+
+## Agent workbench (2026-10-02)
+
+The full assistant design/prompting/editing guidance was extracted to canonical
+[packaged references](../resources/skill/references/) from SfxChat commit
+`7f0038d7a821a1649b3c932f6baf1fb2d9ce0d52`. Those references now feed both runtime
+instructions and the installable skill. The earlier active-provider-only description
+above is historical; current turns include every configured provider-kind block.
+
+[Agent runtime provenance](research/agent-runtime.md) records official provider fact
+revalidation, pinned Node/codec sources and licenses, MCP/harness documentation, and
+ImageGenCli's installation precedent. [Chimera migration](chimera-integration.md)
+records the source revision and workflow mapping. Sibling project files, credentials,
+account caches and databases were not copied or modified.
