@@ -32,6 +32,15 @@
 - Verify work with `typecheck`, the production build, and live/manual checks instead,
   and record what was actually run. Temporary local helpers are allowed, but keep them
   outside the repository and delete them when the check is done.
+- For manual UI verification, use `npm run dev:browser` and control the printed
+  loopback URL with browser tools. This runs the real renderer against Electron's
+  main-process operations, actual library, and OS-backed credentials; it is not a
+  mock or an automated test mode. Keep paid calls within existing authorization.
+  Use the native desktop only for desktop-specific integration checks. Do not
+  repeatedly attempt native computer use for ordinary UI checks. Stop the browser
+  development host after validation and record any browser/desktop coverage gaps.
+  Use one-shot playback for verification, leave user Loop toggles off, and stop
+  audio before leaving a page. Agent tools may open reviews but cannot play audio.
 - Use UTF-8 and LF for authored text. Preserve third-party license notices and document changes to vendored material.
 
 ## Credentials and provider operations

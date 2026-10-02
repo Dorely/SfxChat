@@ -1,4 +1,10 @@
 Generation queues durable jobs while the UI shows progress. External clients receive
+the same shared generate_sounds, generate_music, or generate_voice operations.
+Use list_voices for existing voice discovery before a new voice selection. Preserve
+original text and prepared providerText separately and keep Gemini style out of the
+transcript. Revise from full parent scripts and feedback using parentId; no parent
+audio is sent. Model/default voice selections are independent of the shared vendor key.
+External clients receive
 job IDs immediately; use jobs_wait for a bounded wait. The internal assistant waits
 for results within its turn. Use returned asset IDs to name, tag, and organize the results. A stopped
 turn can leave a job running; inspect jobs when resuming, never regenerate it just
@@ -20,8 +26,8 @@ in a few words at most; it is a label, not a deliverable.
 
 Use SfxChat's cue reviews for audition and handoff. Prepare an ordered board with
 briefs, candidates, optional current references, and saved preview gains. Opening a
-review does not start audio. Only explicit playback requests play or repeat sound;
-stop before changing the listening task. Saved cue decisions distinguish unreviewed,
+review does not start audio. Playback requires a user click; agents cannot start or
+stop it through CLI/MCP or assistant tools. Users can toggle Loop in the UI. Saved cue decisions distinguish unreviewed,
 a selected candidate, and reject-all. Keep cue and candidate notes specific. Read the
 current revision before updating, supply expectedRevision, and reconcile concurrent
 feedback instead of overwriting it. review_history retains prior saved revisions;

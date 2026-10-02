@@ -1,8 +1,9 @@
 import { operationDefinitions } from './operations';
 import { z } from 'zod';
-import type { MusicProviderEntry } from '../shared/types';
+import type { AudioProviderId, MusicProviderEntry, VoiceProviderEntry } from '../shared/types';
+import { VOICE_MODELS } from '../shared/voice-models';
 import { musicProviderLabel } from '../shared/music-models';
-import { analysisSchema, clipSchema, generationSchema, idSchema, musicToolSchema, patchSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
+import { analysisSchema, clipSchema, generationSchema, idSchema, musicToolSchema, voiceToolSchema, patchSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
 
 import { guidanceDocuments } from '../shared/guidance';
 export const instructions = ['design.md', 'elevenlabs-sfx.md', 'workflow.md', 'editing.md'].map(name => guidanceDocuments[name]).join('\n\n') + '\nThe internal assistant cannot read arbitrary files or execute shell commands.';
@@ -17,7 +18,7 @@ const lyriaMusicInstructions = guidanceDocuments['gemini-lyria.md'];
  * from a deleted provider until the IDs are listed.
  */
 export function musicInstructions(providers: MusicProviderEntry[], activeMusicId: string | null): string {
-  if (!providers.length) return 'No music provider is configured, so generate_music cannot run. Tell the user to add a music provider and its API key in Settings, and keep working on sound effects in the meantime.';
+  if (!providers.length) return 'No music target is configured, so generate_music cannot run. Tell the user to select a music model in Settings. It uses the shared vendor key.';
   const active = providers.find(entry => entry.id === activeMusicId) ?? providers.find(entry => entry.ready) ?? providers[0]!;
   const name = (entry: MusicProviderEntry) => entry.label === musicProviderLabel(entry.kind) ? entry.label : `${entry.label} — ${musicProviderLabel(entry.kind)}`;
   const roster = providers.map(entry => `${name(entry)}, model ${entry.model}, ${entry.ready ? 'key saved' : 'no key yet'}, ${entry.id === active.id ? 'active, ' : ''}providerId "${entry.id}"`).join('; ');
@@ -25,12 +26,20 @@ export function musicInstructions(providers: MusicProviderEntry[], activeMusicId
   return `${header}\n${[...new Set(providers.map(p => p.kind))].map(kind => kind === 'elevenlabs-music' ? elevenlabsMusicInstructions : lyriaMusicInstructions).join('\n\n')}`;
 }
 
-const additionalTools = ['guidance', 'review_list', 'review_create', 'review_get', 'review_history', 'review_update', 'review_wait', 'review_open', 'playback_play', 'playback_stop', 'playback_status', 'export_asset', 'export_review', 'import_audio', 'cancel_job'] as const;
+export function voiceInstructions(providers: VoiceProviderEntry[], activeId: AudioProviderId): string {
+  const roster = providers.map(p => `${p.label}, providerId "${p.id}", ${p.ready ? 'key saved' : 'key needed'}, model ${p.model}, voiceId "${p.voiceId}"${p.id === activeId ? ', active' : ''}`).join('; ');
+  const models = providers.map(p => `${p.id}: ${VOICE_MODELS[p.id].map(m => m.id).join(', ')}`).join('; ');
+  return `Voice providers: ${roster}. Supported TTS models: ${models}. Use these IDs exactly, discover voices with list_voices, and never request credentials in tool arguments.
+${providers.map(p => guidanceDocuments[p.id === 'elevenlabs' ? 'elevenlabs-voice.md' : 'gemini-voice.md']).join('\n\n')}`;
+}
+
+const additionalTools = ['list_voices', 'guidance', 'review_list', 'review_create', 'review_get', 'review_history', 'review_update', 'review_wait', 'review_open', 'playback_status', 'export_asset', 'export_review', 'import_audio', 'cancel_job'] as const;
 const additionalSchemas = Object.fromEntries(additionalTools.map(name => [name, z.object(Object.fromEntries(Object.entries(operationDefinitions[name].schema.shape).filter(([key]) => key !== 'projectId' && key !== 'sessionId'))).strict()]));
 export const toolSchemas = {
   ...additionalSchemas,
   generate_sounds: generationSchema,
   generate_music: musicToolSchema,
+  generate_voice: voiceToolSchema,
   search_assets: z.object({ query: z.string() }).strict(),
   inspect_asset: z.object({ id: idSchema }).strict(),
   analyze_audio: analysisSchema.extend({ id: idSchema }),
@@ -43,10 +52,11 @@ export const toolSchemas = {
   inspect_jobs: z.object({}).strict()
 };
 const descriptions: Record<keyof typeof toolSchemas, string> = {
+  generate_voice: 'Generate single-speaker voice clips from an exact script. Discover voice IDs with list_voices. Keep original wording in text and any deliberate tags or requested pronunciation changes in providerText. Gemini style is separate; Eleven v4 uses square-bracket vocal tags and rejects SSML and speed. Waits for results and returns jobs and assets in the voice library and playground. Each candidate is separately billed; follow requested scope.',
   generate_sounds: 'Generate ElevenLabs sound effects from a complete audible description. Each candidate receives the same prompt with no chat history or reference audio. Use the fields for duration, looping and adherence; inspect field descriptions. Waits for results and returns jobs and assets to organize; results appear automatically in the effects library and playground.',
   generate_music: 'Generate music on the configured music provider. Use it for songs, tracks, background beds, loops, jingles, scores, themes, and anything with musical structure or lyrics; isolated musical sounds stay with generate_sounds. The prompt is the complete musical direction, including arrangement and lyrics, and the same wording behaves differently on different providers, so follow the active provider block in your instructions. Each candidate is a separate billed generation and tracks are slower than sound effects, so respect the requested count. durationMs sets whole-track length, instrumental leaves vocals out, and providerId targets another configured provider for one request instead of the active one. Waits for results and returns jobs and assets to organize; results appear automatically in the music library and playground.',
-  search_assets: 'Search names, descriptions, tags, collections, original prompts, and feedback across the effects and music libraries. An empty query lists everything.',
-  inspect_asset: 'Get immutable generation provenance and editable metadata for one asset, whether a sound effect or a music track.',
+  search_assets: 'Search names, descriptions, tags, collections, original prompts, and feedback across the effects, music and voice libraries. An empty query lists everything.',
+  inspect_asset: 'Get immutable generation provenance and editable metadata for one asset, whether an effect, music track or voice clip.',
   analyze_audio: 'Measure decoded audio locally. Returns absolute seconds, sample frames, sample rate, channel count and linear full-scale min/max/peak/RMS bins across all channels. Default 96 bins, maximum 512. Optional startSeconds/endSeconds zoom into a smaller absolute source interval. events:true also returns energy-based event intervals (exact frames) as candidate cut regions. seamProbe measures how the interval end wraps back to its start for loop design. Source files and decoded audio are bounded to 64 MiB. These measurements are not semantic hearing.',
   trim_asset: 'Create a new trimmed float32 WAV from a known asset, preserving the original and exact source lineage. startSeconds/endSeconds use the decoded source timeline from analyze_audio; end is exclusive. Optional fadeInMs/fadeOutMs are linear edge fades (default 0, combined length must fit selection). loop:true instead renders a seamless loop of the selection: the tail crossfades into the head over crossfadeMs (try 5-20 ms for a click-free seam), fades are not allowed with it, and the output is shortened by the crossfade length; the edit record carries the seam. name is optional. Returns the new asset and adds it to the current playground; uses no audio-generation provider.',
   spectrogram_view: 'Render a spectrogram of a library asset interval and attach it as a PNG image you can see. Returns the exact time/frequency mapping for the image plus the attachment reference. Use log frequency (default) for music and low-frequency structure, linear for harmonic detail; request a smaller absolute interval to zoom. The image is a secondary view of measured energy: read structure and boundaries from it, but take exact cut points from analyze_audio sample frames, never from pixel positions. Withheld automatically when the active model cannot view images.',

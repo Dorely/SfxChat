@@ -13,7 +13,7 @@ audition mechanics with SfxChat:
 | Raw ElevenLabs HTTP calls / local output bookkeeping | `generate_sounds` using explicit project/session and retained request UUID; recover with `inspect_jobs` / `jobs_wait` |
 | Temporary HTML booth from `build_review.py` | Persistent `review_create`, then `review_open` in the existing app |
 | Cue groups, current reference and gain controls | Cue keys/briefs/candidates/reference IDs and separate preview gains |
-| Timed repeats / overlap or single voice | Saved repeat interval plus explicit `playback_play` and `playback_stop` |
+| User audition / looping | Manual Play/Stop and Loop in review cards; agents open reviews without autoplay |
 | Pick/reject JSON and candidate notes | Revisioned review decisions, `review_wait` and cue/candidate feedback |
 | Hand-copied preview WAV picks | `export_review` with a complete manifest and chosen original/WAV/OGG encoding |
 

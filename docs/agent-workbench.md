@@ -78,6 +78,16 @@ the displayed project does not change a caller's context. Only review open/play
 intentionally switches the visible workspace. Concurrent UI switches can return
 `UI_BUSY`; retry after checking status. General library operations remain independent.
 
+`generate_voice` uses the same generation envelope below. Its `input` contains exact
+`text`, optional separate `providerText`, `providerId` (`elevenlabs` or `gemini`),
+`model`, `voiceId`, optional Gemini `style` or supported ElevenLabs numeric controls,
+`count`, `name`, and `parentId`. Omitting model/voice uses saved defaults, frozen at
+admission. `list_voices` accepts providerId, search, language, and pageToken without
+project/session scope. `guidance` includes canonical voice references, roster/defaults,
+and schemas; read the applicable provider document before preparing speech. One shared
+vendor key is configured in Settings, never in CLI/MCP requests. Voice libraries,
+review/export operations, and transcript search use the same scoped asset operations.
+
 Generation input has this envelope (replace IDs with real IDs):
 
 ```json
@@ -110,18 +120,18 @@ Neither readiness nor successful compilation proves that a provider account work
 
 `review_create` stores `{title,cues}` for a session. Each ordered cue has a stable
 filename-safe key, label, brief, candidates, optional current reference, notes,
-preview gains, repeat interval, and single-voice/overlapping-tail choice. A decision
+preview gains. A decision
 is `unreviewed`, `selected` with a candidate ID, or `rejected` with no selected ID.
 These are separate from an asset's general library review. Each saved revision is
 retained; current decision and notes attribution survives unrelated board edits.
 `review_update` requires `expectedRevision`; `review_get`, `review_history`, and
 `review_wait` retrieve feedback without erasing another person's edit.
 
-`review_open` never autoplays. `playback_play` requires a cue key and one of its
-candidate/reference IDs. Repeat is explicit and uses the saved interval (40–3000 ms)
-and preview gain. Overlapping playback is bounded to 32 voices; single voice stops
-at each retrigger. Stop cancels scheduled starts as well as active sources. Review,
-session/project/view changes, window hide/minimize, and explicit stop end playback.
+`review_open` never autoplays. CLI/MCP and assistant tools have no playback start
+or stop controls. Users click Play/Stop in a review card; Loop is an optional user
+checkbox, off on opening a review. A single WebAudio source plays the clip, with
+no timed retrigger scheduler or overlapping repeats. View, session/project/review
+changes, visibility loss, native hide/minimize, and explicit stop end playback.
 Playback status is renderer state, never evidence of hearing or approval. Model
 listening requires an audio-capable harness; the human's audition remains separate.
 

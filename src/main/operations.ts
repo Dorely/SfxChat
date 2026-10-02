@@ -2,7 +2,7 @@ import { isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { WorkbenchService } from './service';
-import { analysisSchema, clipSchema, generationSchema, idSchema, musicToolSchema, patchSchema, projectNameSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
+import { analysisSchema, assetKindSchema, clipSchema, generationSchema, idSchema, musicToolSchema, voiceToolSchema, voiceListSchema, patchSchema, projectNameSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
 import { boardInputSchema, WorkbenchError, type UiCommand, type PlaybackState } from '../shared/workbench';
 import { guidanceDocuments } from '../shared/guidance';
 import type { Exporter } from './exporter';
@@ -27,13 +27,15 @@ export const operationDefinitions = {
   rename_session: { schema: obj({ ...session, title: titleSchema }), description: 'Keep a session label specific to the current work.' },
   generate_sounds: { schema: obj({ ...generation, input: generationSchema }), description: 'Queue sound-effect candidates. Returns durable IDs immediately. Respect requested count; never retry uncertain work with a new request ID.' },
   generate_music: { schema: obj({ ...generation, input: musicToolSchema }), description: 'Queue music candidates on a configured provider. Returns durable IDs immediately; read guidance for the selected provider.' },
+  generate_voice: { schema: obj({ ...generation, input: voiceToolSchema }), description: 'Queue single-speaker speech from an exact script. Discover voices with list_voices and read provider guidance. Gemini style is separate from text; ElevenLabs v4 uses square-bracket audio tags. Returns durable job IDs; never retry uncertain work.' },
+  list_voices: { schema: voiceListSchema, description: 'Discover provider voice IDs, descriptions and language/accent labels. Read successive pages with the same filters. Uses the shared saved key, without synthesis.' },
   inspect_jobs: { schema: obj(session), description: 'Inspect this session’s jobs and resulting asset IDs.' },
   jobs_wait: { schema: obj({ ...session, jobIds: z.array(idSchema).min(1), ...wait }), description: 'Bounded wait for specified jobs; timeout does not cancel generation.' },
   cancel_job: { schema: obj({ ...session, id: idSchema }), description: 'Cancel queued work or stop a running request with uncertain provider outcome.' },
   search_assets: { schema: obj({ ...project, query: z.string().default('') }), description: 'Search assets, prompts, traits and feedback in a project.' },
   inspect_asset: { schema: obj({ ...project, id: idSchema }), description: 'Read immutable provenance and current asset metadata.' },
   update_asset: { schema: obj({ ...session, id: idSchema, patch: patchSchema }), description: 'Name, tag, organize, and review an asset without changing its bytes.' },
-  import_audio: { schema: obj({ ...session, paths: z.array(z.string().min(1)).min(1).max(128), kind: z.enum(['effect', 'music']).default('effect') }), description: 'Import WAV/MP3 files using absolute paths into this project/session.' },
+  import_audio: { schema: obj({ ...session, paths: z.array(z.string().min(1)).min(1).max(128), kind: assetKindSchema.default('effect') }), description: 'Import WAV/MP3 files using absolute paths into this project/session.' },
   set_playground: { schema: obj({ ...session, assetIds: z.array(idSchema) }), description: 'Arrange the session’s existing comparison board.' },
   analyze_audio: { schema: obj({ ...project, id: idSchema, input: analysisSchema.default({}) }), description: 'Measure exact sample-frame amplitude, events and seam data; not semantic listening.' },
   trim_asset: { schema: obj({ ...session, id: idSchema, input: trimSchema }), description: 'Save a trim or loop derivative with exact lineage; original unchanged.' },
@@ -46,8 +48,6 @@ export const operationDefinitions = {
   review_update: { schema: obj({ ...board, expectedRevision: z.number().int().positive(), content: boardInputSchema }), description: 'Save review content only if its revision still matches. Reconcile conflicts with current feedback.' },
   review_wait: { schema: obj({ ...board, afterRevision: z.number().int().min(0), ...wait }), description: 'Wait up to 30 seconds for a saved review revision change.' },
   review_open: { schema: obj(board), description: 'Show and focus this review in SfxChat without autoplay.' },
-  playback_play: { schema: obj({ ...board, assetId: idSchema, repeat: z.boolean().default(false), cueKey: z.string().min(1) }), description: 'Explicitly play a candidate/reference using its saved preview gain and optional repeat cadence.' },
-  playback_stop: { schema: obj(session), description: 'Stop playback belonging to this session.' },
   playback_status: { schema: obj(session), description: 'Read actual renderer playback status. Does not imply listening approval.' },
   export_asset: { schema: obj({ ...project, id: idSchema, ...exportFields }), description: 'Export an original, PCM WAV or Ogg Vorbis plus provenance; refuses existing files.' },
   export_review: { schema: obj({ ...board, expectedRevision: z.number().int().positive(), ...exportFields }), description: 'Export selected cues and a manifest of choices, unresolved cues, feedback and provenance into a new directory.' }
@@ -81,8 +81,8 @@ export class Operations {
     const sessionJobs = () => store.jobs(a.projectId).filter(j => j.conversationId === a.sessionId);
     const getJobs = () => a.jobIds.map((id: string) => { const job = sessionJobs().find(j => j.id === id); if (!job) throw new WorkbenchError('NOT_FOUND', 'Job not found in session.'); return job; });
     switch (name) {
-      case 'status': { const settings = await s.settings(); return { version: 1, ready: true, elevenLabsReady: settings.elevenLabsReady, musicProviders: settings.musicProviders, activeMusicId: settings.activeMusicId }; }
-      case 'guidance': { const settings = await s.settings(); return { version: 1, hash: createHash('sha256').update(JSON.stringify(guidanceDocuments)).digest('hex'), documents: guidanceDocuments, providers: { effects: { kind: 'elevenlabs', model: 'eleven_text_to_sound_v2', ready: settings.elevenLabsReady }, music: settings.musicProviders, activeMusicId: settings.activeMusicId }, controls: { effects: z.toJSONSchema(generationSchema), music: z.toJSONSchema(musicToolSchema) } }; }
+      case 'status': { const settings = await s.settings(); return { version: 1, ready: true, elevenLabsReady: settings.elevenLabsReady, musicProviders: settings.musicProviders, activeMusicId: settings.activeMusicId, voiceProviders: settings.voiceProviders, activeVoiceId: settings.activeVoiceId, providerKeys: settings.providerKeys }; }
+      case 'guidance': { const settings = await s.settings(); return { version: 1, hash: createHash('sha256').update(JSON.stringify(guidanceDocuments)).digest('hex'), documents: guidanceDocuments, providers: { effects: { kind: 'elevenlabs', model: 'eleven_text_to_sound_v2', ready: settings.elevenLabsReady }, music: settings.musicProviders, activeMusicId: settings.activeMusicId, voiceProviders: settings.voiceProviders, activeVoiceId: settings.activeVoiceId, providerKeys: settings.providerKeys }, controls: { effects: z.toJSONSchema(generationSchema), music: z.toJSONSchema(musicToolSchema), voice: z.toJSONSchema(voiceToolSchema) } }; }
       case 'projects_list': return store.projects();
       case 'project_get': return store.project(a.projectId);
       case 'project_create': return store.createProject(a.name);
@@ -91,12 +91,14 @@ export class Operations {
       case 'session_create': return store.renameConversation(store.createConversation(a.projectId), a.title, origin === 'user' ? 'user' : 'assistant');
       case 'session_get': return { session: store.conversation(a.sessionId), playground: store.playground(a.projectId)[a.sessionId] ?? [], jobs: sessionJobs() };
       case 'rename_session': return store.renameConversation(a.sessionId, a.title, origin === 'user' ? 'user' : 'assistant');
-      case 'generate_sounds': case 'generate_music': {
+      case 'list_voices': return s.listVoices(a as unknown as import('../shared/types').VoiceListInput);
+      case 'generate_sounds': case 'generate_music': case 'generate_voice': {
         const id = `external:${a.requestId}`;
         if (store.beginExternal(id, a.projectId, a.sessionId, name, canonical(a.input))) {
           try {
             if (name === 'generate_sounds') await s.generate(a.sessionId, a.input, id);
-            else await s.generateMusic(a.sessionId, { ...a.input, kind: 'music' }, id);
+            else if (name === 'generate_music') await s.generateMusic(a.sessionId, { ...a.input, kind: 'music' }, id);
+            else await s.generateVoice(a.sessionId, { ...a.input, kind: 'voice' }, id);
             store.finishExternal(id);
           } catch (e) { store.finishExternal(id, e instanceof Error ? e.message : 'Admission failed.'); }
         }
@@ -122,12 +124,6 @@ export class Operations {
       case 'review_update': review(); return store.saveReview(a.projectId, a.sessionId, a.content, origin, a.reviewId, a.expectedRevision);
       case 'review_wait': { await this.waitUntil(() => review().revision > a.afterRevision, a.timeoutMs); return review(); }
       case 'review_open': review(); return this.ui.send({ action: 'open', projectId: a.projectId, sessionId: a.sessionId, reviewId: a.reviewId });
-      case 'playback_play': {
-        const r = review(), cue = r.cues.find(c => c.key === a.cueKey), candidate = cue?.candidates.find(c => c.assetId === a.assetId);
-        if (!cue || (!candidate && cue.referenceId !== a.assetId)) throw new WorkbenchError('NOT_FOUND', 'Sound not found in cue.');
-        return this.ui.send({ action: 'play', projectId: a.projectId, sessionId: a.sessionId, reviewId: r.id, assetId: a.assetId, gainDb: candidate?.gainDb ?? cue.referenceGainDb, ...(a.repeat ? { repeatIntervalMs: cue.repeatIntervalMs, singleVoice: cue.singleVoice } : {}) });
-      }
-      case 'playback_stop': return this.ui.send({ action: 'stop', projectId: a.projectId, sessionId: a.sessionId });
       case 'playback_status': return this.ui.state(a.sessionId);
       case 'export_asset': return this.exporter.asset(store.asset(a.id, a.projectId), a.destination, a.format);
       case 'export_review': { const r = review(); if (r.revision !== a.expectedRevision) throw new WorkbenchError('REVISION_CONFLICT', 'Read the current review before exporting.'); return this.exporter.review(r, a.destination, a.format); }

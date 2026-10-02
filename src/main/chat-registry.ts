@@ -19,6 +19,7 @@ import { runCapabilityProbe, type CapabilityOutcome } from './providers/generic/
 import { AnthropicClient } from './providers/generic/anthropic';
 import { ChatCompletionsClient } from './providers/generic/chat';
 import { GenericResponsesClient } from './providers/generic/responses';
+import { isDirectGemini, type ProviderKeys } from './provider-keys';
 
 export interface ResolvedChatTarget {
   selectionId: string;
@@ -44,7 +45,7 @@ const TEST_TTL_MS = 10 * 60 * 1000;
 
 export class ChatRegistry {
   private pending = new Map<string, PendingTest>();
-  constructor(private readonly store: Store, private readonly secrets: SecureStore, private readonly now: () => number = Date.now) {}
+  constructor(private readonly store: Store, private readonly secrets: SecureStore, private readonly keys: ProviderKeys, private readonly now: () => number = Date.now) {}
 
   providers(): ChatProvider[] {
     return parseProviders(this.store.setting('chat-providers', '[]'));
@@ -114,16 +115,21 @@ export class ChatRegistry {
     const providers = this.providers();
     const id = input.id?.trim() || randomUUID();
     const existing = providers.findIndex(entry => entry.id === id);
+    if (existing >= 0 && isDirectGemini(providers[existing]!.baseUrl)) await this.keys.get('gemini');
+    if (isDirectGemini(fields.baseUrl) && input.apiKey?.trim()) throw new Error('Set the shared Gemini API key in Settings, then save this chat configuration without a separate key.');
     const provider: ChatProvider = { id, label: fields.label, baseUrl: fields.baseUrl, kind: fields.kind };
     if (existing >= 0) providers[existing] = provider;
     else providers.push(provider);
     this.writeProviders(providers);
-    if (input.apiKey?.trim()) await this.secrets.set(secretName('chat-key', id), input.apiKey.trim());
-    else await this.secrets.delete(secretName('chat-key', id)).catch(() => undefined);
+    if (!isDirectGemini(provider.baseUrl)) {
+      if (input.apiKey?.trim()) await this.secrets.set(secretName('chat-key', id), input.apiKey.trim());
+      else await this.secrets.delete(secretName('chat-key', id)).catch(() => undefined);
+    }
     return provider;
   }
 
   async deleteProvider(id: string): Promise<void> {
+    if (this.providers().some(p => p.id === id && isDirectGemini(p.baseUrl))) await this.keys.get('gemini');
     const providers = this.providers().filter(entry => entry.id !== id);
     this.writeProviders(providers);
     this.writeModels(this.models().filter(entry => entry.providerId !== id));
@@ -135,6 +141,8 @@ export class ChatRegistry {
   }
 
   async providerKey(providerId: string): Promise<string | null> {
+    const provider = this.providers().find(p => p.id === providerId);
+    if (provider && isDirectGemini(provider.baseUrl)) return this.keys.get('gemini');
     try {
       return await this.secrets.get(secretName('chat-key', providerId));
     } catch {

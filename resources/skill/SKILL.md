@@ -1,19 +1,19 @@
 ---
 name: sfxchat
-description: Design, generate, audition, refine, organize, and export sound effects and music through the installed SfxChat workbench. Use its shared review UI for candidate comparisons and feedback.
+description: Design, generate, audition, refine, organize, and export sound effects, music, and single-speaker voice through the installed SfxChat workbench. Includes provider-specific speech delivery, script preservation, revisions, and shared candidate reviews.
 ---
 
 # SfxChat
 
 Use SfxChat for the complete sound-design workflow. Respect project-specific creative direction and the user's chosen tools. The app owns providers, credentials, originals, and jobs; do not make raw provider calls or build a separate audition page.
 
-Before designing audio, read [design](references/design.md) and [workflow](references/workflow.md). For effects, read the complete [ElevenLabs SFX guidance](references/elevenlabs-sfx.md). For music, read the block matching the configured provider: [ElevenLabs Music](references/elevenlabs-music.md) or [Gemini Lyria](references/gemini-lyria.md). Before analysis, trimming, listening, spectrograms, or loop work, read [editing and evidence](references/editing.md). These are the same design documents the app's assistant uses, including its examples and limitations.
+Before designing audio, read [design](references/design.md) and [workflow](references/workflow.md). For effects, read the complete [ElevenLabs SFX guidance](references/elevenlabs-sfx.md). For music, read the block matching the configured provider: [ElevenLabs Music](references/elevenlabs-music.md) or [Gemini Lyria](references/gemini-lyria.md). For spoken scripts, read [ElevenLabs voice](references/elevenlabs-voice.md) or [Gemini voice](references/gemini-voice.md) before `generate_voice`; use `list_voices` for discovery. Before analysis, trimming, listening, spectrograms, or loop work, read [editing and evidence](references/editing.md). These are the same documents the app's assistant uses, including examples and limitations.
 
 1. Run `sfxchat guidance`. Compare its hash with `guidance.json` beside this skill; when different, use the returned current documents. Inspect the configured provider roster and supported controls. Never invent provider IDs or ask for secret values; missing credentials are configured in SfxChat Settings.
 2. Run `sfxchat tools` to discover current operation names and JSON schemas. Use `sfxchat call <operation> --input <request.json>` (or `--json <JSON>`). MCP exposes the same named operations. Use `sfxchat help` for installation and command syntax.
 3. Select or create an explicit project and session. Include their IDs in scoped requests. The visible UI project is not your workflow context.
 4. For generation, supply a unique `requestId` and preserve it with returned job IDs. Reuse that ID only to recover the exact same request. Use `jobs_wait` for bounded waits; inspect existing jobs after a disconnect. Never retry uncertain paid work as a new request without user direction. Defaults and requested candidate counts follow the design guidance.
-5. Use `review_create` and `review_update` to group candidates and current references by named cue. `review_open` opens the existing desktop audition UI without autoplay. `playback_play` explicitly plays or repeats a candidate; `playback_stop` stops it. Review writes require `expectedRevision`; fetch and reconcile conflicts instead of overwriting feedback.
+5. Use `review_create` and `review_update` to group candidates and current references by named cue. `review_open` opens the existing desktop audition UI without autoplay. Playback is user-controlled; agents have no play/stop tools. Users can enable Loop in the UI. Review writes require `expectedRevision`; fetch and reconcile conflicts instead of overwriting feedback.
 6. Read saved selections, reject-all decisions, and notes through `review_get` or `review_wait`. Prepare revisions from those observations and complete parent prompts. An unreviewed cue differs from rejection. Agent-written decisions are marked as agent-origin; never present them as human approval.
 7. Use `export_asset` or `export_review` with an absolute destination and `original`, `wav`, or `ogg` format. Read the returned paths and manifest. Preview gain is never baked into exports. Preserve project-specific integration and in-game validation steps downstream.
 

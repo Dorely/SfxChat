@@ -1,3 +1,107 @@
+# Voice, shared credentials, browser verification and manual playback (2026-10-02)
+
+This entry describes the final behavior after the user's browser and playback changes.
+Older entries below are historical evidence, including tests and playback tools that
+have since been removed. No automated test infrastructure was added.
+
+## Builds and guidance
+
+- `npm run typecheck`, `npm run build`, and `npm run package` passed. The Windows
+  NSIS installer was rebuilt without publishing or installing it.
+- Skill format validation passed with the skill-creator validator. All eight canonical
+  references and SKILL.md matched source, packaged files, runtime guidance, and temporary
+  Codex/Claude project installations byte for byte. Guidance SHA-256:
+  `138a93993999d4bb8e149e31e6df252fad14454572e832299a3e8afbd39fb74a`.
+- Packaging and guidance registration include both voice references. The source turn
+  instruction builder and compiled main bundle include the exact canonical voice text
+  for configured providers. No live hosted assistant turn was used to establish routing.
+- Manually reviewed all nine original JSON voice examples and both feedback revision
+  recipes against the exposed fields: narration, character, urgency/whisper, pronunciation,
+  requested normalization, non-English event tags, script/style separation, and parent
+  lineage. Examples do not authorize a generation batch. Dated official sources and
+  model-specific coverage are in [voice review](knowledge/voice-generation.md).
+
+## Real provider attempts (two total, no retries)
+
+| Provider | Actual outcome | Technical evidence |
+| --- | --- | --- |
+| ElevenLabs | One v4/George request for `The lantern is ready.` failed HTTP 401; no audio returned. | Stored key lacks `text_to_speech`; voice discovery separately reported missing `voices_read`. Generation request ID `58ee4fc3d8c7344da383c2534e87c9d8`. Enable these permissions on the same provider key; no voice-specific key is needed. |
+| Gemini | One Flash TTS/Kore request completed through Interactions with `store:false`. | Original unmodified WAV: 109,748 bytes, 24 kHz mono, 2.16 seconds. Submitted script was exactly `  The lantern is ready.\n` (two leading spaces and a trailing newline); style was separate `calm, clear narration`. |
+
+Gemini original SHA-256:
+`35cdcdc11b27d784e15e5d005a326d57711ea149b0d87335742afd9ca9b994aa`.
+Returned usage included 209 input and 70 output tokens (279 total); no interaction
+ID/request header was available, so request ID remains null. The short completed
+clip is estimated below $0.01 at the reviewed rates, within the authorized $1;
+actual invoice accounting was not inspected. The failed ElevenLabs call was not
+retried. There was no third synthesis attempt, hidden split, or fallback model.
+
+The technical result is not a listening judgment. No audio-understanding capability
+or human creative approval was recorded. The verification review remains unreviewed.
+
+## Jobs, records and operations
+
+- Replayed each admitted request with its same UUID/input and recovered the same
+  completed/failed job IDs, without additional provider requests.
+- Original export matched the Gemini source hash. A local 0–1 second trim retained
+  voice kind, exact 0–24,000 sample-frame lineage, and the original as parent; its
+  float32 WAV hash is `1b7e1f9d670f24f08bb83d2b357a2899fd36d7f49043d6430bbcb2e1ad7c1e4b`.
+- Transcript search found the original and derivative. Cross-project asset inspection
+  was refused. Restart preserved the assets, request history, jobs and shared keys.
+  Cancel on a completed job was idempotent. Queued/running voice cancellation and
+  interrupted billed-job recovery were source-reviewed, not exercised with extra
+  paid requests after the two-attempt limit.
+- Real encrypted legacy music credentials consolidated into one ElevenLabs key and
+  one Gemini key; only readiness returned to clients. Differing-key retention and
+  corrupt-storage failure paths were source-reviewed, not simulated with real secrets.
+  Settings prevents replacement/removal until a saved-key conflict is resolved.
+
+## Browser manual verification
+
+`npm run dev:browser` served the real renderer from a loopback-only Electron owner
+without a native window. The Codex in-app browser loaded it successfully; Chrome's
+extension blocked local navigation, so verification continued in the in-app browser.
+This mode now is the default in [AGENTS](../AGENTS.md). Native screenshot/input
+attempts had failed before the user requested this workflow; native visual coverage
+is not claimed.
+
+- Checked shared vendor key panels, secure-storage readiness, independent model/voice
+  defaults, and hiding the separate generic chat key field for an official Gemini URL.
+  Saved Flash-Lite voice defaults and restored Flash/Kore without changing credentials.
+- Checked Voice Library counts/search, inspector immutable script/hash/settings,
+  editable regeneration, clearing prepared text on wording edits, and ancestor model/
+  voice/style inheritance on a trimmed voice. No regeneration button was submitted.
+- Checked Playground voice routing and v4 numeric controls without speed, v2 with speed,
+  Gemini separate style/prebuilt selection, and regional `en-US` discovery with pagination.
+- Original playback decoded successfully; a 1.2-second trim preview rendered through
+  the bounded byte-array RPC and played with measured waveform and spectrogram visible.
+  This establishes encoding/player state, not perceptual quality.
+- Exported the derivative through the browser's app path dialog, verified its hash,
+  and imported it as voice into the isolated verification project. Native text prompts
+  are unsupported by the in-app browser; app dialogs replace them. Import/export still
+  use the owning scoped operations and refuse overwrite.
+- Opening a review through the CLI bridge acknowledged stopped state and did not autoplay.
+  Manual single playback ended naturally. User Loop remains available and defaults off;
+  checkbox selection was checked without looped playback. Timed repeat scheduling was
+  removed. Browser host disconnect stops native/review playback and displays an error.
+- A real MCP initialize/tools-list exchange returned 36 tools, including `generate_voice`
+  and `list_voices`; its only playback-related tool is read-only `playback_status`.
+  CLI `playback_play` now returns UNKNOWN_OPERATION. Internal assistant tool registration
+  likewise has no play/stop controls. Agents may open reviews; users control playback.
+- Checked the host bound to `127.0.0.1`, and rejected wrong Host, cross-origin JSON RPC,
+  simple POST, and cross-site media requests with HTTP 403. No browser credential store
+  or mock services were introduced.
+
+The isolated verification project retains the original, trim, imported derivative,
+failed/completed jobs and unreviewed cue board as evidence. Voice defaults and the
+previous active project were restored. Owned hosts were stopped after verification. Command policy rejected deletion of
+the temporary `sfxchat-voice-c49c851b-a66f-4baf-ad86-da9d16153a37` directory; its
+exports and temporary skill installations remain outside the repository. The browser capture is a task artifact,
+not a committed fixture. Remaining live gaps: ElevenLabs synthesis/discovery permissions,
+alternative-model synthesis, distinct-key conflict migration, active voice cancellation,
+and hosted assistant creative routing. Browser checks do not establish native dialogs,
+fresh installer installation, or subjective voice quality.
+
 # Review card alignment (2026-10-02)
 
 - The supplied screenshot showed the reference card above adjacent candidates.

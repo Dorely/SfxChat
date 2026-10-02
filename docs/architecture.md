@@ -15,6 +15,27 @@ general filesystem/shell tool. The shared operation registry owns external schem
 `WorkbenchService`, `Store`, media, review playback and export owners. UI and internal
 assistant adapters use these owners too; provider transports remain behind service ports.
 
+`npm run dev:browser` runs the built renderer over a loopback development host,
+while the same Electron main process owns the real profile, secure storage,
+providers, background jobs, and named-pipe agent bridge. It creates no desktop
+window. A shared fixed API factory binds either validated IPC or JSON HTTP calls;
+browser responses restore bounded audio byte arrays, SSE delivers changes and
+acknowledged UI commands, and the existing scoped media handler serves originals.
+The UI identifies browser mode explicitly. Native file pickers become host-path
+dialogs that call the same import/export operations. There are no mock services,
+fixtures, separate test libraries, or browser credential stores.
+
+The host is unavailable in packaged builds. It binds a random port on `127.0.0.1`,
+checks the exact Host header, requires the exact Origin and JSON POST for privileged
+calls and shutdown, and requires same-origin fetch metadata for SSE/media. It grants
+no CORS access, denies framing, limits RPC input to 2 MiB, and restricts static files
+to the built renderer. It is a local development transport, not a remote service.
+Use one browser tab because active project and playback state belong to one owning
+UI. Closing the last event stream clears UI readiness and playback reports; Ctrl+C
+requests normal app shutdown so jobs follow the existing shutdown/recovery rules.
+Source changes require rebuilding and reloading; this mode does not provide HMR.
+A lost event stream stops playback and displays a disconnected-host notice.
+
 The shell is constrained to the window height. Conversation history and workspace
 content scroll inside their panels, keeping the chat composer and headers visible.
 Chat follows streamed output while the reader is at the bottom. Scrolling up pauses
@@ -51,11 +72,11 @@ search path. Provider configuration, credentials, and the flat originals/<asset-
 stay app-level and shared across projects.
 Search covers names, descriptions, tags, collections, prompts, reviews, and feedback.
 
-Assets and jobs carry `kind` (`effect` or `music`). Records written before music
-existed have no field and are read as sound effects; no migration was required. Both
+Assets and jobs carry `kind` (`effect`, `music`, or `voice`). Records written before music
+existed have no field and are read as sound effects; no migration was required. All three
 kinds share the immutable `originals/<asset-id>.<format>` store: kind is metadata, so
-integrity checks, trimming, export, and the media protocol keep one code path. Music
-tracks also retain `providerPrompt` when the app appended provider-specific guidance to
+integrity checks, trimming, export, and the media protocol keep one code path. Music tracks and voice
+clips also retain `providerPrompt` when the app appended provider-specific guidance to
 the submitted text, and `lyrics` when the provider returned lyrics or structure text.
 
 Original files live at `originals/<asset-id>.<format>`. Unique temporary writes are
@@ -217,7 +238,8 @@ Runtime instructions and tool field descriptions provide sound-design guidance,
 [reviewed music prompting practices](knowledge/elevenlabs-music.md). Per turn,
 `chatInstructions` appends the configured music providers with their exact IDs, the
 active choice, and each configured provider-kind block (`musicInstructions` in `assistant.ts`),
-so the model sees provider-accurate limits and prompting advice and copies a real
+and voiceInstructions appends both voice rosters/defaults and canonical provider references.
+The model sees provider-accurate limits and prompting advice and copies a real
 provider ID rather than one it guesses. Provider generation receives no parent audio
 or chat history; `parentId` is local lineage only. These app adapters expose no
 continuation/editing of an earlier generation. Manual
@@ -280,14 +302,40 @@ ElevenLabs resolves its key at dispatch and preserves the SFX HTTP response as M
 HTTP status failures and uncertain transport outcomes are distinct. Production
 provider requests have a three-minute timeout.
 
-Music has its own provider registry, `MusicRegistry` (`src/main/music-registry.ts`),
-which stores provider records in SQLite settings and each provider's key under its own
-`music-key-<id>` secret. This is deliberately separate from chat providers and from the
-sound-effects key: using Gemini for chat does not configure Gemini for music, and an
-ElevenLabs sound-effects key is never reused for Music. One provider is active; a
-request may name another configured provider (`providerId`), which the Playground form
-and the `generate_music` tool can do. Music requests carry their own timeout of ten
-minutes because full-length songs are slower than effects.
+`ProviderKeys` owns one OS-encrypted key for each vendor (`elevenlabs`, `gemini`).
+All ElevenLabs effects/music/voice dispatches share its key. Gemini music/voice and
+direct chat at the official HTTPS host share its key; other generic chat hosts retain
+their own credentials. Neither renderer reads nor assistant/CLI/MCP arguments receive
+stored secrets. Key entry exists only at the vendor level. Equal legacy `music-key-*`
+and direct Gemini `chat-key-*` values consolidate automatically. Different values block
+vendor readiness and retain encrypted originals until Settings explicitly selects a
+source or replaces the shared key. Authoritative ciphertext is written before legacy
+copies are deleted. Deleting a model/target never deletes the shared vendor key.
+
+`MusicRegistry` stores model target metadata separately from credentials. One music
+entry is active and requests may target another by its exact ID. `VoiceRegistry` stores
+one model/default-voice selection per vendor plus the active voice vendor. These are
+independent of shared credential selection. Music and voice requests have ten-minute
+transport timeouts; effects retain three minutes. Discovery has a 30-second timeout.
+
+`providers/voice.ts` dispatches single-speaker TTS. ElevenLabs v4/Multilingual v2 use
+`/v1/text-to-speech/{voiceId}` and retain original MP3; Gemini 3.8 Flash/Flash-Lite use
+Interactions with `store:false`, one voice, separate style metadata, and original unary
+WAV. Shared validation rejects unsupported models, controls, SSML on v4, and oversize
+scripts before admission. Voice request JSON preserves original untrimmed `text`,
+optional prepared `providerText`, model/voice, controls, count/name, and revision parent.
+Resolved model and voice are frozen at admission; optional controls retain omission
+when provider defaults are intended. Keys resolve only at dispatch. No fallback,
+automatic splitting, or retries occur. Usage/request IDs are retained when returned.
+`list_voices` discovers existing account/region voices; Gemini also has 30 bundled
+standard choices. Voice design, cloning, dictionaries, dialogue, and live chat are absent.
+
+The Voice Library, Playground Voice mode, and inspector use existing scoped jobs,
+originals, playback, trimming, reviews, search, and exports. Transcript is indexed as
+asset prompt; prepared script is stored separately. Trims preserve kind and point to
+the immutable generation parent. The inspector exposes editable voice regeneration
+controls without modifying original provenance. The same `generate_voice` and
+`list_voices` operations serve UI, assistant, CLI, and MCP.
 
 Two adapters sit behind `ServicePorts.generateMusic`. `providers/elevenlabs-music.ts`
 posts to `/v1/music` with `output_format=auto`, maps app fields to `prompt`,
@@ -334,13 +382,14 @@ project and session. Each job-admission transaction also persists its job IDs to
 request row (and the internal waiting tool if applicable). Replays return existing
 IDs; changed input/scope conflicts. Failed/partial admission remains incomplete;
 startup marks unfinished admission interrupted. There is no silent second purchase.
-Music requests record the resolved provider ID at admission rather than following
-subsequent active-provider UI changes. Existing queued/running job recovery is retained.
+Music requests record the resolved provider ID, and voice requests additionally freeze
+model and voice at admission rather than following later UI changes. Existing queued/running job recovery is retained.
 
 ## Cue reviews, playback and export
 
 Reviews belong to one project/session and store ordered cue briefs, candidate/reference
-IDs, preview gain, repeat settings, decisions and notes. Candidate membership is checked
+IDs, preview gain, decisions and notes. Legacy repeat settings are ignored when
+reading a current board and retained in immutable history. Candidate membership is checked
 against that project. Updates compare expected revisions in the write transaction;
 every saved revision has origin/time, with per-cue decision and notes stamps retained
 across unrelated edits. Candidate-note stamps and `review_history` preserve feedback
@@ -357,9 +406,12 @@ review cards do not introduce a second native audio player.
 
 RendererPort acknowledges UI commands and reports actual player state. Open commands
 never autoplay. Conflicting simultaneous switches return UI_BUSY. The renderer's
-AuditionPlayer owns one WebAudio context, bounded scheduling (32 voices, short lookahead),
-optional single-voice retrigger, and preview gain nodes. Explicit stop and view/session/
-project/review changes clear scheduled and active sources; visibility and native
+AuditionPlayer owns one WebAudio context and a single source with preview gain.
+Only a user click starts playback. Review Loop checkboxes mirror the native card
+controls, default off, and live only in renderer interaction state. Changing Loop
+stops current review playback; Play applies the new choice. No timed scheduling,
+automatic retrigger, or programmatic play/stop operation remains. Explicit stop and
+view/session/project/review changes clear active sources; visibility and native
 hide/minimize events also stop. Other native audio players stop the review player.
 Playback status is not an observation about audio content or listener decisions.
 

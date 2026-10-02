@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile, rename, stat } from 'node:fs/promises';
 import { join, extname, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { parseBuffer } from 'music-metadata';
-import type { Asset, AssetKind, AudioAnalysisInput, GenerationInput, MusicGenerationInput, SpectrogramInput, TrimInput } from '../shared/types';
+import type { Asset, AssetKind, AudioAnalysisInput, AudioGenerationInput, SpectrogramInput, TrimInput } from '../shared/types';
 import { analyzeAudio, decodeAudio, interval, renderClip, renderTrim, MAX_AUDIO_BYTES, type ClipRender, type DecodedAudio } from './audio';
 import { renderSpectrogram, type SpectrogramRender } from './spectrogram';
 
@@ -89,6 +89,7 @@ export class MediaLibrary {
 
 }
 
-export function generatedFields(input: GenerationInput | MusicGenerationInput, kind: AssetKind, projectId: string): Partial<Asset> & { projectId: string } {
-  return { projectId, source: 'generated', kind, prompt: input.prompt, request: input, parentId: input.parentId ?? null, name: input.name ?? input.prompt.slice(0, 64), description: input.prompt };
+export function generatedFields(input: AudioGenerationInput, kind: AssetKind, projectId: string): Partial<Asset> & { projectId: string } {
+  const prompt = input.kind === 'voice' ? input.text : input.prompt;
+  return { projectId, source: 'generated', kind, prompt, request: input, parentId: input.parentId ?? null, name: input.name ?? prompt.slice(0, 64), description: prompt };
 }

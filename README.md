@@ -1,30 +1,42 @@
 # SfxChat
 
-A Windows desktop workbench for creating, comparing, and organizing sound effects and
-music with a chat assistant. [Public source](https://github.com/Dorely/SfxChat) ·
+A Windows desktop workbench for creating, comparing, and organizing sound effects, music, and
+single-speaker voice with a chat assistant. [Public source](https://github.com/Dorely/SfxChat) ·
 [MIT license](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## v0.2
 
-Chat occupies a resizable left sidebar. Effects Library, Music Library, and
+Chat occupies a resizable left sidebar. Effects Library, Music Library, Voice Library, and
 conversation-specific Playground views share the right workspace. Generate sound
-effects through ElevenLabs and music through a separately configured music provider,
+effects through ElevenLabs, music through a configured music target, and voice
+through ElevenLabs or Gemini,
 audition candidates, record feedback, regenerate linked alternatives, and organize
 names, descriptions, tags, collections, and review status. WAV/MP3 imports and exports
-preserve original bytes. Search includes original prompts and feedback. Local library
+preserve original bytes. Search includes original prompts, voice transcripts, and feedback. Local library
 use needs no provider login.
 
 Work is organized into projects. The project dropdown in the top bar switches between them,
-and each project holds its own conversations plus its own effects and music libraries,
+and each project holds its own conversations plus its own effects, music, and voice libraries,
 while provider configuration and credentials stay app-level. Session titles are editable in
 place, and the assistant names each session as the scope of the work becomes clear.
 
-The Playground generates either kind. Sound effects use the ElevenLabs key from
-Settings; music uses the active **music provider**, which is configured independently of
-chat providers and of the effects key — choosing Gemini for chat does not configure
-Gemini for music, and an ElevenLabs sound-effects key is never reused for Music. One
-provider is active; a generation can target another configured provider. Each candidate
-is a separate billed generation, and music generations are slower than effects.
+The Playground supports Effects, Music, and Voice modes. Settings has **one API key
+per provider**, shared across ElevenLabs effects/music/voice and Gemini music/voice/
+direct Gemini chat. Model and default-voice choices are independent of credentials.
+Equal legacy keys consolidate automatically; differing saved keys remain encrypted
+until you choose which to retain. No capability-specific key fields remain.
+
+Voice defaults to Eleven v4 or Gemini 3.8 Flash TTS, with Multilingual v2 and Gemini
+3.8 Flash-Lite TTS alternatives. Choose an existing voice, discover regional voices,
+and set supported delivery controls. Gemini style stays separate from its verbatim
+transcript. Originals are MP3 for ElevenLabs and WAV for Gemini. The inspector preserves
+script/voice/settings provenance and offers editable regeneration with parent lineage.
+Every candidate is a separate purchase; scripts are never split, models never silently
+changed, and uncertain generations never retried automatically. See the dated
+[voice coverage and controls](docs/knowledge/voice-generation.md) and packaged
+[ElevenLabs](resources/skill/references/elevenlabs-voice.md) / [Gemini](resources/skill/references/gemini-voice.md)
+guides. Cloning, voice creation, multi-speaker dialogue, and real-time voice chat are
+outside this implementation.
 
 The chat composer shows a local tiktoken estimate including the draft, instructions,
 and tool history against the selected model's default Codex context size (272,000
@@ -43,13 +55,13 @@ are available from the providers but not exposed by this app.
 ## Agent integration
 
 The installer includes `sfxchat` and `sfxchat mcp`. Agents share the desktop library
-and use persistent cue reviews for audition, explicit playback, selections, feedback,
+and use persistent cue reviews for user audition, selections, feedback,
 and export. The desktop starts on demand; disconnecting a client leaves admitted
 jobs running. Generation request IDs prevent accidental repeat purchases.
 
 Opening a review displays cue-grouped sound cards in the Playground results area.
 Candidate notes and selection controls sit under each card, with cue feedback and
-repeat settings alongside or below. The Playground header and generation form stay
+manual Loop toggles alongside or below. The Playground header and generation form stay
 in place; **All Playground sounds** returns to the session’s regular results.
 
 ```powershell
@@ -73,10 +85,24 @@ Node 24 runtime for distribution; installed users need no Node installation. See
 
 ```powershell
 npm ci
-npm run dev
+npm run dev:browser
 npm run typecheck
 npm run package
 ```
+
+For manual UI verification, close any running SfxChat instance, run `npm run dev:browser`,
+and open the printed `http://127.0.0.1:<port>` URL in the Codex in-app browser or a
+regular browser. Use one tab. This is the real app renderer, library, jobs, and
+OS-backed credentials, so edits and paid generations have their normal effects.
+Electron owns the privileged operations without creating a desktop window; the
+browser receives readiness only and never stores provider keys. The development
+host binds only to loopback and refuses requests from other web origins. Import,
+export, and directory selection use app dialogs for absolute paths on the host.
+
+This mode builds once; rebuild and reload after code changes. CLI/MCP clients connect
+to the same running owner and can open reviews in the browser without autoplay.
+Playback is user-controlled; agents have no play/stop tools. Press Ctrl+C in the launching terminal to stop the host. Use `npm run dev`
+for desktop-specific checks such as native dialogs and installer integration.
 
 Installation rebuilds SQLite for the pinned Electron runtime. Run `npm run rebuild` after
 changing Electron/native dependencies. The unsigned installer is written to
@@ -96,13 +122,13 @@ only one running instance.
 
 1. Open Settings and connect Codex in the system browser. The temporary callback
    listener uses localhost port 1455; another app's login may occupy that port.
-2. Save your ElevenLabs API key in Settings. Credentials use Windows-backed
+2. Save your ElevenLabs and/or Gemini API key in the provider sections of Settings. Credentials use Windows-backed
    encryption. Settings reads expose readiness, never stored values. An empty key
    removes the saved key.
-3. Add a music provider (ElevenLabs Music or Gemini Lyria), choose its model, and save
-   its API key. Music providers are configured separately from chat providers and from
-   the effects key. The ElevenLabs Music API requires a paid plan.
-4. Request sounds or music in chat or use the Playground form. Generation runs directly
+3. Add a music target (ElevenLabs Music or Gemini Lyria) and choose its model, or
+   choose voice defaults. These selections use the shared vendor key. Provider
+   access and pricing depend on your account.
+4. Request sounds, music, or single-speaker speech in chat or use the Playground form. Generation runs directly
    without a separate spending approval and uses your provider account's credits.
 5. Audition candidates, record feedback, and regenerate. Metadata edits preserve
    original prompts, hashes, requests, and files.

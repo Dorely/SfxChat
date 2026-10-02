@@ -3,13 +3,14 @@ import type { Snapshot } from '../shared/types';
 import type { PlaybackState, ReviewBoard, ReviewContent, ReviewCue } from '../shared/workbench';
 import { AudioCardFrame } from './AudioCard';
 import Icon from './Icon';
+import type { AuditionRequest } from './audition';
 
 export async function workbench<T = unknown>(name: string, args: unknown): Promise<T> {
   const response = await window.sfx.operation(name, args);
   if (!response.ok) throw new Error(`${response.error?.code}: ${response.error?.message}`);
   return response.result as T;
 }
-const newCue = (key: string): ReviewCue => ({ key, label: 'New cue', brief: '', candidates: [], referenceId: null, referenceGainDb: 0, repeatIntervalMs: 300, singleVoice: false, decision: 'unreviewed', selectedAssetId: null, notes: '' });
+const newCue = (key: string): ReviewCue => ({ key, label: 'New cue', brief: '', candidates: [], referenceId: null, referenceGainDb: 0, decision: 'unreviewed', selectedAssetId: null, notes: '' });
 
 /** Compact entry point; a selected review becomes the Playground results. */
 export function ReviewLauncher({ snapshot, sessionId, onSelect }: { snapshot: Snapshot; sessionId: string; onSelect(id: string): void }) {
@@ -32,20 +33,22 @@ export function ReviewLauncher({ snapshot, sessionId, onSelect }: { snapshot: Sn
   </div>;
 }
 
-export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect, onSelectAsset, playback }: { snapshot: Snapshot; sessionId: string; selectedId: string; onSelect(id: string | null): void; onSelectAsset(id: string): void; playback: PlaybackState }) {
+export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect, onSelectAsset, playback, onPlay, onStop }: { snapshot: Snapshot; sessionId: string; selectedId: string; onSelect(id: string | null): void; onSelectAsset(id: string): void; playback: PlaybackState; onPlay(input: AuditionRequest): Promise<void>; onStop(): void }) {
   const boards = snapshot.reviews.filter(r => r.sessionId === sessionId);
   const board = boards.find(r => r.id === selectedId);
   const [error, setError] = useState(''), [draft, setDraft] = useState<ReviewBoard | null>(board ?? null), [dirty, setDirty] = useState(false);
   const [format, setFormat] = useState<'original' | 'wav' | 'ogg'>('original'), [destination, setDestination] = useState('');
   const [result, setResult] = useState(''), [busy, setBusy] = useState(false);
+  const [loops, setLoops] = useState<Record<string, boolean>>({});
   const scope = { projectId: snapshot.activeProjectId, sessionId };
   useEffect(() => { if (!dirty) setDraft(board ?? null); }, [board?.revision, dirty]);
   const attempt = async (action: () => Promise<unknown>) => { setError(''); setBusy(true); try { await action(); } catch (e) { setError(e instanceof Error ? e.message : 'Review operation failed.'); } finally { setBusy(false); } };
   const change = (content: ReviewContent) => { if (draft) { setDraft({ ...draft, ...content }); setDirty(true); } };
   const cueChange = (index: number, patch: Partial<ReviewCue>) => draft && change({ title: draft.title, cues: draft.cues.map((cue, i) => i === index ? { ...cue, ...patch } : cue) });
   const save = () => attempt(async () => { if (!draft) return; const updated = await workbench<ReviewBoard>('review_update', { ...scope, reviewId: draft.id, expectedRevision: draft.revision, content: { title: draft.title, cues: draft.cues } }); setDraft(updated); setDirty(false); });
-  const stop = () => attempt(() => workbench('playback_stop', scope));
-  const play = (cue: ReviewCue, assetId: string, repeat = false) => attempt(async () => { if (!board) return; await workbench('playback_play', { ...scope, reviewId: board.id, cueKey: cue.key, assetId, repeat }); });
+  const stop = () => { setError(''); onStop(); };
+  const play = (cue: ReviewCue, assetId: string) => attempt(async () => { if (!board) return; const candidate = cue.candidates.find(c => c.assetId === assetId); await onPlay({ sessionId, reviewId: board.id, assetId, gainDb: candidate?.gainDb ?? cue.referenceGainDb, loop: !!loops[assetId] }); });
+  const loopToggle = (assetId: string, checked: boolean) => { if (isPlaying(assetId)) stop(); setLoops(current => ({ ...current, [assetId]: checked })); };
   const isPlaying = (id: string) => playback.status === 'playing' && playback.reviewId === selectedId && playback.assetId === id;
   const toggle = (cue: ReviewCue, id: string) => isPlaying(id) ? void stop() : void play(cue, id);
   const move = (index: number, offset: number) => { if (!draft) return; const cues = [...draft.cues]; [cues[index], cues[index + offset]] = [cues[index + offset], cues[index]]; change({ ...draft, cues }); };
@@ -68,7 +71,7 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
           <div className="review-card-grid">
             {reference && <div className="playground-slot review-reference"><div className="slot-label"><span>Current reference</span></div>
               <AudioCardFrame onSelect={() => onSelectAsset(reference.id)} asset={reference} isPlaying={isPlaying(reference.id)} onToggle={() => toggle(cue, reference.id)} disabled={dirty || busy} compact>
-                <div className="review-card-controls"><button className="secondary-button" disabled={dirty || busy} onClick={() => void play(cue, reference.id, true)}><Icon name="undo" /> Repeat</button><label>Preview dB<input type="number" min="-60" max="12" value={cue.referenceGainDb} onChange={e => cueChange(index, { referenceGainDb: Number(e.target.value) })} /></label></div>
+                <div className="review-card-controls"><label className="review-check"><input type="checkbox" aria-label={`Loop ${reference.name}`} checked={!!loops[reference.id]} onChange={e => loopToggle(reference.id, e.target.checked)} /> Loop</label><label>Preview dB<input type="number" min="-60" max="12" value={cue.referenceGainDb} onChange={e => cueChange(index, { referenceGainDb: Number(e.target.value) })} /></label></div>
                 <p className="field-hint">Compare candidates against this sound.</p>
               </AudioCardFrame>
             </div>}
@@ -78,7 +81,7 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
               return <div className="playground-slot" key={candidate.assetId}>
                 <div className="slot-label"><span>Candidate {String(ci + 1).padStart(2, '0')}</span><button className="mini-button" aria-label={`Remove candidate ${ci + 1}`} onClick={remove}><Icon name="close" /></button></div>
                 {asset ? <AudioCardFrame onSelect={() => onSelectAsset(asset.id)} asset={asset} title={candidate.label} selected={picked} review={picked ? 'accepted' : cue.decision === 'rejected' ? 'rejected' : 'unreviewed'} isPlaying={isPlaying(asset.id)} onToggle={() => toggle(cue, asset.id)} disabled={dirty || busy} compact>
-                  <div className="review-card-controls"><button className="secondary-button" disabled={dirty || busy} onClick={() => void play(cue, asset.id, true)}><Icon name="undo" /> Repeat</button><label>Preview dB<input type="number" min="-60" max="12" value={candidate.gainDb} onChange={e => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, gainDb: Number(e.target.value) } : c) })} /></label></div>
+                  <div className="review-card-controls"><label className="review-check"><input type="checkbox" aria-label={`Loop ${asset.name}`} checked={!!loops[asset.id]} onChange={e => loopToggle(asset.id, e.target.checked)} /> Loop</label><label>Preview dB<input type="number" min="-60" max="12" value={candidate.gainDb} onChange={e => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, gainDb: Number(e.target.value) } : c) })} /></label></div>
                   <button className={`secondary-button review-pick ${picked ? 'review-pick-active' : ''}`} aria-pressed={picked} onClick={() => cueChange(index, { decision: 'selected', selectedAssetId: asset.id })}><Icon name="check" /> {picked ? 'Selected for this cue' : 'Select this candidate'}</button>
                   <label className="review-candidate-notes">Candidate notes<textarea value={candidate.notes} placeholder="What works? What needs changing?" onChange={e => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, notes: e.target.value } : c) })} /></label>
                 </AudioCardFrame> : <p role="alert">Candidate is unavailable. Remove it or reload the review.</p>}
@@ -88,8 +91,6 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
           </div>
           <aside className="review-cue-sidebar" aria-label={`${cue.label} controls and feedback`}>
             <span className="section-kicker">Playback & feedback</span>
-            <label>Repeat interval (ms)<input type="number" min="40" max="3000" value={cue.repeatIntervalMs} onChange={e => cueChange(index, { repeatIntervalMs: Number(e.target.value) })} /></label>
-            <label className="review-check"><input type="checkbox" checked={cue.singleVoice} onChange={e => cueChange(index, { singleVoice: e.target.checked })} /> Single voice</label><p className="field-hint">Off lets previous tails overlap.</p>
             <div className="review-buttons"><button className={cue.decision === 'unreviewed' ? 'review-active unreviewed' : ''} aria-pressed={cue.decision === 'unreviewed'} onClick={() => cueChange(index, { decision: 'unreviewed', selectedAssetId: null })}>Unreviewed</button><button className={cue.decision === 'rejected' ? 'review-active rejected' : ''} aria-pressed={cue.decision === 'rejected'} onClick={() => cueChange(index, { decision: 'rejected', selectedAssetId: null })}><Icon name="x" /> Reject all</button></div>
             <label>Cue feedback<textarea value={cue.notes} placeholder="Direction for the next revision…" onChange={e => cueChange(index, { notes: e.target.value })} /></label>
             {draft.cueAudit?.[cue.key] && <p className="field-hint">Decision saved by {draft.cueAudit[cue.key].decision.origin} · {new Date(draft.cueAudit[cue.key].decision.at).toLocaleString()}</p>}

@@ -33,6 +33,7 @@ is recorded in [verification](docs/verification.md).
 | [docs/knowledge/elevenlabs.md](docs/knowledge/elevenlabs.md) | Dated official SFX prompting review, endpoint/app control mapping, revision examples, source discrepancies, and evidence limits. |
 | [docs/knowledge/elevenlabs-music.md](docs/knowledge/elevenlabs-music.md) | Dated official Music endpoint review, request mapping, limits, prompt-suggestion errors, prompting synthesis, and evidence limits. |
 | [docs/knowledge/gemini-lyria.md](docs/knowledge/gemini-lyria.md) | Dated Lyria/Interactions review, model table, response parsing, limitations, and prompting synthesis. |
+| [docs/knowledge/voice-generation.md](docs/knowledge/voice-generation.md) | Dated TTS source/control coverage, endpoint mapping, bounds, evidence and budget. |
 | [docs/knowledge/gemini-audio.md](docs/knowledge/gemini-audio.md) | Inherited audio-input, response, usage, and calibration lessons. |
 
 ## Repository-local skills
@@ -53,11 +54,22 @@ is recorded in [verification](docs/verification.md).
 | [package.json](package.json), [package-lock.json](package-lock.json) | Pinned runtime/development dependencies and build/package commands. |
 | [tsconfig.json](tsconfig.json) | Strict TypeScript configuration. |
 | [electron.vite.config.ts](electron.vite.config.ts), [electron-builder.yml](electron-builder.yml) | Desktop builds and unsigned Windows NSIS packaging. |
+| [scripts/dev-browser.mjs](scripts/dev-browser.mjs) | Launches the real Electron owner without a window and requests graceful browser-host shutdown. |
+| [src/main/browser-host.ts](src/main/browser-host.ts) | Loopback-only development renderer/RPC/SSE/media transport with origin validation. |
+| [src/shared/api.ts](src/shared/api.ts) | Fixed capability factory shared by isolated preload and browser transport. |
+| [src/renderer/browser-api.ts](src/renderer/browser-api.ts) | Same-origin browser calls, byte restoration, change/UI events, and host-path file dialogs. |
 | [src/shared/types.ts](src/shared/types.ts) | Renderer/preload/application operation, project, and snapshot contracts. |
 | [src/shared/chat-models.ts](src/shared/chat-models.ts) | Configured model IDs, Codex effort lists, default context sizes, and legacy/default resolution. |
+| [src/shared/voice-models.ts](src/shared/voice-models.ts) | TTS catalog, standard Gemini voices, defaults, model-specific admission guards. |
+| [src/shared/provider-identities.ts](src/shared/provider-identities.ts) | Shared official Gemini host recognition for credential routing. |
+| [src/main/provider-keys.ts](src/main/provider-keys.ts) | Serialized shared vendor credentials and safe legacy consolidation/conflict selection. |
+| [src/main/voice-registry.ts](src/main/voice-registry.ts) | Independent saved model/default voice and active vendor. |
+| [src/main/providers/voice.ts](src/main/providers/voice.ts) | Bounded ElevenLabs/Gemini REST TTS and voice discovery, original bytes and provenance. |
+| [src/renderer/VoiceControls.tsx](src/renderer/VoiceControls.tsx) | Reusable voice discovery/model/delivery controls and Playground voice form. |
+| [src/renderer/ProviderSettings.tsx](src/renderer/ProviderSettings.tsx) | Vendor key entry, encrypted-key conflict selection, and voice defaults. |
 | [src/shared/music-models.ts](src/shared/music-models.ts) | Music provider presets, reviewed model catalogs, and app-side duration bounds. |
 | [src/main/chat-registry.ts](src/main/chat-registry.ts) | Generic provider/model registry, combined selection, test-gated saves, and active chat resolution. |
-| [src/main/music-registry.ts](src/main/music-registry.ts) | Independent music provider registry, active/override resolution, and `music-key` credential names. |
+| [src/main/music-registry.ts](src/main/music-registry.ts) | Music model target registry and active/override resolution through shared vendor keys. |
 | [src/main/chat-context.ts](src/main/chat-context.ts) | Cached local tiktoken context estimates with encrypted-reasoning exclusion and estimated media substitution. |
 | [src/main/providers/generic/sse.ts](src/main/providers/generic/sse.ts) | Shared SSE frame splitting for generic chat adapters. |
 | [src/main/providers/generic/chat.ts](src/main/providers/generic/chat.ts) | Chat Completions transport, history conversion, and reasoning-effort fallback. |
@@ -84,7 +96,7 @@ is recorded in [verification](docs/verification.md).
 | [src/main/providers/gemini-music.ts](src/main/providers/gemini-music.ts) | Lyria prompt composition, Interactions requests with `store:false`, step/lyrics parsing, and fixed-length guards. |
 | [src/main/providers/secrets.ts](src/main/providers/secrets.ts) | Atomic encrypted credential storage using injected OS protection and store-safe secret names. |
 | [src/renderer/index.html](src/renderer/index.html), [src/renderer/main.tsx](src/renderer/main.tsx) | Renderer entrypoint and content security policy. |
-| [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Project switcher, session renaming, chat, effects and music libraries, Playground generation, audition, inspector, settings, and styling. |
+| [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Project switcher, session renaming, chat, effects, music, and voice libraries, Playground generation, audition, inspector, settings, and styling. |
 | [src/renderer/Icon.tsx](src/renderer/Icon.tsx) | Shared inline SVG icon set drawn for this project, replacing font glyph icons. |
 | [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Waveform trim selection, fine-window zoom, fades, spectrogram panel, exact rendered preview, and derived-asset saving. |
 | [src/renderer/ChatContextMeter.tsx](src/renderer/ChatContextMeter.tsx) | Throttled composer context indicator, threshold styling, and estimate details. |
@@ -108,11 +120,12 @@ is recorded in [verification](docs/verification.md).
 | [src/shared/native.ts](src/shared/native.ts) | Narrow bounded helper transport for DPAPI and directory ACL operations. |
 | [src/renderer/AudioCard.tsx](src/renderer/AudioCard.tsx) | Shared sound-card presentation, waveform and native preview controls for libraries, Playground and inspector; cue reviews reuse the card frame. |
 | [src/renderer/ReviewPanel.tsx](src/renderer/ReviewPanel.tsx) | Cue-grouped Playground result cards, review launcher, references, preview settings, decisions/notes, stale revisions and pack export. |
-| [src/renderer/audition.ts](src/renderer/audition.ts) | Exclusive WebAudio playback, repeats, overlap/retrigger, cancellation and state reports. |
+| [src/renderer/audition.ts](src/renderer/audition.ts) | User-controlled single-source WebAudio playback/Loop, cancellation and state reports. |
 | [src/renderer/AgentSettings.tsx](src/renderer/AgentSettings.tsx) | Scoped integration installation, explicit MCP registration, status and previews. |
 | [resources/skill/SKILL.md](resources/skill/SKILL.md) | Installable workflow and required reference/version discovery instructions. |
 | [resources/skill/references/design.md](resources/skill/references/design.md), [workflow.md](resources/skill/references/workflow.md) | Complete shared creative direction, music brief examples, scope, jobs, session naming, reviews and export. |
 | [resources/skill/references/elevenlabs-sfx.md](resources/skill/references/elevenlabs-sfx.md) | Complete SFX prompting, controls, examples, constraints and revisions. |
+| [resources/skill/references/elevenlabs-voice.md](resources/skill/references/elevenlabs-voice.md), [gemini-voice.md](resources/skill/references/gemini-voice.md) | Canonical voice selection, script/delivery/pronunciation guidance, examples, revisions and unsupported features. |
 | [resources/skill/references/editing.md](resources/skill/references/editing.md) | Measurement/visual/listening evidence, exact trims, fades, seam probes and loops. |
 | [resources/skill/references/elevenlabs-music.md](resources/skill/references/elevenlabs-music.md), [gemini-lyria.md](resources/skill/references/gemini-lyria.md) | Complete supported-provider music guidance, controls and examples. |
 | [scripts/build-agent.mjs](scripts/build-agent.mjs) | CLI/runtime/skill packaging, pinned source verification and native helper build. |

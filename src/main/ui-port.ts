@@ -9,7 +9,7 @@ export class RendererPort implements UiPort {
   private currentSession: string | null = null;
   private playback: PlaybackState = { status: 'stopped', updatedAt: new Date().toISOString() };
   private ready = false;
-  constructor(private window: () => BrowserWindow | null, private store: Store) {}
+  constructor(private window: () => BrowserWindow | null, private store: Store, private browser?: { available(): boolean; send(command: UiCommand): void }) {}
   markReady() { this.ready = true; }
   state(sessionId: string): PlaybackState { return this.currentSession === sessionId ? this.playback : { status: 'stopped', updatedAt: this.playback.updatedAt }; }
   report(sessionId: string, state: PlaybackState) { this.currentSession = sessionId; this.playback = { ...state, updatedAt: new Date().toISOString() }; }
@@ -20,14 +20,15 @@ export class RendererPort implements UiPort {
   }
   async send(input: Omit<UiCommand, 'id'>) {
     const window = this.window();
-    if (!window || window.isDestroyed() || !this.ready) throw new WorkbenchError('UI_UNAVAILABLE', 'The audition UI is not ready. Try again after it opens.');
+    if (((!window || window.isDestroyed()) && !this.browser?.available()) || !this.ready) throw new WorkbenchError('UI_UNAVAILABLE', 'The audition UI is not ready. Try again after it opens.');
     if (this.pending.size && input.action !== 'stop') throw new WorkbenchError('UI_BUSY', 'Another client is changing the audition UI. Inspect playback status and retry after it completes.');
     if (input.action === 'stop' && this.currentSession !== input.sessionId) return this.state(input.sessionId);
-    if (input.action !== 'stop') { this.store.setActiveProject(input.projectId); window.show(); window.focus(); }
+    if (input.action !== 'stop') { this.store.setActiveProject(input.projectId); window?.show(); window?.focus(); }
     const command: UiCommand = { ...input, id: randomUUID() };
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => { this.pending.delete(command.id); reject(new WorkbenchError('UI_TIMEOUT', 'The audition UI did not acknowledge the command. Inspect playback status before trying again.')); }, 15000);
-      this.pending.set(command.id, { resolve, reject, timer }); window.webContents.send('sfx:ui-command', command);
+      this.pending.set(command.id, { resolve, reject, timer });
+      if (this.browser?.available()) this.browser.send(command); else window?.webContents.send('sfx:ui-command', command);
     });
   }
   stopForVisibility() {

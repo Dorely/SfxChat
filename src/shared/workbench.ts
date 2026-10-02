@@ -5,7 +5,6 @@ export const cueSchema = z.object({
   label: z.string().trim().min(1).max(200), brief: z.string().max(10000).default(''),
   candidates: z.array(z.object({ assetId: z.string().uuid(), label: z.string().max(200).default(''), notes: z.string().max(10000).default(''), gainDb: z.number().min(-60).max(12).default(0) }).strict()).max(128),
   referenceId: z.string().uuid().nullable().default(null), referenceGainDb: z.number().min(-60).max(12).default(0),
-  repeatIntervalMs: z.number().int().min(40).max(3000).default(300), singleVoice: z.boolean().default(false),
   decision: z.enum(['unreviewed', 'selected', 'rejected']).default('unreviewed'), selectedAssetId: z.string().uuid().nullable().default(null),
   notes: z.string().max(10000).default('')
 }).strict().superRefine((cue, ctx) => {
@@ -25,7 +24,7 @@ export interface ReviewBoard extends ReviewContent {
   id: string; projectId: string; sessionId: string; revision: number; createdAt: string; updatedAt: string; origin: 'user' | 'agent';
 }
 export interface PlaybackState { status: 'stopped' | 'playing' | 'error'; assetId?: string; reviewId?: string; error?: string; updatedAt: string }
-export interface UiCommand { id: string; action: 'open' | 'play' | 'stop'; projectId: string; sessionId: string; reviewId?: string; assetId?: string; gainDb?: number; repeatIntervalMs?: number; singleVoice?: boolean }
+export interface UiCommand { id: string; action: 'open' | 'stop'; projectId: string; sessionId: string; reviewId?: string }
 export interface OperationResponse { ok: boolean; result?: unknown; error?: { code: string; message: string; details?: unknown } }
 export class WorkbenchError extends Error {
   constructor(public code: string, message: string, public details?: unknown) { super(message); }

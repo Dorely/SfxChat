@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { WorkbenchError, type ReviewBoard, type ReviewContent } from '../shared/workbench';
-import type { Asset, AssetKind, AssetPatch, ChatAttachment, Conversation, GenerationInput, Job, Message, MusicGenerationInput, Project, TitleSource } from '../shared/types';
+import type { Asset, AssetKind, AssetPatch, ChatAttachment, Conversation, AudioGenerationInput, Job, Message, Project, TitleSource } from '../shared/types';
 
 const now = () => new Date().toISOString();
 const decode = <T>(row: unknown): T => JSON.parse((row as { json: string }).json) as T;
@@ -77,12 +77,12 @@ export class Store {
   }
   reviews(projectId: string, sessionId?: string): ReviewBoard[] {
     return (sessionId ? this.db.prepare('SELECT json FROM reviews WHERE project_id=? AND session_id=? ORDER BY rowid DESC').all(projectId, sessionId)
-      : this.db.prepare('SELECT json FROM reviews WHERE project_id=? ORDER BY rowid DESC').all(projectId)).map(decode<ReviewBoard>);
+      : this.db.prepare('SELECT json FROM reviews WHERE project_id=? ORDER BY rowid DESC').all(projectId)).map(readReview);
   }
   review(id: string, projectId: string): ReviewBoard {
     const row = this.db.prepare('SELECT json FROM reviews WHERE id=? AND project_id=?').get(id, projectId);
     if (!row) throw new WorkbenchError('NOT_FOUND', 'Review not found.');
-    return decode<ReviewBoard>(row);
+    return readReview(row);
   }
   saveReview(projectId: string, sessionId: string, content: ReviewContent, origin: 'user' | 'agent', id?: string, expectedRevision?: number): ReviewBoard {
     if (this.conversation(sessionId).projectId !== projectId) throw new WorkbenchError('NOT_FOUND', 'Session not found in project.');
@@ -278,7 +278,7 @@ export class Store {
   job(id: string): Job {
     const row = this.db.prepare('SELECT json FROM jobs WHERE id=?').get(id); if (!row) throw new Error('Generation not found.'); return normalizeJob(decode<Job>(row));
   }
-  createJobs(conversationId: string, input: GenerationInput | MusicGenerationInput, kind: AssetKind, toolCallId?: string): Job[] {
+  createJobs(conversationId: string, input: AudioGenerationInput, kind: AssetKind, toolCallId?: string): Job[] {
     this.requireConversation(conversationId);
     const jobs: Job[] = [];
     this.db.transaction(() => {
@@ -374,4 +374,13 @@ export class Store {
       }
     })();
   }
+}
+
+/** Obsolete repeat scheduling remains in immutable history, never active controls. */
+function readReview(row: unknown): ReviewBoard {
+  const board = decode<ReviewBoard>(row);
+  return { ...board, cues: board.cues.map(cue => {
+    const { repeatIntervalMs: _interval, singleVoice: _single, ...current } = cue as typeof cue & { repeatIntervalMs?: number; singleVoice?: boolean };
+    return current;
+  }) };
 }

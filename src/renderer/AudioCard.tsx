@@ -57,9 +57,9 @@ export function AudioCardFrame({ asset, selected = false, isPlaying, onToggle, o
       <div className="asset-title"><strong>{title || asset.name || 'Untitled sound'}</strong><span>{asset.format.toUpperCase()} · {formatDuration(asset.duration)}</span></div>
       <span className={`review-mark review-${review}`} title={review} role="img" aria-label={`Review: ${review}`}><Icon name={review === 'accepted' ? 'check' : review === 'rejected' ? 'x' : 'dot'} /></span>
     </div>
-    <Waveform active={isPlaying} url={`sfx-media://asset/${asset.id}`} />
+    <Waveform active={isPlaying} url={window.sfx.mediaUrl(`asset/${asset.id}`)} />
     {seek}
-    <div className="asset-card-bottom"><span className={`kind-chip kind-${asset.kind ?? 'effect'}`}>{asset.kind === 'music' ? 'MUSIC' : 'SFX'}</span><span>{formatDuration(asset.duration)}</span><div className="asset-tags">{asset.tags.slice(0, 3).map(tag => <span key={tag}>{tag}</span>)}</div><span className="asset-date">{shortDate(asset.createdAt)}</span></div>
+    <div className="asset-card-bottom"><span className={`kind-chip kind-${asset.kind ?? 'effect'}`}>{asset.kind === 'voice' ? 'VOICE' : asset.kind === 'music' ? 'MUSIC' : 'SFX'}</span><span>{formatDuration(asset.duration)}</span><div className="asset-tags">{asset.tags.slice(0, 3).map(tag => <span key={tag}>{tag}</span>)}</div><span className="asset-date">{shortDate(asset.createdAt)}</span></div>
     {children}
   </article>;
 }
@@ -78,7 +78,7 @@ export default function AudioCard({ asset, onSelect, selected, onPlay, playerKey
   return <AudioCardFrame activeAction="Pause" asset={asset} selected={selected} compact={compact} isPlaying={isPlaying} onSelect={onSelect} onToggle={() => onPlay(effectivePlayerKey, !isPlaying)} seek={
     <input className="scrub" type="range" min="0" max={loaded && audioRef.current?.duration ? audioRef.current.duration : asset.duration || 1} step="0.01" value={position} onChange={event => { const next = Number(event.target.value); if (audioRef.current) audioRef.current.currentTime = next; setPosition(next); }} aria-label="Seek audio" />
   }>
-    <audio ref={audioRef} src={`sfx-media://asset/${asset.id}`} loop={loop} preload="metadata" onLoadedMetadata={() => setLoaded(true)} onTimeUpdate={event => setPosition(event.currentTarget.currentTime)} onEnded={() => onPlay(effectivePlayerKey, false)} />
+    <audio ref={audioRef} src={window.sfx.mediaUrl(`asset/${asset.id}`)} loop={loop} preload="metadata" onLoadedMetadata={() => setLoaded(true)} onTimeUpdate={event => setPosition(event.currentTarget.currentTime)} onEnded={() => onPlay(effectivePlayerKey, false)} />
     <div className="preview-controls"><label><input type="checkbox" checked={loop} onChange={event => setLoop(event.target.checked)} /> Loop</label><label className="gain-control">Gain <input type="range" min="0" max="1" step="0.05" value={gain} onChange={event => setGain(Number(event.target.value))} aria-label="Preview gain" /></label></div>
   </AudioCardFrame>;
 }

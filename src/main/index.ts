@@ -1,4 +1,5 @@
 import { Operations } from './operations';
+import { startBrowserHost } from './browser-host';
 import { Exporter } from './exporter';
 import { startBridge, operationError } from './bridge';
 import { RendererPort } from './ui-port';
@@ -19,6 +20,9 @@ import { ElevenLabsMusicClient } from './providers/elevenlabs-music';
 import { GeminiMusicClient } from './providers/gemini-music';
 import { ChatRegistry } from './chat-registry';
 import { MusicRegistry } from './music-registry';
+import { ProviderKeys } from './provider-keys';
+import { VoiceRegistry } from './voice-registry';
+import { VoiceClient } from './providers/voice';
 import { AnthropicClient } from './providers/generic/anthropic';
 import { ChatCompletionsClient, toChatMessages, toResponsesOutput } from './providers/generic/chat';
 import { GenericResponsesClient } from './providers/generic/responses';
@@ -31,6 +35,8 @@ import { diagnosticError } from './providers/errors';
 protocol.registerSchemesAsPrivileged([{ scheme: 'sfx-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }]);
 app.setName('SfxChat');
 app.setPath('userData', join(app.getPath('appData'), 'SfxChat'));
+const browserMode = !app.isPackaged && process.env.SFXCHAT_BROWSER === '1';
+let browserHost: Awaited<ReturnType<typeof startBrowserHost>> | null = null;
 let window: BrowserWindow | null = null;
 let service: WorkbenchService | null = null;
 let auth: CodexAuth | null = null;
@@ -42,7 +48,7 @@ let eventTimer: ReturnType<typeof setTimeout> | null = null;
 const diagnostics = new DiagnosticLog(app.getPath('userData'));
 const changed = () => {
   if (eventTimer) return;
-  eventTimer = setTimeout(() => { eventTimer = null; if (window && !window.isDestroyed()) window.webContents.send('sfx:changed'); }, 40);
+  eventTimer = setTimeout(() => { eventTimer = null; if (window && !window.isDestroyed()) window.webContents.send('sfx:changed'); browserHost?.changed(); }, 40);
 };
 function safeError(error: unknown) {
   // Never surface upstream payloads, headers or arbitrary diagnostic objects.
@@ -62,7 +68,7 @@ function bytesResponse(bytes: Buffer, contentType: string, request: Request): Re
   }
   return new Response(new Uint8Array(bytes), { headers: { ...headers, 'content-length': String(bytes.length) } });
 }
-if (!app.requestSingleInstanceLock()) app.quit();
+if (!app.requestSingleInstanceLock()) { if (browserMode) { process.stderr.write('Close the existing SfxChat owner before starting browser development.\n'); app.exit(1); } else app.quit(); }
 else {
   app.on('second-instance', () => { window?.show(); window?.focus(); });
   void app.whenReady().then(async () => {
@@ -76,15 +82,20 @@ else {
     try { await auth.initialize(); } catch (error) { credentialError = safeError(error); }
     const codex = new CodexClient(); const eleven = new ElevenLabsClient();
     const elevenMusic = new ElevenLabsMusicClient(); const geminiMusic = new GeminiMusicClient();
-    const registry = new ChatRegistry(store, secrets);
-    const music = new MusicRegistry(store, secrets);
+    const providerKeys = new ProviderKeys(store, secrets);
+    const registry = new ChatRegistry(store, secrets, providerKeys);
+    const music = new MusicRegistry(store, providerKeys);
+    const voice = new VoiceRegistry(store, providerKeys);
+    const voiceClient = new VoiceClient();
     const model = () => resolveChatModel(store.setting('chat-model', DEFAULT_MODEL));
     const livePorts: ServicePorts = {
       settings: async () => {
-        let elevenLabsReady = false;
-        try { elevenLabsReady = Boolean(await secrets.get('elevenlabs')); } catch (error) { credentialError = safeError(error); }
+        let keys: import('../shared/types').ProviderKeyStatus[] = [];
+        try { keys = await providerKeys.status(); } catch (error) { credentialError = safeError(error); }
+        const elevenLabsReady = keys.find(k => k.id === 'elevenlabs')?.ready ?? false;
+        const geminiReady = keys.find(k => k.id === 'gemini')?.ready ?? false;
         const active = registry.activeSelection();
-        return { codexReady: auth!.status.ready, loginPending: auth!.status.pending, elevenLabsReady, secureStorageAvailable: await secrets.available(), model: model(), error: auth!.status.error ?? credentialError, chatModels: registry.options(), activeChat: active, providers: registry.providers(), musicProviders: await music.entries(), activeMusicId: music.activeId() };
+        return { codexReady: auth!.status.ready, loginPending: auth!.status.pending, elevenLabsReady, geminiReady, providerKeys: keys, voiceProviders: await voice.entries(keys), activeVoiceId: voice.activeId(), secureStorageAvailable: await secrets.available(), model: model(), error: auth!.status.error ?? credentialError, chatModels: registry.options(), activeChat: active, providers: registry.providers(), musicProviders: await music.entries(keys), activeMusicId: music.activeId() };
       },
       chat: async options => {
         const target = await registry.resolveActive();
@@ -109,14 +120,14 @@ else {
         return { output: toResponsesOutput(result.text, result.calls), calls: result.calls, usage: result.usage, requestId: result.requestId };
       },
       generateEffect: async (input, signal) => {
-        const key = await secrets.get('elevenlabs');
+        const key = await providerKeys.get('elevenlabs');
         if (!key) throw new Error('Add your ElevenLabs API key in Settings first.');
         const result = await eleven.generateSound(input, key, AbortSignal.any([signal, AbortSignal.timeout(180_000)]));
         return { ...result, format: 'mp3' as const, provider: 'ElevenLabs' };
       },
       generateMusic: async (input, signal) => {
         // The provider, model, and key resolve here rather than in tool arguments or the
-        // renderer; music credentials are separate from chat and sound-effect keys.
+        // renderer; every capability uses the one shared vendor key.
         const target = await music.resolve(input.providerId);
         const timeout = AbortSignal.any([signal, AbortSignal.timeout(600_000)]);
         if (target.provider.kind === 'elevenlabs-music') {
@@ -126,19 +137,30 @@ else {
         const result = await geminiMusic.compose(input, target.model, target.key, timeout);
         return { ...result, provider: target.provider.label };
       },
+      generateVoice: async (input, signal) => {
+        if (!input.providerId) throw new Error('Queued voice request has no resolved provider.');
+        const key = await providerKeys.get(input.providerId);
+        if (!key) throw new Error('Save the shared provider API key in Settings first.');
+        return voiceClient.generate(input, key, AbortSignal.any([signal, AbortSignal.timeout(600_000)]));
+      },
+      listVoices: async input => {
+        const key = await providerKeys.get(input.providerId);
+        if (!key) throw new Error('Save the shared provider API key in Settings first.');
+        return voiceClient.list(input, key, AbortSignal.timeout(30_000));
+      },
       safeError
     };
     service = new WorkbenchService(store, media, livePorts, changed, diagnostics);
     store.recover(); store.ensureConversation(store.activeProjectId());
     const agentRoot = app.isPackaged ? join(process.resourcesPath, 'agent') : join(__dirname, '../agent');
-    rendererPort = new RendererPort(() => window, store);
+    rendererPort = new RendererPort(() => window, store, browserMode ? { available: () => browserHost?.available() ?? false, send: command => browserHost?.send(command) } : undefined);
     const exporter = new Exporter(media, store, join(agentRoot, 'sfxchat-helper.exe'));
     operations = new Operations(service, rendererPort, exporter);
     service.operation = (name, args) => operations!.call(name, args);
     bridge = await startBridge(root, join(agentRoot, 'sfxchat-helper.exe'), operations);
     const context = (id: string) => ({ projectId: store.conversation(id).projectId, sessionId: id });
 
-    protocol.handle('sfx-media', async request => {
+    const serveMedia = async (request: Request): Promise<Response> => {
       try {
         const url = new URL(request.url);
         if (request.method !== 'GET') return new Response(null, { status: 404 });
@@ -158,7 +180,8 @@ else {
         }
         return new Response(null, { status: 404 });
       } catch { return new Response(null, { status: 404 }); }
-    });
+    };
+    protocol.handle('sfx-media', serveMedia);
 
     const handlers: Record<string, (...args: any[]) => unknown> = {
       operation: async (name, args) => { try { return { ok: true, result: await operations!.call(name, args, 'user') }; } catch (e) { return operationError(e); } },
@@ -176,6 +199,11 @@ else {
       sendMessage: (id, text) => service!.sendMessage(id, text), cancelTurn: id => service!.cancelTurn(id),
       generate: (id, input) => operations!.call('generate_sounds', { ...context(id), requestId: randomUUID(), input }, 'user').then(requireAdmission), cancelJob: id => operations!.call('cancel_job', { ...context(store.job(id).conversationId), id }, 'user'),
       generateMusic: (id, input) => { const { kind: _kind, ...fields } = input; return operations!.call('generate_music', { ...context(id), requestId: randomUUID(), input: fields }, 'user').then(requireAdmission); },
+      generateVoice: (id, input) => { const { kind: _kind, ...fields } = input; return operations!.call('generate_voice', { ...context(id), requestId: randomUUID(), input: fields }, 'user').then(requireAdmission); },
+      listVoices: input => operations!.call('list_voices', input, 'user'),
+      saveVoiceProvider: input => { voice.save(input); changed(); }, setActiveVoice: id => { voice.setActive(id); changed(); },
+      saveProviderKey: async (id, key) => { await providerKeys.save(id, key); credentialError = null; changed(); },
+      selectProviderKey: async (id, candidateId) => { await providerKeys.select(id, candidateId); credentialError = null; changed(); },
       updateAsset: (id, patch, conversationId) => operations!.call('update_asset', { ...context(conversationId ?? store.ensureConversation(store.activeProjectId())), id, patch }, 'user'),
       analyzeAudio: (id, input) => operations!.call('analyze_audio', { projectId: store.activeProjectId(), id, input }, 'user'), trimAsset: (conversationId, id, input) => operations!.call('trim_asset', { ...context(conversationId), id, input }, 'user'),
       previewTrim: (id, input) => service!.previewTrim(id, input, store.activeProjectId()),
@@ -193,7 +221,6 @@ else {
         if (!result.canceled && result.filePath) await operations!.call('export_asset', { projectId: asset.projectId, id, destination: result.filePath, format }, 'user');
       },
       startLogin: () => auth!.startLogin(), cancelLogin: () => auth!.cancelLogin(), logout: () => auth!.logout(),
-      saveElevenLabsKey: async key => { if (key.trim()) await secrets.set('elevenlabs', key.trim()); else await secrets.delete('elevenlabs'); credentialError = null; changed(); },
       saveModel: value => { const resolved = resolveChatModel(value); store.setSetting('chat-model', resolved); registry.setActive(`codex:${resolved}`, registry.activeSelection().effort || 'medium'); },
       saveChatProvider: async input => { const provider = await registry.saveProvider(input); changed(); return provider; },
       deleteChatProvider: async id => { await registry.deleteProvider(id); changed(); },
@@ -206,9 +233,8 @@ else {
       deleteMusicProvider: async id => { await music.deleteProvider(id); changed(); },
       setActiveMusic: id => { const active = music.setActive(id); changed(); return active; }
     };
-    ipcMain.handle('sfx:call', async (event, method: unknown, rawArgs: unknown) => {
+    const invoke = async (method: unknown, rawArgs: unknown) => {
       if (quitting) throw new Error('SfxChat is closing.');
-      if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted application request.');
       if (typeof method !== 'string' || !Object.hasOwn(commandSchemas, method)) throw new Error('Unknown application operation.');
       const parsed = commandSchemas[method as keyof typeof commandSchemas].safeParse(rawArgs);
       if (!parsed.success) throw new Error('Invalid operation arguments.');
@@ -216,7 +242,16 @@ else {
         const reference = diagnostics.record('operation.failed', { method, error: diagnosticError(error) });
         throw new Error(`${safeError(error)}${reference ? `\nDiagnostic reference: ${reference}. Open Settings → Open diagnostic logs for details.` : ''}`);
       }
+    };
+    ipcMain.handle('sfx:call', async (event, method: unknown, rawArgs: unknown) => {
+      if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted application request.');
+      return invoke(method, rawArgs);
     });
+    if (browserMode) {
+      browserHost = await startBrowserHost({ directory: join(__dirname, '../renderer'), invoke, media: serveMedia, disconnected: () => rendererPort?.unavailable(), shutdown: () => app.quit() });
+      process.stdout.write(`SfxChat browser: ${browserHost.url}\n`);
+      service.pump(); return;
+    }
     window = new BrowserWindow({ width: 1440, height: 940, minWidth: 1000, minHeight: 650, title: 'SfxChat', backgroundColor: '#191b19', show: false, webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
     window.removeMenu();
     window.on('hide', () => rendererPort?.stopForVisibility());
@@ -236,7 +271,7 @@ else {
   app.on('before-quit', event => {
     if (quitting) return; event.preventDefault(); quitting = true;
     rendererPort?.unavailable();
-    void Promise.all([bridge?.close(), operations?.close(), service?.shutdown(), auth?.cancelLogin()]).finally(() => { if (eventTimer) clearTimeout(eventTimer); service?.store.close(); app.quit(); });
+    void Promise.all([browserHost?.close(), bridge?.close(), operations?.close(), service?.shutdown(), auth?.cancelLogin()]).finally(() => { if (eventTimer) clearTimeout(eventTimer); service?.store.close(); app.quit(); });
   });
 }
 

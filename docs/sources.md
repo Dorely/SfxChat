@@ -164,3 +164,21 @@ revalidation, pinned Node/codec sources and licenses, MCP/harness documentation,
 ImageGenCli's installation precedent. [Chimera migration](chimera-integration.md)
 records the source revision and workflow mapping. Sibling project files, credentials,
 account caches and databases were not copied or modified.
+
+
+## Voice integration and guidance — 2026-10-02
+
+The [voice generation review](knowledge/voice-generation.md) records official ElevenLabs
+TTS overview/best practices/v4/models/voice search/settings/convert and Gemini 3.8
+TTS prompting/models/voice API/Interactions sources, plus dated pricing and terms.
+Its coverage table maps recommendations to canonical references, implemented controls,
+or explicitly unsupported features. The v4 HTML page was unavailable through the web
+reader; its official `.md` representation was fetched and read directly.
+
+[ElevenLabs voice](../resources/skill/references/elevenlabs-voice.md) and
+[Gemini voice](../resources/skill/references/gemini-voice.md) are original SfxChat
+syntheses and worked scripts. They are registered in shared guidance and the packaging
+list; build/install hashes cover the exact texts. Vendored ElevenLabs skills and
+licenses remain unchanged historical snapshots. No sibling credentials, databases,
+media, or audition decisions were copied. Provider terms determine generated-media
+rights independently of source/skill licensing.

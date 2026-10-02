@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Store } from './store';
-import { secretName, type SecureStore } from './providers/secrets';
-import type { MusicProviderEntry, MusicProviderKind } from '../shared/types';
+import type { ProviderKeys } from './provider-keys';
+import type { MusicProviderEntry, MusicProviderKind, ProviderKeyStatus } from '../shared/types';
 import { defaultMusicModel, isMusicModel, MUSIC_MODELS, musicModel } from '../shared/music-models';
 
 /** Persisted provider record; readiness is resolved from secure storage on read. */
@@ -45,12 +45,11 @@ export function validateMusicProviderFields(label: string, kind: unknown, model:
 }
 
 /**
- * Music providers are configured independently of chat providers and of the
- * ElevenLabs sound-effects key: each entry owns its own model choice and its own
- * `music-key/<id>` secret. One entry is active; a request may override it.
+ * Music entries own model choices, while credentials belong to their vendor.
+ * One entry is active; a request may override it.
  */
 export class MusicRegistry {
-  constructor(private readonly store: Store, private readonly secrets: SecureStore) {}
+  constructor(private readonly store: Store, private readonly keys: ProviderKeys) {}
 
   providers(): MusicProviderRecord[] {
     return parseMusicProviders(this.store.setting('music-providers', '[]'));
@@ -75,33 +74,38 @@ export class MusicRegistry {
   }
 
   async providerKey(id: string): Promise<string | null> {
-    try { return await this.secrets.get(secretName('music-key', id)); } catch { return null; }
+    const provider = this.providers().find(p => p.id === id);
+    if (!provider) return null;
+    return this.keys.get(provider.kind === 'elevenlabs-music' ? 'elevenlabs' : 'gemini');
   }
 
-  async entries(): Promise<MusicProviderEntry[]> {
+  async entries(knownStatus?: ProviderKeyStatus[]): Promise<MusicProviderEntry[]> {
     const providers = this.providers();
     const entries: MusicProviderEntry[] = [];
-    for (const provider of providers) entries.push({ ...provider, ready: Boolean((await this.providerKey(provider.id))?.trim()) });
+    const status = knownStatus ?? await this.keys.status();
+    for (const provider of providers) entries.push({ ...provider, ready: status.find(s => s.id === (provider.kind === 'elevenlabs-music' ? 'elevenlabs' : 'gemini'))?.ready ?? false });
     return entries;
   }
 
-  async saveProvider(input: { id?: string; label: string; kind: MusicProviderKind; model: string; apiKey?: string }): Promise<MusicProviderEntry> {
+  async saveProvider(input: { id?: string; label: string; kind: MusicProviderKind; model: string }): Promise<MusicProviderEntry> {
     const fields = validateMusicProviderFields(input.label, input.kind, input.model);
     const providers = this.providers();
     const id = input.id?.trim() || randomUUID();
     const existing = providers.findIndex(entry => entry.id === id);
+    if (existing >= 0) await this.keys.get(providers[existing]!.kind === 'elevenlabs-music' ? 'elevenlabs' : 'gemini');
     const record: MusicProviderRecord = { id, ...fields };
     if (existing >= 0) providers[existing] = record;
     else providers.push(record);
     this.write(providers);
     if (!this.store.setting('music-active', '').trim()) this.store.setSetting('music-active', id);
-    if (input.apiKey?.trim()) await this.secrets.set(secretName('music-key', id), input.apiKey.trim());
-    return { ...record, ready: Boolean((await this.providerKey(id))?.trim()) };
+    const status = await this.keys.status();
+    return { ...record, ready: status.find(s => s.id === (record.kind === 'elevenlabs-music' ? 'elevenlabs' : 'gemini'))?.ready ?? false };
   }
 
   async deleteProvider(id: string): Promise<void> {
+    const existing = this.providers().find(p => p.id === id);
+    if (existing) await this.keys.get(existing.kind === 'elevenlabs-music' ? 'elevenlabs' : 'gemini');
     this.write(this.providers().filter(entry => entry.id !== id));
-    await this.secrets.delete(secretName('music-key', id)).catch(() => undefined);
     if (this.store.setting('music-active', '').trim() === id) this.store.setSetting('music-active', this.providers()[0]?.id ?? '');
   }
 

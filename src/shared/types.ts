@@ -1,7 +1,8 @@
 import type { ReviewBoard, UiCommand, PlaybackState, OperationResponse, InstallationInput } from './workbench';
 export type Review = 'unreviewed' | 'accepted' | 'rejected';
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'uncertain';
-export type AssetKind = 'effect' | 'music';
+export type AssetKind = 'effect' | 'music' | 'voice';
+export type AudioProviderId = 'elevenlabs' | 'gemini';
 /** Who set a session title last: the app from the first message, the user, or the assistant. */
 export type TitleSource = 'default' | 'user' | 'assistant';
 export interface Project { id: string; name: string; createdAt: string }
@@ -20,7 +21,7 @@ export interface Asset {
   review: Review; feedback: string; source: 'generated' | 'imported' | 'edited'; kind: AssetKind;
   format: 'mp3' | 'wav'; hash: string; bytes: number; duration: number | null;
   prompt: string; provider: string | null; model: string | null; requestId: string | null;
-  request: GenerationInput | MusicGenerationInput | null; usage: string | null; parentId: string | null; createdAt: string;
+  request: AudioGenerationInput | null; usage: string | null; parentId: string | null; createdAt: string;
   providerPrompt?: string | null; lyrics?: string; edit?: TrimEdit;
 }
 export interface TrimInput {
@@ -65,7 +66,19 @@ export interface MusicGenerationInput {
   /** Local provider override; null or omitted uses the active music provider. */
   providerId?: string | null; parentId?: string | null; name?: string;
 }
-export interface Job { id: string; conversationId: string; kind: AssetKind; status: JobStatus; input: GenerationInput | MusicGenerationInput; assetId: string | null; error: string | null; createdAt: string }
+export interface VoiceGenerationInput {
+  kind: 'voice'; text: string; providerId?: AudioProviderId; model?: string; voiceId?: string;
+  /** Optional prepared script; original text remains independently preserved. */
+  providerText?: string; style?: string; stability?: number; similarity?: number; speed?: number;
+  count?: number; name?: string; parentId?: string | null;
+}
+export type AudioGenerationInput = GenerationInput | MusicGenerationInput | VoiceGenerationInput;
+export interface VoiceProviderEntry { id: AudioProviderId; label: string; model: string; voiceId: string; ready: boolean }
+export interface VoiceListInput { providerId: AudioProviderId; search?: string; language?: string; pageToken?: string }
+export interface VoiceOption { id: string; name: string; description: string; labels: Record<string, string> }
+export interface VoicePage { voices: VoiceOption[]; nextPageToken: string | null }
+export interface ProviderKeyStatus { id: AudioProviderId; ready: boolean; candidates: { id: string; label: string }[] }
+export interface Job { id: string; conversationId: string; kind: AssetKind; status: JobStatus; input: AudioGenerationInput; assetId: string | null; error: string | null; createdAt: string }
 export type GenericProviderKind = 'chat-completions' | 'responses' | 'anthropic';
 export interface ChatProviderEntry { id: string; label: string; baseUrl: string; kind: GenericProviderKind }
 export type CapabilityFlag = true | false | 'unknown';
@@ -78,7 +91,7 @@ export interface ActiveChatSelection { modelId: string; effort: string }
 export interface ChatModelOption { id: string; label: string; providerLabel: string; slug: string; efforts: string[]; builtIn: boolean }
 export type MusicProviderKind = 'elevenlabs-music' | 'gemini-lyria';
 export interface MusicProviderEntry { id: string; label: string; kind: MusicProviderKind; model: string; ready: boolean }
-export interface SettingsStatus { codexReady: boolean; elevenLabsReady: boolean; secureStorageAvailable: boolean; loginPending: boolean; model: string; error: string | null; chatModels: ChatModelOption[]; activeChat: ActiveChatSelection; providers: ChatProviderEntry[]; musicProviders: MusicProviderEntry[]; activeMusicId: string | null }
+export interface SettingsStatus { codexReady: boolean; elevenLabsReady: boolean; geminiReady: boolean; providerKeys: ProviderKeyStatus[]; voiceProviders: VoiceProviderEntry[]; activeVoiceId: AudioProviderId; secureStorageAvailable: boolean; loginPending: boolean; model: string; error: string | null; chatModels: ChatModelOption[]; activeChat: ActiveChatSelection; providers: ChatProviderEntry[]; musicProviders: MusicProviderEntry[]; activeMusicId: string | null }
 export interface ChatContext { model: string; tokens: number; limit: number | null; includesHiddenReasoning: boolean; includesEstimatedMedia: boolean }
 /** Every list below is scoped to `activeProjectId`; other projects' rows never reach the renderer. */
 export interface Snapshot { projects: Project[]; activeProjectId: string; conversations: Conversation[]; messages: Message[]; assets: Asset[]; jobs: Job[]; playground: Record<string, string[]>; settings: SettingsStatus; activeTurns: string[]; reviews: ReviewBoard[] }
@@ -88,6 +101,8 @@ export interface ModelCapabilityResult {
   maxTokens: number | null; vision: CapabilityFlag; audio: CapabilityFlag; error?: string;
 }
 export interface SfxApi {
+  readonly hostMode: 'desktop' | 'browser';
+  mediaUrl(path: string): string;
   operation(name: string, args: unknown): Promise<OperationResponse>;
   installIntegration(input: InstallationInput): Promise<OperationResponse>;
   chooseDirectory(): Promise<string | null>;
@@ -107,6 +122,12 @@ export interface SfxApi {
   cancelTurn(conversationId: string): Promise<void>;
   generate(conversationId: string, input: GenerationInput): Promise<void>;
   generateMusic(conversationId: string, input: MusicGenerationInput): Promise<void>;
+  generateVoice(conversationId: string, input: VoiceGenerationInput): Promise<void>;
+  listVoices(input: VoiceListInput): Promise<VoicePage>;
+  saveVoiceProvider(input: { id: AudioProviderId; model: string; voiceId: string }): Promise<void>;
+  setActiveVoice(id: AudioProviderId): Promise<void>;
+  saveProviderKey(id: AudioProviderId, key: string): Promise<void>;
+  selectProviderKey(id: AudioProviderId, candidateId: string): Promise<void>;
   cancelJob(id: string): Promise<void>;
   updateAsset(id: string, patch: AssetPatch, conversationId?: string): Promise<void>;
   analyzeAudio(id: string, input: AudioAnalysisInput): Promise<AudioAnalysis>;
@@ -120,7 +141,6 @@ export interface SfxApi {
   startLogin(): Promise<void>;
   cancelLogin(): Promise<void>;
   logout(): Promise<void>;
-  saveElevenLabsKey(key: string): Promise<void>;
   saveModel(model: string): Promise<void>;
   saveChatProvider(input: { id?: string; label: string; baseUrl: string; kind: GenericProviderKind; apiKey?: string }): Promise<ChatProviderEntry>;
   deleteChatProvider(id: string): Promise<void>;
@@ -129,7 +149,7 @@ export interface SfxApi {
   saveChatModel(input: { id?: string; providerId: string; slug: string; efforts: string[] }): Promise<ChatModelEntry>;
   deleteChatModel(id: string): Promise<void>;
   setActiveChat(input: { modelId: string; effort: string }): Promise<void>;
-  saveMusicProvider(input: { id?: string; label: string; kind: MusicProviderKind; model: string; apiKey?: string }): Promise<MusicProviderEntry>;
+  saveMusicProvider(input: { id?: string; label: string; kind: MusicProviderKind; model: string }): Promise<MusicProviderEntry>;
   deleteMusicProvider(id: string): Promise<void>;
   setActiveMusic(providerId: string): Promise<void>;
   onChanged(callback: () => void): () => void;
