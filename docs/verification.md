@@ -22,7 +22,14 @@
   completed before the owned browser host was stopped; the browser tab was closed.
 
 Browser checks establish interaction and player state, not listening quality or
-native desktop integration. The rebuilt installer was not installed or published.
+native desktop integration. The rebuilt installer was not published.
+
+At the user's subsequent request, the rebuilt installer completed a silent update
+of `%LOCALAPPDATA%/Programs/SfxChat` with exit code 0. The installed executable,
+application archive, CLI, runtime, command shim and helper matched the release
+files by SHA-256. The installed CLI's `--help` command succeeded without launching
+the app. The archive contains the corrected renderer; native UI verification was
+not repeated after installation.
 
 # Voice, shared credentials, browser verification and manual playback (2026-10-02)
 
