@@ -63,6 +63,8 @@ Opening a review displays cue-grouped sound cards in the Playground results area
 Candidate notes and selection controls sit under each card, with cue feedback and
 manual Loop toggles alongside or below. The Playground header and generation form stay
 in place; **All Playground sounds** returns to the session’s regular results.
+Selections and notes stay editable while you continue auditioning any cue. Save
+review changes before switching reviews or exporting selected sounds.
 
 ```powershell
 sfxchat guidance

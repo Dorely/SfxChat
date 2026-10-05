@@ -1,3 +1,29 @@
+# Auditioning after candidate selection (2026-10-05)
+
+- Source inspection traced the reported board-wide playback lock to candidate
+  selection setting the review draft dirty, which disabled every candidate and
+  reference Play button. Unsaved edits now leave playback available across cues;
+  saving remains explicit and manual review navigation/export retain their draft
+  guard. Draft preview gains must be finite and within -60 to +12 dB before playback.
+- `npm run typecheck` and `npm run package` passed, including the production build
+  and Windows NSIS installer. `npm run dev:browser` also built and launched the
+  real Electron owner and renderer. No automated test infrastructure was added.
+- In the in-app browser, selected a candidate in the existing multi-cue voice
+  review, then started another candidate in that cue and a candidate in another
+  cue without saving. Their controls reported playing and returned to Play after
+  stopping/completion. Edited candidate notes and selected a second cue's candidate.
+- A +13 dB draft gain produced the expected validation error without starting
+  playback; changing it to -6 dB allowed playback without saving. An unsaved
+  reference choice also played. Loop toggles stayed off throughout verification.
+- Stopped audio and discarded all verification drafts. Concurrent external agent
+  work updated the saved board from revision 2 to 3; discard loaded revision 3
+  without overwriting it. No user decisions or feedback were saved by verification,
+  and no provider generation was initiated by this check. External generation jobs
+  completed before the owned browser host was stopped; the browser tab was closed.
+
+Browser checks establish interaction and player state, not listening quality or
+native desktop integration. The rebuilt installer was not installed or published.
+
 # Voice, shared credentials, browser verification and manual playback (2026-10-02)
 
 This entry describes the final behavior after the user's browser and playback changes.

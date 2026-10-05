@@ -402,7 +402,10 @@ and feedback sit beside the cards, moving below at narrower container widths. Th
 Playground header, generation form and jobs remain in place. ReviewLauncher opens or
 creates a board from the header; returning to all sounds restores regular results.
 The WebAudio player reports state to the card presentation as well as RendererPort;
-review cards do not introduce a second native audio player.
+review cards do not introduce a second native audio player. Unsaved decisions, notes,
+membership and preview gains do not disable auditioning candidates or references in
+any cue; playback uses the current draft's preview gain. Saving remains explicit,
+and manual review navigation or exporting requires saving or discarding the draft first.
 
 RendererPort acknowledges UI commands and reports actual player state. Open commands
 never autoplay. Conflicting simultaneous switches return UI_BUSY. The renderer's

@@ -47,7 +47,13 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
   const cueChange = (index: number, patch: Partial<ReviewCue>) => draft && change({ title: draft.title, cues: draft.cues.map((cue, i) => i === index ? { ...cue, ...patch } : cue) });
   const save = () => attempt(async () => { if (!draft) return; const updated = await workbench<ReviewBoard>('review_update', { ...scope, reviewId: draft.id, expectedRevision: draft.revision, content: { title: draft.title, cues: draft.cues } }); setDraft(updated); setDirty(false); });
   const stop = () => { setError(''); onStop(); };
-  const play = (cue: ReviewCue, assetId: string) => attempt(async () => { if (!board) return; const candidate = cue.candidates.find(c => c.assetId === assetId); await onPlay({ sessionId, reviewId: board.id, assetId, gainDb: candidate?.gainDb ?? cue.referenceGainDb, loop: !!loops[assetId] }); });
+  const play = (cue: ReviewCue, assetId: string) => attempt(async () => {
+    if (!board) return;
+    const candidate = cue.candidates.find(c => c.assetId === assetId);
+    const gainDb = candidate?.gainDb ?? cue.referenceGainDb;
+    if (!Number.isFinite(gainDb) || gainDb < -60 || gainDb > 12) throw new Error('Preview gain must be between -60 and 12 dB.');
+    await onPlay({ sessionId, reviewId: board.id, assetId, gainDb, loop: !!loops[assetId] });
+  });
   const loopToggle = (assetId: string, checked: boolean) => { if (isPlaying(assetId)) stop(); setLoops(current => ({ ...current, [assetId]: checked })); };
   const isPlaying = (id: string) => playback.status === 'playing' && playback.reviewId === selectedId && playback.assetId === id;
   const toggle = (cue: ReviewCue, id: string) => isPlaying(id) ? void stop() : void play(cue, id);
@@ -59,7 +65,7 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
       <span className="field-hint">Revision {draft.revision} · saved by {draft.origin}</span>
       <div className="header-actions"><button className="secondary-button" disabled={dirty || busy} onClick={() => onSelect(null)}>All Playground sounds</button><button className="secondary-button" onClick={() => void stop()}>Stop audio</button><button className="primary-button" disabled={!dirty || busy} onClick={() => void save()}>Save review</button></div>
     </div>
-    {dirty && <div className="review-board-bar"><span className="field-hint">Save to audition changed settings or leave this review.</span><button className="secondary-button" disabled={busy} onClick={() => { setDraft(board ?? null); setDirty(false); }}>Discard / reload</button></div>}
+    {dirty && <div className="review-board-bar"><span className="field-hint">Unsaved changes. Keep auditioning; save before switching reviews or exporting.</span><button className="secondary-button" disabled={busy} onClick={() => { setDraft(board ?? null); setDirty(false); }}>Discard / reload</button></div>}
     {error && <p role="alert" className="settings-error">{error}</p>}
     {board && board.revision !== draft.revision && <p role="alert" className="settings-error">New feedback was saved elsewhere. Reload and reconcile before saving.</p>}
     <details className="review-details"><summary>Review details</summary><label>Review title<input value={draft.title} onChange={e => change({ ...draft, title: e.target.value })} /></label></details>
@@ -70,7 +76,7 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
         <div className="review-cue-layout">
           <div className="review-card-grid">
             {reference && <div className="playground-slot review-reference"><div className="slot-label"><span>Current reference</span></div>
-              <AudioCardFrame onSelect={() => onSelectAsset(reference.id)} asset={reference} isPlaying={isPlaying(reference.id)} onToggle={() => toggle(cue, reference.id)} disabled={dirty || busy} compact>
+              <AudioCardFrame onSelect={() => onSelectAsset(reference.id)} asset={reference} isPlaying={isPlaying(reference.id)} onToggle={() => toggle(cue, reference.id)} disabled={busy} compact>
                 <div className="review-card-controls"><label className="review-check"><input type="checkbox" aria-label={`Loop ${reference.name}`} checked={!!loops[reference.id]} onChange={e => loopToggle(reference.id, e.target.checked)} /> Loop</label><label>Preview dB<input type="number" min="-60" max="12" value={cue.referenceGainDb} onChange={e => cueChange(index, { referenceGainDb: Number(e.target.value) })} /></label></div>
                 <p className="field-hint">Compare candidates against this sound.</p>
               </AudioCardFrame>
@@ -80,7 +86,7 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
               const remove = () => cueChange(index, { candidates: cue.candidates.filter((_, i) => i !== ci), ...(picked ? { decision: 'unreviewed' as const, selectedAssetId: null } : {}) });
               return <div className="playground-slot" key={candidate.assetId}>
                 <div className="slot-label"><span>Candidate {String(ci + 1).padStart(2, '0')}</span><button className="mini-button" aria-label={`Remove candidate ${ci + 1}`} onClick={remove}><Icon name="close" /></button></div>
-                {asset ? <AudioCardFrame onSelect={() => onSelectAsset(asset.id)} asset={asset} title={candidate.label} selected={picked} review={picked ? 'accepted' : cue.decision === 'rejected' ? 'rejected' : 'unreviewed'} isPlaying={isPlaying(asset.id)} onToggle={() => toggle(cue, asset.id)} disabled={dirty || busy} compact>
+                {asset ? <AudioCardFrame onSelect={() => onSelectAsset(asset.id)} asset={asset} title={candidate.label} selected={picked} review={picked ? 'accepted' : cue.decision === 'rejected' ? 'rejected' : 'unreviewed'} isPlaying={isPlaying(asset.id)} onToggle={() => toggle(cue, asset.id)} disabled={busy} compact>
                   <div className="review-card-controls"><label className="review-check"><input type="checkbox" aria-label={`Loop ${asset.name}`} checked={!!loops[asset.id]} onChange={e => loopToggle(asset.id, e.target.checked)} /> Loop</label><label>Preview dB<input type="number" min="-60" max="12" value={candidate.gainDb} onChange={e => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, gainDb: Number(e.target.value) } : c) })} /></label></div>
                   <button className={`secondary-button review-pick ${picked ? 'review-pick-active' : ''}`} aria-pressed={picked} onClick={() => cueChange(index, { decision: 'selected', selectedAssetId: asset.id })}><Icon name="check" /> {picked ? 'Selected for this cue' : 'Select this candidate'}</button>
                   <label className="review-candidate-notes">Candidate notes<textarea value={candidate.notes} placeholder="What works? What needs changing?" onChange={e => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, notes: e.target.value } : c) })} /></label>
