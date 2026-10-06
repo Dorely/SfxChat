@@ -1,8 +1,9 @@
 # App icon (2026-10-05)
 
-- Added the app icon: a lime speech bubble carrying a sound burst, with the assistant
-  spark, on the Studio tile. `icon-small.svg` drops the spark and uses three
-  pixel-aligned bars for 16-24 px. The ICO and PNG were rasterized from the SVGs with the
+- Added the app icon: a lime speech bubble carrying a sound burst, with two sound arcs,
+  on the Studio tile. The arcs replaced a four-point spark that read too close to the
+  Gemini logo. `icon-small.svg` drops the arcs and uses three pixel-aligned bars for
+  16-24 px. The ICO and PNG were rasterized from the SVGs with the
   project's Electron in a temporary helper outside the repository.
 - Wired as the `BrowserWindow` icon (packaged builds read it from `resources/icon.ico`),
   the electron-builder Windows/installer icon, and the renderer favicon.
