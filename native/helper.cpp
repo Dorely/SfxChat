@@ -130,6 +130,15 @@ static std::string utf8(const wchar_t* value) {
 static void put32(unsigned char* p,unsigned v){ p[0]=v&255; p[1]=(v>>8)&255; p[2]=(v>>16)&255; p[3]=(v>>24)&255; }
 static void put16(unsigned char* p,unsigned v){ p[0]=v&255; p[1]=(v>>8)&255; }
 static void quietLog(int,const char*,void*) {}
+// FluidSynth's player reports success for a file it could not open, which would otherwise render silence.
+static bool readableMidi(const wchar_t* path) {
+    FILE* file=_wfopen(path,L"rb");
+    if(!file) return false;
+    unsigned char header[14];
+    bool ok=fread(header,1,14,file)==14 && !memcmp(header,"MThd",4);
+    fclose(file);
+    return ok;
+}
 static void wavHeader(unsigned char* h,unsigned dataBytes) {
     memcpy(h,"RIFF",4); put32(h+4,36+dataBytes); memcpy(h+8,"WAVEfmt ",8); put32(h+16,16); put16(h+20,1); put16(h+22,2);
     put32(h+24,44100); put32(h+28,44100*4); put16(h+32,4); put16(h+34,16); memcpy(h+36,"data",4); put32(h+40,dataBytes);
@@ -154,7 +163,8 @@ static int renderMidi(const wchar_t* midi,const wchar_t* soundfont,const wchar_t
     }
     if(!failure) {
         player=new_fluid_player(synth);
-        if(!player || fluid_player_add(player,utf8(midi).c_str())==FLUID_FAILED) failure="Could not read the MIDI file.";
+        if(!readableMidi(midi)) failure="Could not read the MIDI file.";
+        else if(!player || fluid_player_add(player,utf8(midi).c_str())==FLUID_FAILED) failure="Could not read the MIDI file.";
     }
     if(!failure) {
         file=_wfopen(output,L"wb");
