@@ -701,15 +701,35 @@ Run and passed:
   bank, bank identity hashed, non-SF2 input rejected, an exact 4.000 s render for a 2 s clip,
   identical cache reuse, a single cache file, working file export, and non-silent audio.
 
-Not run (coverage gaps):
+Browser UI pass (2026-10-06, `npm run dev:browser` on a freed single-instance lock, driven with
+the agent-browser CLI; no provider or chat call was made):
 
-- **No live browser or desktop acceptance pass.** A SfxChat instance was already running and holds
-  the single-instance lock, so `npm run dev:browser` could not start; that process was left alone
-  rather than terminated. The studio's tab, note drawing and dragging, playhead audition,
-  instrument picker, and save-as-derivative flows are therefore verified only by typecheck, the
-  production build, and the direct helper/module checks above — not by a UI pass.
-- **No live assistant turn** composing a clip and **no CLI/MCP invocation** of `compose_midi`. The
-  operation is registered and published through the catalog by construction, but it was not called
-  end to end.
+- The MIDI Studio tab opens the studio: clip rail, transport (Play/Stop, Loop, tempo, meter, snap,
+  zoom, add track, save, clip name), and a track block whose instrument picker is populated from
+  the real bank ("0 · Grand Piano" through "127 · Gun Shot").
+- Drawing works: four synthetic and one real click on the roll produced five notes and updated the
+  summary to "7.50 beats · 3.75s · 1 track".
+- Playback works: Play switched the transport to "Stop" and the playhead advanced to 152 px; Stop
+  reset it to 0. The player is a detached `Audio` element, so the clock-driven playhead is the
+  visible evidence rather than a DOM `<audio>` node.
+- The instrument picker applies: selecting program 40 changed the note label to
+  "Violin · beat 1 · velocity 100".
+- Saving works: "Save clip" wrote the clip (railed as "Studio UI check — 5 notes · 3.8s"), moved
+  the tab counts to "MIDI Studio 1" and "Playground 56", and switched the action to "Save as new
+  clip" (derivative mode). A screenshot was captured during the pass.
+- The pass created one 5-note clip ("Studio UI check") in the selected project's MIDI library and
+  playground. It is left in place because no asset-delete operation exists.
+
+MCP server check (bundled CLI `sfxchat mcp`, stdio JSON-RPC handshake):
+
+- `initialize` returned protocol `2024-11-05` and server `sfxchat@0.2.0`.
+- `tools/list` returned 37 tools, including `compose_midi`, `generate_music`, `audio_listen`,
+  `guidance`, `set_playground`, and `export_asset`.
+- `resources/list` exposed `sfxchat://guidance`. The process exited 0 with empty stderr.
+
+Still not run (coverage gaps):
+
+- **No live assistant turn** composing a clip; the model-driven path is exercised through the
+  registered operation and tool schema, not a hosted turn.
 - **No listening evidence.** No model listened to a render, and no claim is made about the
   perceptual quality of the bank, the synthesis, or any composed clip.
