@@ -8,7 +8,7 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .chat-sidebar { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid var(--line); background: var(--sidebar); }
 .brand-row { display: flex; gap: 11px; align-items: center; height: 74px; padding: 0 24px; border-bottom: 1px solid var(--line); letter-spacing: .08em; }
 .brand-row strong { font-size: 14px; letter-spacing: .14em; display: block; }
-.brand-row span:not(.live-indicator) { color: var(--quiet); text-transform: uppercase; font: 11px var(--font-mono); letter-spacing: .06em; display: block; margin-top: 3px; }
+.brand-row strong + span { color: var(--quiet); text-transform: uppercase; font: 11px var(--font-mono); letter-spacing: .06em; display: block; margin-top: 3px; }
 .brand-mark { width: 29px; height: 29px; display: grid; place-items: center; border: 1px solid var(--accent-line); color: var(--accent); border-radius: 8px; font-size: 17px; }
 .live-indicator { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: auto; box-shadow: 0 0 12px var(--accent); }
 .sidebar-heading { padding: 26px 20px 12px 24px; display: flex; align-items: center; justify-content: space-between; color: var(--muted); font: 12px var(--font-mono); text-transform: uppercase; letter-spacing: .1em; }

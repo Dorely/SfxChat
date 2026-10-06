@@ -6,14 +6,19 @@
   pixel-aligned bars for 16-24 px. The ICO and PNG were rasterized from the SVGs with the
   project's Electron in a temporary helper outside the repository.
 - Wired as the `BrowserWindow` icon (packaged builds read it from `resources/icon.ico`),
-  the electron-builder Windows/installer icon, and the renderer favicon.
-- `npm run typecheck` and `npm run build` passed; the build emitted the favicon asset.
-  Electron's `nativeImage` loaded the ICO at 256x256, and .NET `System.Drawing.Icon`
-  opened its 16, 32, and 48 px entries. Rendered sizes 16-512 px were inspected on dark
-  and light backgrounds.
-- Gaps: no packaged installer was built and the native window/taskbar icon was not
-  viewed. With `signAndEditExecutable: false`, electron-builder does not embed the icon in
-  `SfxChat.exe`, so Explorer and shortcuts may still show Electron's icon.
+  the electron-builder Windows/installer icon, and the renderer favicon. The sidebar
+  brand mark and chat welcome use a themed `mark` glyph of the same bubble; the brand
+  subtitle rule no longer also restyled the mark as 11 px quiet text.
+- `signAndEditExecutable` is now enabled so electron-builder embeds the icon in
+  `SfxChat.exe`. No certificate is configured, so the executables remain unsigned.
+- `npm run typecheck`, `npm run build`, and `npm run package` passed. .NET
+  `ExtractAssociatedIcon` returned the new icon from `SfxChat.exe` and the installer.
+  The redistributed Node runtime kept its pinned SHA-256 and its own valid signature.
+  Electron's `nativeImage` loaded the ICO at 256x256. Rendered sizes 16-512 px were
+  inspected on dark and light backgrounds.
+- In the in-app browser via `npm run dev:browser`, the brand mark rendered the bubble at
+  17 px in the accent color with the subtitle unchanged, and the favicon resolved. The
+  host was shut down afterwards. No audio was played.
 
 # Review candidate card polish (2026-10-05)
 

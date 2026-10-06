@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 
 const paths: Record<string, ReactNode> = {
   spark: <path d="M12 2.5 L14 9.5 L21 12 L14 14.5 L12 21.5 L10 14.5 L3 12 L10 9.5 Z" fill="currentColor" stroke="none" />,
+  mark: <path d="M7 4 H17 A4 4 0 0 1 21 8 V12 A4 4 0 0 1 17 16 H10.5 L6 19.5 L6.6 15.9 A4 4 0 0 1 3 12 V8 A4 4 0 0 1 7 4 Z M7.7 8.5 V11.5 H9.3 V8.5 Z M11.2 7 V13 H12.8 V7 Z M14.7 8.25 V11.75 H16.3 V8.25 Z" fill="currentColor" fillRule="evenodd" stroke="none" />,
   plus: <path d="M12 5.5 V18.5 M5.5 12 H18.5" strokeWidth={2.4} />,
   search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="M15.3 15.3 L20.5 20.5" /></>,
   send: <path d="M21 3 L10.5 13.5 M21 3 L14.5 21 L10.5 13.5 L3 9.5 Z" />,
