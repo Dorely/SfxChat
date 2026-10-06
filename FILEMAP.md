@@ -33,6 +33,8 @@ is recorded in [verification](docs/verification.md).
 | [third-party/](third-party/) | Decoder attribution, LGPL text, and corresponding upstream source/build archives shipped with the app. |
 | [third-party/synthesis/](third-party/synthesis/) | Pinned FluidSynth 2.6.1 and gcem archives with hashes and LGPL/Apache license texts for offline MIDI rendering. |
 | [resources/soundfonts/](resources/soundfonts/) | Bundled GeneralUser GS General MIDI bank and its license, packaged as an app resource for playback and export. |
+| [resources/icon.svg](resources/icon.svg), [icon-small.svg](resources/icon-small.svg) | App icon masters: full design, and a simplified pixel-grid version for 16-24 px. |
+| [resources/icon.ico](resources/icon.ico), [icon.png](resources/icon.png) | Icon rasters rendered from the masters (ICO 16-256 px with the small master at 16-24 px; 512 px PNG) for the window, installer, and packaged resources. |
 | [docs/knowledge/README.md](docs/knowledge/README.md) | API bundle navigation, historical-status caveats, and research boundaries. |
 | [docs/knowledge/elevenlabs.md](docs/knowledge/elevenlabs.md) | Dated official SFX prompting review, endpoint/app control mapping, revision examples, source discrepancies, and evidence limits. |
 | [docs/knowledge/elevenlabs-music.md](docs/knowledge/elevenlabs-music.md) | Dated official Music endpoint review, request mapping, limits, prompt-suggestion errors, prompting synthesis, and evidence limits. |

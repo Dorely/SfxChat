@@ -306,7 +306,8 @@ void acquireInstanceLock().then(acquired => {
       process.stdout.write(`SfxChat browser: ${browserHost.url}\n`);
       service.pump(); return;
     }
-    window = new BrowserWindow({ width: 1440, height: 940, minWidth: 1000, minHeight: 650, title: 'SfxChat', backgroundColor: '#191b19', show: false, webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    const icon = app.isPackaged ? join(process.resourcesPath, 'icon.ico') : join(__dirname, '../../resources/icon.ico');
+    window = new BrowserWindow({ width: 1440, height: 940, minWidth: 1000, minHeight: 650, title: 'SfxChat', icon, backgroundColor: '#191b19', show: false, webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
     window.removeMenu();
     window.on('hide', () => rendererPort?.stopForVisibility());
     window.on('minimize', () => rendererPort?.stopForVisibility());

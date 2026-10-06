@@ -1,3 +1,19 @@
+# App icon (2026-10-05)
+
+- Added the app icon: a lime speech bubble carrying a sound burst, with the assistant
+  spark, on the Studio tile. `icon-small.svg` drops the spark and uses three
+  pixel-aligned bars for 16-24 px. The ICO and PNG were rasterized from the SVGs with the
+  project's Electron in a temporary helper outside the repository.
+- Wired as the `BrowserWindow` icon (packaged builds read it from `resources/icon.ico`),
+  the electron-builder Windows/installer icon, and the renderer favicon.
+- `npm run typecheck` and `npm run build` passed; the build emitted the favicon asset.
+  Electron's `nativeImage` loaded the ICO at 256x256, and .NET `System.Drawing.Icon`
+  opened its 16, 32, and 48 px entries. Rendered sizes 16-512 px were inspected on dark
+  and light backgrounds.
+- Gaps: no packaged installer was built and the native window/taskbar icon was not
+  viewed. With `signAndEditExecutable: false`, electron-builder does not embed the icon in
+  `SfxChat.exe`, so Explorer and shortcuts may still show Electron's icon.
+
 # Review candidate card polish (2026-10-05)
 
 - Reported: the Loop checkbox floated in the middle of review cards. Both control labels

@@ -19,12 +19,15 @@ extraResources:
     to: skill
   - from: resources/soundfonts
     to: soundfonts
+  - from: resources/icon.ico
+    to: icon.ico
 asarUnpack:
   - node_modules/better-sqlite3/**/*
   - node_modules/mpg123-decoder/**/*
   - third-party/**/*
 win:
   target: nsis
+  icon: resources/icon.ico
   signAndEditExecutable: false
 nsis:
   oneClick: false

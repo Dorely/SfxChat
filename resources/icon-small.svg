@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- SfxChat icon for 16-24 px: the bubble and burst only, aligned to a 16 px grid. -->
+  <rect width="256" height="256" rx="56" fill="#191c18"/>
+  <path d="M72 48 H184 A40 40 0 0 1 224 88 V136 A40 40 0 0 1 184 176 H112 L56 224 L64 176 A40 40 0 0 1 32 136 V88 A40 40 0 0 1 72 48 Z" fill="#c4f264"/>
+  <g fill="#17200f">
+    <rect x="64" y="80" width="32" height="64" rx="16"/>
+    <rect x="112" y="64" width="32" height="96" rx="16"/>
+    <rect x="160" y="80" width="32" height="64" rx="16"/>
+  </g>
+</svg>
