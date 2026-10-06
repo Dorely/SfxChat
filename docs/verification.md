@@ -1,3 +1,18 @@
+# F5 debugger attach with a running owner (2026-10-06)
+
+- Cause: VS Code's renderer attach reported "Socket closed before the connection was
+  established" when another SfxChat (installed or CLI-started) held the library's
+  single-instance lock. Reproduced: a second `electron . --remote-debugging-port`
+  instance printed "DevTools listening" and then quit immediately on the lock.
+- Unpackaged launches now prompt to close the running owner, which quits through its
+  normal shutdown on a `takeover` second-instance message, and retry the lock for up to
+  30 s. Packaged and browser-mode behavior is unchanged.
+- `npm run typecheck` and `npm run build` passed. Live: started `electron .`, then the
+  launch configuration's `REMOTE_DEBUGGING_PORT=9222 electron-vite --sourcemap`. The
+  debug instance stayed alive showing the prompt; pressing "Close it and continue"
+  (via Windows UI Automation) shut down the first owner, and `/json/list` on 9222 then
+  listed the "SfxChat — Sound Workbench" page target. VS Code itself was not driven.
+
 # Auditioning after candidate selection (2026-10-05)
 
 - Source inspection traced the reported board-wide playback lock to candidate

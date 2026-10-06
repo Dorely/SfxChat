@@ -117,8 +117,9 @@ build, and live/manual runs of the app, and record what was actually checked in
 
 For interactive debugging in VS Code, select `Debug SfxChat` in Run and Debug and
 press F5. This launches the development app with source-mapped main-process and
-renderer debugging. Close any existing SfxChat window first because the app allows
-only one running instance.
+renderer debugging. The app allows one running instance per library: if the installed
+app or a CLI-started owner is already running, the development build asks to close it
+and takes its place, so the renderer debugger can attach.
 
 ## Connect and create
 

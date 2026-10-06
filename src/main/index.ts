@@ -72,9 +72,32 @@ function bytesResponse(bytes: Buffer, contentType: string, request: Request): Re
   }
   return new Response(new Uint8Array(bytes), { headers: { ...headers, 'content-length': String(bytes.length) } });
 }
-if (!app.requestSingleInstanceLock()) { if (browserMode) { process.stderr.write('Close the existing SfxChat owner before starting browser development.\n'); app.exit(1); } else app.quit(); }
-else {
-  app.on('second-instance', () => { window?.show(); window?.focus(); });
+// Unpackaged launches (F5 debugging, `npm run dev`) share the library folder, and so the instance lock, with an
+// installed or CLI-started owner. Quitting silently there leaves the debugger attached to a vanished process, so
+// offer to close the running owner through its normal shutdown and take its place.
+async function acquireInstanceLock(): Promise<boolean> {
+  if (app.requestSingleInstanceLock()) return true;
+  if (browserMode) { process.stderr.write('Close the existing SfxChat owner before starting browser development.\n'); app.exit(1); return false; }
+  if (app.isPackaged) { app.quit(); return false; }
+  await app.whenReady();
+  const { response } = await dialog.showMessageBox({ type: 'question', title: 'SfxChat is already running', message: 'Another SfxChat instance owns the library.', detail: 'Close it and start this development build? The running instance shuts down the same way as quitting it.', buttons: ['Close it and continue', 'Cancel'], defaultId: 0, cancelId: 1, noLink: true });
+  if (response === 0) {
+    const until = Date.now() + 30_000;
+    while (Date.now() < until) {
+      if (app.requestSingleInstanceLock({ takeover: true })) return true;
+      await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    dialog.showErrorBox('SfxChat could not start', 'The running SfxChat instance did not close. Close it and start again.');
+  }
+  app.quit(); return false;
+}
+void acquireInstanceLock().then(acquired => {
+  if (!acquired) return;
+  app.on('second-instance', (_event, _argv, _directory, data) => {
+    if (quitting) return;
+    if ((data as { takeover?: unknown } | null)?.takeover === true) { diagnostics.record('app.taken_over', {}); app.quit(); return; }
+    if (window && !window.isDestroyed()) { window.show(); window.focus(); }
+  });
   void app.whenReady().then(async () => {
     const root = app.getPath('userData'); await mkdir(root, { recursive: true });
     diagnostics.record('app.started', { version: app.getVersion(), packaged: app.isPackaged });
@@ -304,6 +327,6 @@ else {
     rendererPort?.unavailable();
     void Promise.all([browserHost?.close(), bridge?.close(), operations?.close(), service?.shutdown(), auth?.cancelLogin()]).finally(() => { if (eventTimer) clearTimeout(eventTimer); service?.store.close(); app.quit(); });
   });
-}
+});
 
 function requireAdmission(value: unknown) { const result = value as { status: string; error?: string }; if (result.status !== 'admitted') throw new Error(result.error || 'Generation admission incomplete; inspect jobs before retrying.'); }
