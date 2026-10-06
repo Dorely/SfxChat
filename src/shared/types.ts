@@ -1,7 +1,8 @@
 import type { ReviewBoard, UiCommand, PlaybackState, OperationResponse, InstallationInput } from './workbench';
+import type { MidiComposition, MidiSummary } from './midi';
 export type Review = 'unreviewed' | 'accepted' | 'rejected';
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'uncertain';
-export type AssetKind = 'effect' | 'music' | 'voice';
+export type AssetKind = 'effect' | 'music' | 'voice' | 'midi';
 export type AudioProviderId = 'elevenlabs' | 'gemini';
 /** Who set a session title last: the app from the first message, the user, or the assistant. */
 export type TitleSource = 'default' | 'user' | 'assistant';
@@ -18,11 +19,15 @@ export interface ChatAttachment {
 export interface Message { id: string; conversationId: string; role: 'user' | 'assistant' | 'tool'; text: string; status: 'running' | 'completed' | 'failed' | 'cancelled'; createdAt: string; attachments?: ChatAttachment[] }
 export interface Asset {
   id: string; projectId: string; name: string; description: string; tags: string[]; collections: string[];
-  review: Review; feedback: string; source: 'generated' | 'imported' | 'edited'; kind: AssetKind;
-  format: 'mp3' | 'wav'; hash: string; bytes: number; duration: number | null;
+  review: Review; feedback: string; source: 'generated' | 'imported' | 'edited' | 'authored'; kind: AssetKind;
+  format: 'mp3' | 'wav' | 'mid'; hash: string; bytes: number; duration: number | null;
   prompt: string; provider: string | null; model: string | null; requestId: string | null;
-  request: AudioGenerationInput | null; usage: string | null; parentId: string | null; createdAt: string;
+  request: AnyGenerationInput | null; usage: string | null; parentId: string | null; createdAt: string;
   providerPrompt?: string | null; lyrics?: string; edit?: TrimEdit;
+  /** Present on MIDI assets: tempo, meter, per-track instrument summary, and musical length. */
+  midi?: MidiSummary;
+  /** Set on a MIDI clip derived from another clip by editing its notes. */
+  midiEdit?: MidiEdit;
 }
 export interface TrimInput {
   startSeconds: number; endSeconds: number; fadeInMs?: number; fadeOutMs?: number; name?: string;
@@ -72,13 +77,27 @@ export interface VoiceGenerationInput {
   providerText?: string; style?: string; stability?: number; similarity?: number; speed?: number;
   count?: number; name?: string; parentId?: string | null;
 }
+export interface MidiComposeInput {
+  kind: 'midi';
+  /** Short brief this clip responds to; kept as the asset prompt for search and regeneration context. */
+  prompt: string;
+  /** The notes themselves. This is the exact reproduction record; the app writes them to an SMF. */
+  composition: MidiComposition;
+  name?: string; parentId?: string | null;
+}
 export type AudioGenerationInput = GenerationInput | MusicGenerationInput | VoiceGenerationInput;
+export type AnyGenerationInput = AudioGenerationInput | MidiComposeInput;
+/** Note-level edit lineage for a MIDI clip derived from another clip. */
+export interface MidiEdit {
+  kind: 'midi-edit'; version: 1; sourceHash: string; ticksPerQuarter: number;
+  requested: MidiComposition; outputEncoding: 'smf-1';
+}
 export interface VoiceProviderEntry { id: AudioProviderId; label: string; model: string; voiceId: string; ready: boolean }
 export interface VoiceListInput { providerId: AudioProviderId; search?: string; language?: string; pageToken?: string }
 export interface VoiceOption { id: string; name: string; description: string; labels: Record<string, string> }
 export interface VoicePage { voices: VoiceOption[]; nextPageToken: string | null }
 export interface ProviderKeyStatus { id: AudioProviderId; ready: boolean; candidates: { id: string; label: string }[] }
-export interface Job { id: string; conversationId: string; kind: AssetKind; status: JobStatus; input: AudioGenerationInput; assetId: string | null; error: string | null; createdAt: string }
+export interface Job { id: string; conversationId: string; kind: AssetKind; status: JobStatus; input: AnyGenerationInput; assetId: string | null; error: string | null; createdAt: string }
 export type GenericProviderKind = 'chat-completions' | 'responses' | 'anthropic';
 export interface ChatProviderEntry { id: string; label: string; baseUrl: string; kind: GenericProviderKind }
 export type CapabilityFlag = true | false | 'unknown';

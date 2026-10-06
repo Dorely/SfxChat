@@ -10,6 +10,9 @@ import { join } from 'node:path';
 import { mkdir, readFile } from 'node:fs/promises';
 import { Store } from './store';
 import { MediaLibrary } from './media';
+import { MidiRenderer } from './midi-render';
+import { loadSoundfont } from './soundfont';
+import { midiDurationSeconds } from '../shared/midi';
 import { WorkbenchService, type ServicePorts } from './service';
 import { SecureStore } from './providers/secrets';
 import { CodexAuth } from './providers/auth';
@@ -155,6 +158,14 @@ else {
     const agentRoot = app.isPackaged ? join(process.resourcesPath, 'agent') : join(__dirname, '../agent');
     rendererPort = new RendererPort(() => window, store, browserMode ? { available: () => browserHost?.available() ?? false, send: command => browserHost?.send(command) } : undefined);
     const exporter = new Exporter(media, store, join(agentRoot, 'sfxchat-helper.exe'));
+    const midiRenderer = new MidiRenderer(join(agentRoot, 'sfxchat-helper.exe'), join(root, 'midi-renders'));
+    // The bundled General MIDI bank ships beside the app; a bank saved in Settings overrides it.
+    const bundledSoundfont = app.isPackaged ? join(process.resourcesPath, 'soundfonts', 'GeneralUser-GS.sf2') : join(__dirname, '../../resources/soundfonts/GeneralUser-GS.sf2');
+    const resolveSoundfont = async () => {
+      const custom = store.setting('soundfont-path', '');
+      if (custom) { try { return await loadSoundfont(custom); } catch (error) { diagnostics.record('soundfont.custom_failed', { error: diagnosticError(error) }); } }
+      return await loadSoundfont(bundledSoundfont);
+    };
     operations = new Operations(service, rendererPort, exporter);
     service.operation = (name, args) => operations!.call(name, args);
     bridge = await startBridge(root, join(agentRoot, 'sfxchat-helper.exe'), operations);
@@ -166,6 +177,13 @@ else {
         if (request.method !== 'GET') return new Response(null, { status: 404 });
         if (url.hostname === 'asset') {
           const id = idSchema.parse(url.pathname.slice(1)); const asset = store.asset(id, store.activeProjectId());
+          // MIDI assets are symbolic; playback serves the synth render through the bundled bank.
+          if (asset.format === 'mid') {
+            const seconds = asset.midi?.durationSeconds ?? (asset.request?.kind === 'midi' ? midiDurationSeconds(asset.request.composition) : 0);
+            if (!(seconds > 0)) return new Response(null, { status: 404 });
+            const bytes = await midiRenderer.renderClip(await readFile(media.path(asset)), await resolveSoundfont(), { seconds });
+            return bytesResponse(bytes, 'audio/wav', request);
+          }
           const bytes = await readFile(media.path(asset));
           return bytesResponse(bytes, asset.format === 'mp3' ? 'audio/mpeg' : 'audio/wav', request);
         }
@@ -211,7 +229,7 @@ else {
       setPlayground: (id, ids) => operations!.call('set_playground', { ...context(id), assetIds: ids }, 'user'),
       searchAssets: query => operations!.call('search_assets', { projectId: store.activeProjectId(), query }, 'user'),
       importAudio: async (id, kind) => {
-        const result = await dialog.showOpenDialog(window!, { title: 'Import audio', filters: [{ name: 'Audio', extensions: ['wav', 'mp3'] }], properties: ['openFile', 'multiSelections'] });
+        const result = await dialog.showOpenDialog(window!, { title: 'Import audio', filters: [{ name: 'Audio or MIDI', extensions: ['wav', 'mp3', 'mid', 'midi'] }], properties: ['openFile', 'multiSelections'] });
         if (!result.canceled) await operations!.call('import_audio', { ...context(id), paths: result.filePaths, kind: kind ?? 'effect' }, 'user');
       },
       exportAsset: async (id, format = 'original') => {

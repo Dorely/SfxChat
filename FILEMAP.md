@@ -87,6 +87,8 @@ is recorded in [verification](docs/verification.md).
 | [src/main/spectrogram.ts](src/main/spectrogram.ts) | Self-contained STFT spectrogram rendering: radix-2 FFT, Hann window, full-scale-dB scaling, colormap, time/frequency grid, and exact mapping. |
 | [src/shared/midi.ts](src/shared/midi.ts) | Beat-based MIDI note model, bounds, General MIDI instrument/drum names, and duration/summary helpers. |
 | [src/main/midi.ts](src/main/midi.ts) | Standard MIDI File writer and parser plus clip duration for the MIDI creator. |
+| [src/main/soundfont.ts](src/main/soundfont.ts) | SoundFont bank resolution, SF2 preset enumeration, and cached bank identity for MIDI playback. |
+| [src/main/midi-render.ts](src/main/midi-render.ts) | Serialized helper-backed MIDI-to-audio rendering with a bounded on-disk cache. |
 | [src/main/validation.ts](src/main/validation.ts) | Runtime validation of privileged operations and generation inputs. |
 | [src/main/service.ts](src/main/service.ts) | Shared library operations, project-scoped snapshots, sequential generation jobs, chat turns, capability-gated media attachments (transcript cards, history eviction), and tool execution. |
 | [src/main/diagnostics.ts](src/main/diagnostics.ts) | Rotating local JSONL records, diagnostic references, and credential redaction. |

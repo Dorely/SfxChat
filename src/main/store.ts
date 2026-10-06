@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { WorkbenchError, type ReviewBoard, type ReviewContent } from '../shared/workbench';
-import type { Asset, AssetKind, AssetPatch, ChatAttachment, Conversation, AudioGenerationInput, Job, Message, Project, TitleSource } from '../shared/types';
+import type { Asset, AssetKind, AssetPatch, ChatAttachment, Conversation, AnyGenerationInput, Job, Message, Project, TitleSource } from '../shared/types';
 
 const now = () => new Date().toISOString();
 const decode = <T>(row: unknown): T => JSON.parse((row as { json: string }).json) as T;
@@ -278,12 +278,12 @@ export class Store {
   job(id: string): Job {
     const row = this.db.prepare('SELECT json FROM jobs WHERE id=?').get(id); if (!row) throw new Error('Generation not found.'); return normalizeJob(decode<Job>(row));
   }
-  createJobs(conversationId: string, input: AudioGenerationInput, kind: AssetKind, toolCallId?: string): Job[] {
+  createJobs(conversationId: string, input: AnyGenerationInput, kind: AssetKind, toolCallId?: string): Job[] {
     this.requireConversation(conversationId);
     const jobs: Job[] = [];
     this.db.transaction(() => {
-      for (let i = 0; i < (input.count ?? 1); i++) {
-        const job: Job = { id: randomUUID(), conversationId, kind, status: 'queued', input: { ...input, count: 1 }, assetId: null, error: null, createdAt: now() };
+      for (let i = 0; i < ('count' in input ? input.count ?? 1 : 1); i++) {
+        const job: Job = { id: randomUUID(), conversationId, kind, status: 'queued', input: 'count' in input ? { ...input, count: 1 } : input, assetId: null, error: null, createdAt: now() };
         this.db.prepare('INSERT INTO jobs VALUES (?,?,?,?)').run(job.id, conversationId, job.status, JSON.stringify(job)); jobs.push(job);
       }
       if (toolCallId?.startsWith('external:')) {

@@ -1,11 +1,12 @@
 import { installationSchema } from '../shared/workbench';
 import { z } from 'zod';
 import { MUSIC_DURATION_MAX_MS, MUSIC_DURATION_MIN_MS } from '../shared/music-models';
+import { MIDI_BPM_MAX, MIDI_BPM_MIN, MIDI_MAX_NOTES_PER_TRACK, MIDI_MAX_PITCH, MIDI_MAX_TRACKS, MIDI_TIME_SIG_DENOMINATORS } from '../shared/midi';
 export const idSchema = z.string().uuid();
 export const providerKindSchema = z.enum(['chat-completions', 'responses', 'anthropic']);
 export const musicProviderKindSchema = z.enum(['elevenlabs-music', 'gemini-lyria']);
 export const audioProviderSchema = z.enum(['elevenlabs', 'gemini']);
-export const assetKindSchema = z.enum(['effect', 'music', 'voice']);
+export const assetKindSchema = z.enum(['effect', 'music', 'voice', 'midi']);
 export const effortSchema = z.string().trim().regex(/^[a-zA-Z0-9._-]+$/).max(40);
 export const effortsSchema = z.array(effortSchema).max(8);
 export const trimSchema = z.object({
@@ -74,6 +75,33 @@ const voiceInputFields = {
 };
 export const voiceToolSchema = z.object(voiceInputFields).strict();
 export const voiceGenerationSchema = z.object({ kind: z.literal('voice').optional(), ...voiceInputFields }).strict();
+const midiNoteSchema = z.object({
+  pitch: z.number().int().min(0).max(MIDI_MAX_PITCH),
+  startBeat: z.number().finite().min(0),
+  durationBeats: z.number().finite().positive(),
+  velocity: z.number().int().min(1).max(127).optional()
+}).strict();
+const midiTrackSchema = z.object({
+  name: z.string().trim().min(1).max(60).optional(),
+  program: z.number().int().min(0).max(127).optional(),
+  drums: z.boolean().optional(),
+  notes: z.array(midiNoteSchema).max(MIDI_MAX_NOTES_PER_TRACK)
+}).strict();
+export const midiCompositionSchema = z.object({
+  bpm: z.number().min(MIDI_BPM_MIN).max(MIDI_BPM_MAX),
+  timeSig: z.object({ numerator: z.number().int().min(1).max(12), denominator: z.number().int().refine(value => MIDI_TIME_SIG_DENOMINATORS.includes(value), `Denominator must be one of ${MIDI_TIME_SIG_DENOMINATORS.join(', ')}.`) }).strict().optional(),
+  tracks: z.array(midiTrackSchema).min(1).max(MIDI_MAX_TRACKS)
+}).strict();
+const midiInputFields = {
+  prompt: z.string().trim().min(1).max(4100).describe('Short description of what this clip is meant to be, in musical terms: style, mood, tempo feel, key, and the role of each track. Kept as the clip prompt for search and later revision context.'),
+  composition: midiCompositionSchema.describe('The music itself. Positions and lengths are in quarter-note beats (a quarter note is 1, an eighth is 0.5). Set drums on a rhythm track and a General MIDI program number (0-127) on each melodic track.'),
+  name: z.string().trim().min(1).max(200).optional().describe('Library name for the clip.'),
+  parentId: idSchema.nullable().optional().describe('Local revision lineage. Revising means sending a complete new composition that restates the intended music with the requested change; earlier clips are never modified.')
+};
+/** IPC/application schema: accepts the kind discriminant the renderer and service send. */
+export const midiGenerationSchema = z.object({ kind: z.literal('midi').optional(), ...midiInputFields }).strict();
+/** Agent-facing tool schema: the kind is implied by the tool name. */
+export const midiToolSchema = z.object(midiInputFields).strict();
 export const voiceListSchema = z.object({ providerId: audioProviderSchema, search: z.string().max(200).optional(), language: z.string().regex(/^[a-zA-Z0-9-]{1,40}$/).optional(), pageToken: z.string().max(2000).optional() }).strict();
 export const patchSchema = z.object({ name: z.string().trim().min(1).optional(), description: z.string().optional(), tags: z.array(z.string().trim().min(1)).optional(), collections: z.array(z.string().trim().min(1)).optional(), review: z.enum(['unreviewed','accepted','rejected']).optional(), feedback: z.string().optional() }).strict();
 export const projectNameSchema = z.string().trim().min(1).max(60);

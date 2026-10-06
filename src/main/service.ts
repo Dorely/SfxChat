@@ -1,10 +1,12 @@
 import { operationDefinitions } from './operations';
 import { Store } from './store';
 import { MediaLibrary, generatedFields } from './media';
-import { analysisSchema, generationSchema, musicGenerationSchema, voiceGenerationSchema, patchSchema, spectrogramSchema, trimSchema } from './validation';
+import { analysisSchema, generationSchema, midiGenerationSchema, musicGenerationSchema, voiceGenerationSchema, patchSchema, spectrogramSchema, trimSchema } from './validation';
 import { instructions, musicInstructions, voiceInstructions, tools, toolSchemas } from './assistant';
+import { writeMidi } from './midi';
+import { midiSummary } from '../shared/midi';
 import { validateVoiceTarget } from '../shared/voice-models';
-import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, AudioGenerationInput, GenerationInput, MusicGenerationInput, MusicProviderKind, VoiceGenerationInput, VoiceListInput, VoicePage, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
+import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, MidiComposeInput, MusicProviderKind, VoiceGenerationInput, VoiceListInput, VoicePage, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
 import type { DiagnosticLog } from './diagnostics';
 import { diagnosticError } from './providers/errors';
 import { unlink } from 'node:fs/promises';
@@ -19,7 +21,7 @@ export interface ToolOutcome { output: string; attachments: ToolAttachment[] }
 /** Provider-reported outcome of one generation, including the provider that produced it. */
 export interface GenerationResult {
   bytes: Buffer;
-  format: 'mp3' | 'wav';
+  format: 'mp3' | 'wav' | 'mid';
   provider: string;
   model: string;
   requestId: string | null;
@@ -128,19 +130,32 @@ export class WorkbenchService {
     this.pump(); return { jobIds: jobs.map(j => j.id) };
   }
   listVoices(input: VoiceListInput) { this.requireOpen(); return this.ports.listVoices(input); }
+  /** Composing MIDI is local: it writes a Standard MIDI File and needs no provider, key, or network call. */
+  async generateMidi(conversationId: string, raw: MidiComposeInput, callId?: string) {
+    this.requireOpen();
+    const input = midiGenerationSchema.parse(raw) as MidiComposeInput;
+    if (input.parentId) this.store.asset(input.parentId, this.store.conversation(conversationId).projectId);
+    const jobs = await this.queueCandidates(conversationId, input, 'midi', callId);
+    this.store.addMessage(conversationId, 'tool', `Composing ${jobs.length} MIDI clip${jobs.length === 1 ? '' : 's'}: ${input.prompt}`);
+    this.pump(); return { jobIds: jobs.map(j => j.id) };
+  }
+  private composeMidi(input: MidiComposeInput): GenerationResult {
+    return { bytes: writeMidi(input.composition), format: 'mid', provider: 'SfxChat', model: 'MIDI', requestId: null, usage: null };
+  }
   /**
    * Admits candidates in transactions of up to 128 jobs, yielding between them so
    * large explicit requests keep the UI and shutdown responsive. This is an
    * admission chunk, not a count limit.
    */
-  private async queueCandidates(conversationId: string, input: AudioGenerationInput, kind: AssetKind, callId?: string) {
+  private async queueCandidates(conversationId: string, input: AnyGenerationInput, kind: AssetKind, callId?: string) {
     const jobs: ReturnType<Store['createJobs']> = [];
-    const requested = input.count ?? 1;
+    // MIDI composition carries no candidate count: one call composes one clip.
+    const requested = 'count' in input ? input.count ?? 1 : 1;
     if (requested > 128) this.store.addMessage(conversationId, 'tool', `Preparing ${requested} requested candidates. If the app closes during preparation, only already queued candidates will run.`);
     for (let remaining = requested; remaining > 0;) {
       this.requireOpen();
       const count = Math.min(128, remaining);
-      jobs.push(...this.store.createJobs(conversationId, { ...input, count }, kind, callId));
+      jobs.push(...this.store.createJobs(conversationId, 'count' in input ? { ...input, count } : input, kind, callId));
       remaining -= count;
       if (remaining) await new Promise<void>(resolve => setImmediate(resolve));
     }
@@ -161,12 +176,15 @@ export class WorkbenchService {
           ? await this.ports.generateVoice(job.input, controller.signal)
           : job.input.kind === 'music'
           ? await this.ports.generateMusic(job.input, controller.signal)
+          : job.input.kind === 'midi'
+          ? this.composeMidi(job.input)
           : await this.ports.generateEffect(job.input, controller.signal);
         const asset = await this.media.save(result.bytes, result.format, {
           ...generatedFields(job.input, job.kind, this.store.conversation(job.conversationId).projectId), provider: result.provider, model: result.model,
           requestId: result.requestId, usage: result.usage,
           providerPrompt: result.providerPrompt ?? null,
-          ...(result.lyrics ? { lyrics: result.lyrics } : {})
+          ...(result.lyrics ? { lyrics: result.lyrics } : {}),
+          ...(job.input.kind === 'midi' ? { midi: midiSummary(job.input.composition) } : {})
         });
         if (asset.duration === null || asset.duration <= 0) {
           this.store.insertAsset(asset);

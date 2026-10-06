@@ -26,9 +26,10 @@ const LIBRARY_COPY: Record<AssetKind, { eyebrow: string; title: string; placehol
   effect: { eyebrow: 'Your sound library', title: 'Effects Library', placeholder: 'Search sounds, tags, prompts…', emptyTitle: 'Your effects library is ready', emptyBody: 'Generate a sound in the Playground or import an existing WAV or MP3 to get started.', importLabel: 'Import a sound', noun: ['sound', 'sounds'] },
   voice: { eyebrow: 'Your voice library', title: 'Voice Library', placeholder: 'Search voices, scripts, tags…', emptyTitle: 'Your voice library is ready', emptyBody: 'Generate speech in the Playground or import an existing WAV or MP3.', importLabel: 'Import a voice clip', noun: ['clip', 'clips'] },
   music: { eyebrow: 'Your music library', title: 'Music Library', placeholder: 'Search music, prompts, lyrics…', emptyTitle: 'Your music library is ready', emptyBody: 'Generate a track in the Playground or import an existing WAV or MP3 to get started.', importLabel: 'Import a track', noun: ['track', 'tracks'] },
+  midi: { eyebrow: 'Your MIDI library', title: 'MIDI Library', placeholder: 'Search MIDI clips, prompts, tags…', emptyTitle: 'Your MIDI library is ready', emptyBody: 'Compose a clip with the assistant or import an existing MIDI file to get started.', importLabel: 'Import a MIDI file', noun: ['clip', 'clips'] },
 }
 
-function kindLabel(kind: AssetKind) { return kind === 'voice' ? 'Voice' : kind === 'music' ? 'Music' : 'Sound effect' }
+function kindLabel(kind: AssetKind) { return kind === 'midi' ? 'MIDI clip' : kind === 'voice' ? 'Voice' : kind === 'music' ? 'Music' : 'Sound effect' }
 function musicSecondsLabel(ms: number) { const seconds = ms / 1000; return seconds >= 60 ? `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, '0')}` : `${seconds}s` }
 
 const api = () => window.sfx
@@ -193,7 +194,7 @@ function Inspector({ asset, assets, onClose, onSave, onExport, onPlay, isPlaying
   const voiceSource = asset?.kind === 'voice' ? voiceGenerationSource(asset, assets) : null
   const request = voiceSource?.request ?? asset?.request ?? null
   const musicRequest: MusicGenerationInput | null = request && request.kind === 'music' ? request : null
-  const effectRequest: GenerationInput | null = request && request.kind !== 'music' && request.kind !== 'voice' ? request : null
+  const effectRequest: GenerationInput | null = request && (request.kind === undefined || request.kind === 'effect') ? request : null
   const [voiceEdit, setVoiceEdit] = useState<VoiceGenerationInput>(request?.kind === 'voice' ? request : { kind: 'voice', text: asset?.prompt ?? '', providerId: activeVoiceId })
   const [name, setName] = useState(asset?.name || '')
   const [description, setDescription] = useState(asset?.description || '')

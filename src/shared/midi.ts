@@ -179,6 +179,7 @@ export const midiCompositionProblem = (composition: MidiComposition): string | n
     }
   }
   if (total > MIDI_MAX_NOTES) return `A clip can hold up to ${MIDI_MAX_NOTES} notes.`;
+  if (total < 1) return 'A clip needs at least one note.';
   if (midiDurationSeconds(composition) > MIDI_MAX_DURATION_SECONDS) return `A clip can be up to ${MIDI_MAX_DURATION_SECONDS / 60} minutes long.`;
   return null;
 };
