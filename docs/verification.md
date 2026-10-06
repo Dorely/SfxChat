@@ -19,6 +19,11 @@
 - In the in-app browser via `npm run dev:browser`, the brand mark rendered the bubble at
   17 px in the accent color with the subtitle unchanged, and the favicon resolved. The
   host was shut down afterwards. No audio was played.
+- At the user's request, stopped the installed MCP server another agent session was
+  using, then silently updated `%LOCALAPPDATA%/Programs/SfxChat` (exit code 0). The
+  installed executable, archive, icon, CLI, runtime, and helper matched the release files
+  by SHA-256. Start menu and desktop shortcuts point at `SfxChat.exe,0`. The installed
+  CLI's `--help` succeeded. The installed app was not launched.
 
 # Review candidate card polish (2026-10-05)
 
