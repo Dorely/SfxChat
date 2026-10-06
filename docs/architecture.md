@@ -305,10 +305,13 @@ three skill references (`music-craft.md`, `midi-instruments.md`, `midi-workflow.
 [research/music-composition.md](research/music-composition.md) records sources and limits, and
 [research/midi.md](research/midi.md) records the engine, bank, and build provenance.
 
-The MIDI studio (`MidiStudio.tsx`) is the MIDI tab: a searchable clip rail beside stacked piano
-rolls with draw/move/resize/erase editing, per-track instrument choice from the loaded bank, tempo
-and meter, snap and zoom, and a transport that renders the draft and sweeps a playhead while
-highlighting the notes it passes. Saving writes a derivative with `midiEdit` lineage for an existing
+The MIDI studio (`MidiStudio.tsx`) is the MIDI tab: a searchable clip rail (a strip on narrow
+workspaces) beside an arrangement of track lanes that share one ruler and horizontal scroll. Each
+lane has a sticky header (name, instrument from the loaded bank or the drum kit, audition, remove)
+and a clickable key gutter, and supports draw/move/resize/erase plus keyboard nudging and a
+selected-note velocity control. Tempo, meter, snap and zoom sit in the transport, which renders the
+draft and sweeps a playhead while highlighting the notes it passes; unsaved drafts prompt before
+being replaced. Saving writes a derivative with `midiEdit` lineage for an existing
 clip, or an `authored` clip for a new draft; composed originals are never modified.
 
 ## Providers and credentials
@@ -329,7 +332,9 @@ registry in SQLite settings, combined `Provider:Model` selection with per-model
 effort lists, test-gated model saves (every listed effort must pass a lightweight
 live probe), and vision/audio capability flags that filter future
 vision/audio tools via `toolsForModel`. Stored conversation history stays
-Responses-shaped; adapters convert in memory per turn.
+Responses-shaped; adapters convert in memory per turn. The renderer's model and effort picker
+sits in the chat composer footer and calls the same `setActiveChat` operation; Settings → Chat
+models lists, adds, tests, and removes custom models and endpoints.
 
 `SecureStore` encrypts values with Electron `safeStorage` before atomic writes under
 the profile's `secrets/`. Windows protection is OS-backed; unavailable encryption

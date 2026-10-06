@@ -18,7 +18,10 @@ use needs no provider login.
 Work is organized into projects. The project dropdown in the top bar switches between them,
 and each project holds its own conversations plus its own effects, music, and voice libraries,
 while provider configuration and credentials stay app-level. Session titles are editable in
-place, and the assistant names each session as the scope of the work becomes clear.
+place, and the assistant names each session as the scope of the work becomes clear. The chat
+composer holds the model and reasoning-effort picker; the palette button in the top bar switches
+between the Studio, Midnight, Ember, and Daylight themes (also under Settings → Appearance), and
+the choice is remembered per device.
 
 The Playground supports Effects, Music, and Voice modes. Settings has **one API key
 per provider**, shared across ElevenLabs effects/music/voice and Gemini music/voice/

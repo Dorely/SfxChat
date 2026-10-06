@@ -103,11 +103,12 @@ is recorded in [verification](docs/verification.md).
 | [src/main/providers/elevenlabs-music.ts](src/main/providers/elevenlabs-music.ts) | Validated Music requests, length/instrumental mapping, `song-id` provenance, and returned formats. |
 | [src/main/providers/gemini-music.ts](src/main/providers/gemini-music.ts) | Lyria prompt composition, Interactions requests with `store:false`, step/lyrics parsing, and fixed-length guards. |
 | [src/main/providers/secrets.ts](src/main/providers/secrets.ts) | Atomic encrypted credential storage using injected OS protection and store-safe secret names. |
-| [src/renderer/index.html](src/renderer/index.html), [src/renderer/main.tsx](src/renderer/main.tsx) | Renderer entrypoint and content security policy. |
-| [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Project switcher, session renaming, chat, effects, music, and voice libraries, Playground generation, audition, inspector, settings, and styling. |
+| [src/renderer/index.html](src/renderer/index.html), [src/renderer/main.tsx](src/renderer/main.tsx) | Renderer entrypoint and content security policy; applies the stored theme before first render. |
+| [src/renderer/themes.css](src/renderer/themes.css), [src/renderer/theme.ts](src/renderer/theme.ts) | Theme color tokens (Studio, Midnight, Ember, Daylight) and the per-device theme preference. |
+| [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Project switcher, theme picker, session renaming, chat with the composer model picker, effects, music, and voice libraries, Playground generation, audition, inspector, two-pane settings, and token-based styling. |
 | [src/renderer/Icon.tsx](src/renderer/Icon.tsx) | Shared inline SVG icon set drawn for this project, replacing font glyph icons. |
 | [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Waveform trim selection, fine-window zoom, fades, spectrogram panel, exact rendered preview, and derived-asset saving. |
-| [src/renderer/MidiStudio.tsx](src/renderer/MidiStudio.tsx) | MIDI workspace: clip rail, stacked piano rolls with note editing, instrument picker, transport with playhead audition, and derivative saving. |
+| [src/renderer/MidiStudio.tsx](src/renderer/MidiStudio.tsx) | MIDI workspace: clip rail, track lanes with sticky headers and key gutters on a shared ruler, note editing and keyboard nudging, transport with playhead audition, and derivative saving. |
 | [src/renderer/ChatContextMeter.tsx](src/renderer/ChatContextMeter.tsx) | Throttled composer context indicator, threshold styling, and estimate details. |
 | [.github/workflows/windows.yml](.github/workflows/windows.yml) | Credential-free Windows typecheck and installer artifact build. |
 

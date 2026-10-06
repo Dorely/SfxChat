@@ -1,4 +1,27 @@
-# F5 debugger attach with a running owner (2026-10-06)
+# UI pass: themes, composer model picker, settings, MIDI studio (2026-10-05)
+
+- Renderer colors now come from theme tokens (`themes.css`); a top-bar palette popover
+  and Settings → Appearance switch Studio, Midnight, Ember, and Daylight. The model and
+  effort picker moved from the top bar into the chat composer. Settings became a
+  two-pane dialog with per-page headers; Agent integrations and voice defaults use the
+  shared form styles. The MIDI studio was rewritten (lanes with sticky headers and key
+  gutters on one ruler, keyboard nudging, velocity, dirty-draft guard).
+- `npm run typecheck` and `npm run build` passed. No automated test infrastructure was added.
+- `npm run dev:browser` in the in-app browser at 1200x760 and 1680x1000: switched all
+  four themes from the popover and Settings, confirmed the choice survived a reload, and
+  inspected Effects, MIDI, and settings in each. Opened every settings page. The composer
+  picker listed the configured models and efforts; it was not changed during the check.
+- MIDI: opened the saved "Studio UI check" clip, drew a note, nudged it with the arrow
+  keys, dragged it, deleted it with Delete, and confirmed the dirty badge and status bar.
+  Started one-shot playback (Loop off): the render returned, the playhead advanced to
+  bar 1 beat 4, and Stop halted it. Nothing was saved, so the library is unchanged.
+  Audition and playback were checked as player state only, not by listening.
+- Fixed during the check: icon spans that took the tab-count pill style, wrapping tab and
+  settings-nav labels, a focus outline around the whole MIDI panel after a click, and
+  low-contrast note labels in Daylight (new `--track-ink` token). No provider generation
+  was run. Native desktop rendering was not separately checked.
+
+# F5 debugger attach with a running owner (2026-10-05)
 
 - Cause: VS Code's renderer attach reported "Socket closed before the connection was
   established" when another SfxChat (installed or CLI-started) held the library's

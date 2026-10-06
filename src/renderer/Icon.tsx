@@ -27,14 +27,23 @@ const paths: Record<string, ReactNode> = {
   trash: <path d="M4.5 6.5 H19.5 M9.5 6.5 V4.5 H14.5 V6.5 M6.5 6.5 L7.5 19.5 A1.5 1.5 0 0 0 9 20.9 H15 A1.5 1.5 0 0 0 16.5 19.5 L17.5 6.5 M10 10.5 V16.5 M14 10.5 V16.5" />,
   info: <><circle cx="12" cy="12" r="8.5" /><path d="M12 11 V16.2" /><circle cx="12" cy="7.8" r="1.1" fill="currentColor" stroke="none" /></>,
   lock: <><rect x="5" y="10.5" width="14" height="9.5" rx="2" /><path d="M8.5 10.5 V7.5 A3.5 3.5 0 0 1 15.5 7.5 V10.5" /><circle cx="12" cy="15.2" r="1.2" fill="currentColor" stroke="none" /></>,
-}
-
-const glyphs: Record<string, ReactNode> = {
-  settings: '⚙',
+  settings: <><circle cx="12" cy="12" r="3" /><path d="M12 2.8 V5.2 M12 18.8 V21.2 M2.8 12 H5.2 M18.8 12 H21.2 M5.5 5.5 L7.2 7.2 M16.8 16.8 L18.5 18.5 M5.5 18.5 L7.2 16.8 M16.8 7.2 L18.5 5.5" /><circle cx="12" cy="12" r="6.6" /></>,
+  palette: <><path d="M12 3.5 A8.5 8.5 0 1 0 12 20.5 C13.4 20.5 13.9 19.5 13.4 18.4 C12.8 17.1 13.6 15.8 15 15.8 H17 A3.5 3.5 0 0 0 20.5 12.3 C20.5 7.4 16.7 3.5 12 3.5 Z" /><circle cx="7.8" cy="11" r="1.2" fill="currentColor" stroke="none" /><circle cx="10.5" cy="7.4" r="1.2" fill="currentColor" stroke="none" /><circle cx="15" cy="7.8" r="1.2" fill="currentColor" stroke="none" /></>,
+  music: <><path d="M9 17.5 V5.5 L19 3.5 V15.5" /><circle cx="6.5" cy="17.5" r="2.5" /><circle cx="16.5" cy="15.5" r="2.5" /></>,
+  mic: <><rect x="9" y="3.5" width="6" height="11" rx="3" /><path d="M5.5 11.5 A6.5 6.5 0 0 0 18.5 11.5 M12 18 V20.5" /></>,
+  piano: <><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><path d="M8.2 4.5 V19.5 M12 4.5 V19.5 M15.8 4.5 V19.5" /><path d="M7 4.5 V12 H9.4 V4.5 M14.6 4.5 V12 H17 V4.5" fill="currentColor" /></>,
+  repeat: <><path d="M17 3.5 L20 6.5 L17 9.5" /><path d="M4 11.5 V10 A3.5 3.5 0 0 1 7.5 6.5 H20" /><path d="M7 20.5 L4 17.5 L7 14.5" /><path d="M20 12.5 V14 A3.5 3.5 0 0 1 16.5 17.5 H4" /></>,
+  chip: <><rect x="6.5" y="6.5" width="11" height="11" rx="2" /><path d="M9.5 3.5 V6.5 M14.5 3.5 V6.5 M9.5 17.5 V20.5 M14.5 17.5 V20.5 M3.5 9.5 H6.5 M3.5 14.5 H6.5 M17.5 9.5 H20.5 M17.5 14.5 H20.5" /></>,
+  key: <><circle cx="8" cy="15" r="4" /><path d="M11 12 L19.5 3.5 M16 7 L18.5 9.5 M14 9 L16 11" /></>,
+  user: <><circle cx="12" cy="8.5" r="4" /><path d="M4.5 20 A7.5 7.5 0 0 1 19.5 20" /></>,
+  plug: <path d="M9 3.5 V8 M15 3.5 V8 M6.5 8 H17.5 V11 A5.5 5.5 0 0 1 12 16.5 A5.5 5.5 0 0 1 6.5 11 Z M12 16.5 V20.5" />,
+  file: <><path d="M6.5 3.5 H14 L18.5 8 V20.5 H6.5 Z" /><path d="M14 3.5 V8 H18.5 M9.5 12.5 H15.5 M9.5 16 H15.5" /></>,
+  'chevron-down': <path d="M6.5 9.5 L12 15 L17.5 9.5" />,
+  folder: <path d="M3.5 6.5 A1.5 1.5 0 0 1 5 5 H9.5 L11.5 7 H19 A1.5 1.5 0 0 1 20.5 8.5 V17.5 A1.5 1.5 0 0 1 19 19 H5 A1.5 1.5 0 0 1 3.5 17.5 Z" />,
 }
 
 export default function Icon({ name }: { name: string }) {
   return <span className={`icon icon-${name}`} aria-hidden="true">
-    {glyphs[name] ?? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">{paths[name] ?? <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />}</svg>}
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">{paths[name] ?? <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />}</svg>
   </span>
 }
