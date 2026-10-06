@@ -1,3 +1,18 @@
+# F5 renderer attach over IPv4 (2026-10-05)
+
+- Reported: the "Cannot connect to the target at localhost:9222 … Socket closed before
+  the connection was established" popup still appeared with no other SfxChat running.
+- Reproduced by starting `Debug SfxChat` from VS Code's Run menu: Electron's DevTools
+  endpoint answered `http://127.0.0.1:9222/json/version` within 3 s, yet js-debug 1.117
+  (extension host Node 24) retried for the full 60 s and showed the popup. Its trace
+  never recorded a `/json/version` result. Every attempt went through its `localhost`
+  path, which races 127.0.0.1 against [::1] (Chromium listens on IPv4 only).
+- The renderer attach now sets `"address": "127.0.0.1"`, so js-debug makes one IPv4
+  lookup. Same launch from VS Code: "Discovered target URL from /json/version", the
+  `http://localhost:5173/` page attached, and "Launched successfully" came about 2.3 s
+  after the attach started. No popup appeared after the 60 s timeout. The debug app was
+  then closed.
+
 # MIDI drum lane labels (2026-10-05)
 
 - Reported: a drum lane left key rows blank. Rows above 81 have no General MIDI drum
