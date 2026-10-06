@@ -85,6 +85,8 @@ is recorded in [verification](docs/verification.md).
 | [src/main/audio.ts](src/main/audio.ts) | Bounded MP3/WAV decode, timestamped amplitude windows, energy event detection, loop-seam probing, exact sample-frame trims, loop crossfades, fades, mono WAV clip rendering, and float32 WAV rendering. |
 | [src/main/png.ts](src/main/png.ts) | Minimal 8-bit RGB PNG encoder over Node zlib (filter 0 scanlines, hand-rolled CRC32 and chunks). |
 | [src/main/spectrogram.ts](src/main/spectrogram.ts) | Self-contained STFT spectrogram rendering: radix-2 FFT, Hann window, full-scale-dB scaling, colormap, time/frequency grid, and exact mapping. |
+| [src/shared/midi.ts](src/shared/midi.ts) | Beat-based MIDI note model, bounds, General MIDI instrument/drum names, and duration/summary helpers. |
+| [src/main/midi.ts](src/main/midi.ts) | Standard MIDI File writer and parser plus clip duration for the MIDI creator. |
 | [src/main/validation.ts](src/main/validation.ts) | Runtime validation of privileged operations and generation inputs. |
 | [src/main/service.ts](src/main/service.ts) | Shared library operations, project-scoped snapshots, sequential generation jobs, chat turns, capability-gated media attachments (transcript cards, history eviction), and tool execution. |
 | [src/main/diagnostics.ts](src/main/diagnostics.ts) | Rotating local JSONL records, diagnostic references, and credential redaction. |

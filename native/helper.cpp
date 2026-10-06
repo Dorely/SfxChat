@@ -143,7 +143,8 @@ static void wavHeader(unsigned char* h,unsigned dataBytes) {
     memcpy(h,"RIFF",4); put32(h+4,36+dataBytes); memcpy(h+8,"WAVEfmt ",8); put32(h+16,16); put16(h+20,1); put16(h+22,2);
     put32(h+24,44100); put32(h+28,44100*4); put16(h+32,4); put16(h+34,16); memcpy(h+36,"data",4); put32(h+40,dataBytes);
 }
-static int renderMidi(const wchar_t* midi,const wchar_t* soundfont,const wchar_t* output,double gain) {
+static int renderMidi(const wchar_t* midi,const wchar_t* soundfont,const wchar_t* output,double seconds,double gain) {
+    if(!(seconds>0.0) || seconds>7200.0) return fail("A positive clip length in seconds is required.");
     fluid_settings_t* settings=new_fluid_settings();
     if(!settings) return fail("Could not create synthesizer settings.");
     fluid_set_log_function(FLUID_WARN,quietLog,nullptr);
@@ -174,18 +175,20 @@ static int renderMidi(const wchar_t* midi,const wchar_t* soundfont,const wchar_t
         unsigned char header[44]; memset(header,0,sizeof(header));
         if(fwrite(header,1,sizeof(header),file)!=sizeof(header)) failure="Could not write the WAV header.";
     }
-    const unsigned frames=4096; std::vector<short> samples(frames*2); unsigned long long total=0, limit=44100ULL*60*12;
+    const unsigned frames=4096; std::vector<short> samples(frames*2); unsigned long long total=0;
+    // Bound the render by the caller's musical length plus a fixed tail for reverb and chorus decay.
+    // FluidSynth's player keeps reporting itself playing after the last event of a file we wrote, so
+    // the player's own end is not a reliable length.
+    unsigned long long limit=(unsigned long long)((seconds+2.0)*44100.0);
+    const unsigned long long maximum=(unsigned long long)(44100.0*60.0*12.0);
+    if(limit>maximum) failure="The MIDI clip exceeds the render limit.";
+    else if(limit<frames) limit=frames;
     if(!failure && fluid_player_play(player)==FLUID_FAILED) failure="Could not start MIDI playback.";
-    while(!failure && fluid_player_get_status(player)==FLUID_PLAYER_PLAYING) {
-        if(total>=limit) { failure="The MIDI clip exceeds the render limit."; break; }
-        fluid_synth_write_s16(synth,frames,samples.data(),0,2,samples.data(),1,2);
-        if(fwrite(samples.data(),sizeof(short),frames*2,file)!=frames*2) { failure="Could not write rendered audio."; break; }
-        total+=frames;
-    }
-    for(unsigned i=0; !failure && i<44100*2/frames+1; i++) { // let reverb and chorus tails ring out
-        fluid_synth_write_s16(synth,frames,samples.data(),0,2,samples.data(),1,2);
-        if(fwrite(samples.data(),sizeof(short),frames*2,file)!=frames*2) failure="Could not write rendered audio.";
-        total+=frames;
+    while(!failure && total<limit) {
+        unsigned chunk=(unsigned)std::min<unsigned long long>(frames,limit-total);
+        fluid_synth_write_s16(synth,(int)chunk,samples.data(),0,2,samples.data(),1,2);
+        if(fwrite(samples.data(),sizeof(short),chunk*2,file)!=chunk*2) { failure="Could not write rendered audio."; break; }
+        total+=chunk;
     }
     if(file) {
         if(!failure) {
@@ -203,12 +206,12 @@ static int renderMidi(const wchar_t* midi,const wchar_t* soundfont,const wchar_t
 int wmain(int argc,wchar_t** argv) {
     _setmode(_fileno(stdin),_O_BINARY); _setmode(_fileno(stdout),_O_BINARY);
     if(argc==2 && !wcscmp(argv[1],L"encode")) return encode();
-    if(argc==5 && !wcscmp(argv[1],L"render-midi")) return renderMidi(argv[2],argv[3],argv[4],0.5);
-    if(argc==6 && !wcscmp(argv[1],L"render-midi")) return renderMidi(argv[2],argv[3],argv[4],_wtof(argv[5]));
+    if(argc==6 && !wcscmp(argv[1],L"render-midi")) return renderMidi(argv[2],argv[3],argv[4],_wtof(argv[5]),0.5);
+    if(argc==7 && !wcscmp(argv[1],L"render-midi")) return renderMidi(argv[2],argv[3],argv[4],_wtof(argv[5]),_wtof(argv[6]));
     if(argc==2 && !wcscmp(argv[1],L"protect")) return protect(false);
     if(argc==2 && !wcscmp(argv[1],L"unprotect")) return protect(true);
     if(argc==3 && !wcscmp(argv[1],L"secure-directory")) return secureDirectory(argv[2]);
     if(argc==3 && !wcscmp(argv[1],L"path-add")) return updatePath(argv[2],false);
     if(argc==3 && !wcscmp(argv[1],L"path-remove")) return updatePath(argv[2],true);
-    return fail("Expected encode, render-midi, protect, unprotect, or secure-directory PATH.");
+    return fail("Expected encode, render-midi MIDI BANK OUT SECONDS [GAIN], protect, unprotect, or secure-directory PATH.");
 }

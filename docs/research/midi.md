@@ -57,17 +57,24 @@ Verified locally: MSVC from Visual Studio 18 (Community), CMake 4.1.1-msvc1, Win
 abstraction: cpp11`, `Support for DLS files: yes`, and built `libfluidsynth-3.lib` +
 `sfxchat-helper.exe`.
 
-Helper command:
+Helper command (the caller supplies the clip's musical length in seconds):
 
 ```
-sfxchat-helper render-midi <input.mid> <bank.sf2> <output.wav> [gain]
+sfxchat-helper render-midi <input.mid> <bank.sf2> <output.wav> <seconds> [gain]
 ```
 
 Settings: 44.1 kHz stereo 16-bit output; `synth.gain` 0.5 by default (the 2.6 limiter is
 unavailable — see below); reverb and chorus on; `player.timing-source=sample` so rendering runs
-faster than realtime; ~12-minute render cap; a 2-second tail is rendered after the last note so
-reverb/chorus decays are not cut off. FluidSynth's informational logging is silenced for
-`WARN`/`INFO`/`DBG` so helper stderr stays clean.
+faster than realtime; a 2-second tail is rendered after the musical length so reverb/chorus
+decays are not cut off, and output length is exactly `seconds + 2`; the render is capped at
+12 minutes. FluidSynth's informational logging is silenced for `WARN`/`INFO`/`DBG` so helper
+stderr stays clean.
+
+Rendering is bounded by the caller's length rather than the player's own end: for files this
+project writes, FluidSynth's player keeps reporting `FLUID_PLAYER_PLAYING` well past the last
+event (a 0.5 s clip produced ~3.6 s of player time), so the rendered file was longer than the
+model duration. Bounding by time makes the output deterministic and identical for a given
+composition.
 
 ## Evidence from the spike (2026-10-06)
 
@@ -79,6 +86,27 @@ reverb/chorus decays are not cut off. FluidSynth's informational logging is sile
   demo's own level, not representative of sparse composed clips.
 - **Regression:** the existing Vorbis `encode` command still produces valid Ogg (`OggS`,
   5,040 bytes for 0.5 s mono 440 Hz) after the new static link.
+
+## SMF codec round-trip (2026-10-06)
+
+`src/shared/midi.ts` (beat-based model, bounds, General MIDI names) and `src/main/midi.ts`
+(format-1 writer, format-0/1 parser) were compiled standalone and exercised against FluidSynth:
+
+- Write → parse round-trip preserved track count, drum flags, programs (0/33/73), written labels
+  (`Drums`/`Bass`/`Flute`), per-track note counts, note pitch/start/duration, explicit velocity
+  110, defaulted velocity 100, tempo 120, 4/4 meter, and a 2.0 s computed duration. 11 assertions
+  passed.
+- A hand-built **format-0** file (96 ppq, two channels) parsed into two tracks with programs
+  0/32 and correct beat conversion, so imported single-track files work.
+- Malformed input is rejected: garbage bytes and compositions outside the bounds (900 BPM,
+  >2000 notes) throw rather than rendering.
+- The SMF this writer produces **renders in FluidSynth** with correct musical content: a
+  three-track clip's last sound lands at 2.502 s for a 4-beat/2.0 s composition, and the file
+  length is exactly `seconds + 2`. A missing or non-`MThd` file now fails without leaving output.
+
+Asset duration is the musical length; the rendered WAV therefore carries the extra 2 s decay
+tail, which is intentional and recorded here so the served audio and the reported duration are
+not mistaken for a mismatch.
 
 ## Findings and limits
 
