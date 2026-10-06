@@ -24,3 +24,9 @@
 /third-party/node-LICENSE.txt -text whitespace=-blank-at-eol,-space-before-tab
 
 /third-party/encoding/*-checksums.txt -text
+# Preserve the vendored FluidSynth/gcem license bytes and the bundled bank archive exactly.
+/third-party/synthesis/*-LICENSE.txt -text whitespace=-blank-at-eol
+/third-party/synthesis/*.tar.gz -text
+/third-party/synthesis/*.zip -text
+/resources/soundfonts/*-LICENSE.txt -text whitespace=-blank-at-eol
+/resources/soundfonts/*.sf2 -text
