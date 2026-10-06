@@ -2,7 +2,7 @@ import { isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { WorkbenchService } from './service';
-import { analysisSchema, assetKindSchema, clipSchema, generationSchema, idSchema, musicToolSchema, voiceToolSchema, voiceListSchema, patchSchema, projectNameSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
+import { analysisSchema, assetKindSchema, clipSchema, generationSchema, idSchema, midiToolSchema, musicToolSchema, voiceToolSchema, voiceListSchema, patchSchema, projectNameSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
 import { boardInputSchema, WorkbenchError, type UiCommand, type PlaybackState } from '../shared/workbench';
 import { guidanceDocuments } from '../shared/guidance';
 import type { Exporter } from './exporter';
@@ -28,6 +28,7 @@ export const operationDefinitions = {
   generate_sounds: { schema: obj({ ...generation, input: generationSchema }), description: 'Queue sound-effect candidates. Returns durable IDs immediately. Respect requested count; never retry uncertain work with a new request ID.' },
   generate_music: { schema: obj({ ...generation, input: musicToolSchema }), description: 'Queue music candidates on a configured provider. Returns durable IDs immediately; read guidance for the selected provider.' },
   generate_voice: { schema: obj({ ...generation, input: voiceToolSchema }), description: 'Queue single-speaker speech from an exact script. Discover voices with list_voices and read provider guidance. Gemini style is separate from text; ElevenLabs v4 uses square-bracket audio tags. Returns durable job IDs; never retry uncertain work.' },
+  compose_midi: { schema: obj({ ...generation, input: midiToolSchema }), description: 'Compose a MIDI clip from note data into a Standard MIDI File that plays through the bundled General MIDI bank. No provider, key, or spend. Returns durable job IDs immediately.' },
   list_voices: { schema: voiceListSchema, description: 'Discover provider voice IDs, descriptions and language/accent labels. Read successive pages with the same filters. Uses the shared saved key, without synthesis.' },
   inspect_jobs: { schema: obj(session), description: 'Inspect this session’s jobs and resulting asset IDs.' },
   jobs_wait: { schema: obj({ ...session, jobIds: z.array(idSchema).min(1), ...wait }), description: 'Bounded wait for specified jobs; timeout does not cancel generation.' },
@@ -82,7 +83,7 @@ export class Operations {
     const getJobs = () => a.jobIds.map((id: string) => { const job = sessionJobs().find(j => j.id === id); if (!job) throw new WorkbenchError('NOT_FOUND', 'Job not found in session.'); return job; });
     switch (name) {
       case 'status': { const settings = await s.settings(); return { version: 1, ready: true, elevenLabsReady: settings.elevenLabsReady, musicProviders: settings.musicProviders, activeMusicId: settings.activeMusicId, voiceProviders: settings.voiceProviders, activeVoiceId: settings.activeVoiceId, providerKeys: settings.providerKeys }; }
-      case 'guidance': { const settings = await s.settings(); return { version: 1, hash: createHash('sha256').update(JSON.stringify(guidanceDocuments)).digest('hex'), documents: guidanceDocuments, providers: { effects: { kind: 'elevenlabs', model: 'eleven_text_to_sound_v2', ready: settings.elevenLabsReady }, music: settings.musicProviders, activeMusicId: settings.activeMusicId, voiceProviders: settings.voiceProviders, activeVoiceId: settings.activeVoiceId, providerKeys: settings.providerKeys }, controls: { effects: z.toJSONSchema(generationSchema), music: z.toJSONSchema(musicToolSchema), voice: z.toJSONSchema(voiceToolSchema) } }; }
+      case 'guidance': { const settings = await s.settings(); return { version: 1, hash: createHash('sha256').update(JSON.stringify(guidanceDocuments)).digest('hex'), documents: guidanceDocuments, providers: { effects: { kind: 'elevenlabs', model: 'eleven_text_to_sound_v2', ready: settings.elevenLabsReady }, music: settings.musicProviders, activeMusicId: settings.activeMusicId, voiceProviders: settings.voiceProviders, activeVoiceId: settings.activeVoiceId, providerKeys: settings.providerKeys }, controls: { effects: z.toJSONSchema(generationSchema), music: z.toJSONSchema(musicToolSchema), voice: z.toJSONSchema(voiceToolSchema), midi: z.toJSONSchema(midiToolSchema) } }; }
       case 'projects_list': return store.projects();
       case 'project_get': return store.project(a.projectId);
       case 'project_create': return store.createProject(a.name);
@@ -92,12 +93,13 @@ export class Operations {
       case 'session_get': return { session: store.conversation(a.sessionId), playground: store.playground(a.projectId)[a.sessionId] ?? [], jobs: sessionJobs() };
       case 'rename_session': return store.renameConversation(a.sessionId, a.title, origin === 'user' ? 'user' : 'assistant');
       case 'list_voices': return s.listVoices(a as unknown as import('../shared/types').VoiceListInput);
-      case 'generate_sounds': case 'generate_music': case 'generate_voice': {
+      case 'generate_sounds': case 'generate_music': case 'generate_voice': case 'compose_midi': {
         const id = `external:${a.requestId}`;
         if (store.beginExternal(id, a.projectId, a.sessionId, name, canonical(a.input))) {
           try {
             if (name === 'generate_sounds') await s.generate(a.sessionId, a.input, id);
             else if (name === 'generate_music') await s.generateMusic(a.sessionId, { ...a.input, kind: 'music' }, id);
+            else if (name === 'compose_midi') await s.generateMidi(a.sessionId, { ...a.input, kind: 'midi' }, id);
             else await s.generateVoice(a.sessionId, { ...a.input, kind: 'voice' }, id);
             store.finishExternal(id);
           } catch (e) { store.finishExternal(id, e instanceof Error ? e.message : 'Admission failed.'); }
@@ -116,7 +118,7 @@ export class Operations {
       case 'analyze_audio': return s.analyzeAudio(a.id, a.input, a.projectId);
       case 'trim_asset': return s.trimAsset(a.sessionId, a.id, a.input);
       case 'spectrogram_view': { const { png, mapping } = await s.media.spectrogram(store.asset(a.id, a.projectId), a.input); return { mapping, media: { type: 'image', mimeType: 'image/png', data: png.toString('base64') } }; }
-      case 'audio_listen': { const { bytes, ...clip } = await s.media.clip(store.asset(a.id, a.projectId), a.input); return { clip, media: { type: 'audio', mimeType: 'audio/wav', data: bytes.toString('base64') } }; }
+      case 'audio_listen': { const asset = store.asset(a.id, a.projectId); const { bytes, ...clip } = asset.format === 'mid' ? await s.midiClip(a.id, a.input, a.projectId) : await s.media.clip(asset, a.input); return { clip, media: { type: 'audio', mimeType: 'audio/wav', data: bytes.toString('base64') } }; }
       case 'review_list': return store.reviews(a.projectId, a.sessionId);
       case 'review_get': return review();
       case 'review_history': review(); return store.reviewHistory(a.reviewId, a.projectId);

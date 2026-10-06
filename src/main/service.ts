@@ -1,10 +1,11 @@
 import { operationDefinitions } from './operations';
 import { Store } from './store';
 import { MediaLibrary, generatedFields } from './media';
-import { analysisSchema, generationSchema, midiGenerationSchema, musicGenerationSchema, voiceGenerationSchema, patchSchema, spectrogramSchema, trimSchema } from './validation';
-import { instructions, musicInstructions, voiceInstructions, tools, toolSchemas } from './assistant';
+import { analysisSchema, clipSchema, generationSchema, midiGenerationSchema, musicGenerationSchema, voiceGenerationSchema, patchSchema, spectrogramSchema, trimSchema } from './validation';
+import { instructions, midiInstructions, musicInstructions, voiceInstructions, tools, toolSchemas } from './assistant';
 import { writeMidi } from './midi';
 import { midiSummary } from '../shared/midi';
+import type { ClipRender } from './audio';
 import { validateVoiceTarget } from '../shared/voice-models';
 import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, MidiComposeInput, MusicProviderKind, VoiceGenerationInput, VoiceListInput, VoicePage, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
 import type { DiagnosticLog } from './diagnostics';
@@ -38,6 +39,8 @@ export interface ServicePorts {
   generateMusic(input: MusicGenerationInput, signal: AbortSignal): Promise<GenerationResult>;
   generateVoice(input: VoiceGenerationInput, signal: AbortSignal): Promise<GenerationResult>;
   listVoices(input: VoiceListInput): Promise<VoicePage>;
+  /** Renders a MIDI clip's interval through the SoundFont bank for listening. */
+  renderMidi(asset: Asset, input: { startSeconds?: number; endSeconds?: number }): Promise<ClipRender>;
   safeError(error: unknown): string;
 }
 export class WorkbenchService {
@@ -72,6 +75,7 @@ export class WorkbenchService {
     return instructions
       + `\n${musicInstructions(settings.musicProviders, settings.activeMusicId)}`
       + `\n${voiceInstructions(settings.voiceProviders, settings.activeVoiceId)}`
+      + `\n${midiInstructions()}`
       + `\nCurrent project: "${project.name}". Session title: "${conversation.title}" (${titledBy}). This project's sessions and library are the only work visible to you; other projects are separate.`
       + `\nCurrent comparison board: ${JSON.stringify(this.store.playground()[conversationId] ?? [])}\nCurrent generation jobs: ${JSON.stringify(this.store.jobs().filter(j => j.conversationId === conversationId).map(j => ({ id: j.id, kind: j.kind, status: j.status, assetId: j.assetId })))}`;
   }
@@ -141,6 +145,11 @@ export class WorkbenchService {
   }
   private composeMidi(input: MidiComposeInput): GenerationResult {
     return { bytes: writeMidi(input.composition), format: 'mid', provider: 'SfxChat', model: 'MIDI', requestId: null, usage: null };
+  }
+  /** Renders a MIDI clip interval for listening; audio assets stay on the decoded path. */
+  midiClip(id: string, raw: { startSeconds?: number; endSeconds?: number }, projectId: string) {
+    this.requireOpen();
+    return this.ports.renderMidi(this.store.asset(id, projectId), clipSchema.parse(raw));
   }
   /**
    * Admits candidates in transactions of up to 128 jobs, yielding between them so
@@ -377,7 +386,8 @@ export class WorkbenchService {
           break;
         }
         case 'generate_voice':
-        case 'generate_music': {
+        case 'generate_music':
+        case 'compose_midi': {
           const requestId = randomUUID();
           this.store.waitTool(call.id, { requestId, message: 'Admission began; recover this request or inspect session jobs before generating again.' });
           const queued = await operate(call.name, { input: args, requestId }) as { jobIds: string[]; error?: string };
@@ -412,7 +422,9 @@ export class WorkbenchService {
         case 'audio_listen': {
           const { id, startSeconds, endSeconds } = args as { id: string; startSeconds?: number; endSeconds?: number };
           const asset = this.store.asset(id, projectId);
-          const clip = await this.media.clip(asset, { ...(startSeconds === undefined ? {} : { startSeconds }), ...(endSeconds === undefined ? {} : { endSeconds }) });
+          const clip = asset.format === 'mid'
+            ? await this.ports.renderMidi(asset, { ...(startSeconds === undefined ? {} : { startSeconds }), ...(endSeconds === undefined ? {} : { endSeconds }) })
+            : await this.media.clip(asset, { ...(startSeconds === undefined ? {} : { startSeconds }), ...(endSeconds === undefined ? {} : { endSeconds }) });
           const clipStart = clip.startFrame / clip.sampleRate;
           const clipEnd = clip.endFrame / clip.sampleRate;
           const attachmentId = randomUUID();
@@ -423,7 +435,9 @@ export class WorkbenchService {
           result = {
             attachmentId,
             clip: { startSeconds: clipStart, endSeconds: clipEnd, duration: clipEnd - clipStart, sampleRate: clip.sampleRate, channels: 1, encoding: 'wav16', bytes: clip.bytes.length },
-            note: 'The attached WAV covers exactly this decoded-source window, downmixed to mono 16-bit PCM. Listening through the provider is an observation at its fidelity; the user audition decides quality.'
+            note: asset.format === 'mid'
+              ? 'The attached WAV is this clip rendered through the bundled General MIDI bank, downmixed to mono 16-bit PCM. It is an observation of that render, not of a live performance; the written notes remain the primary evidence, and the user audition decides quality.'
+              : 'The attached WAV covers exactly this decoded-source window, downmixed to mono 16-bit PCM. Listening through the provider is an observation at its fidelity; the user audition decides quality.'
           };
           attachments.push({ label: `audio clip of “${asset.name}” (${clipStart.toFixed(2)}–${clipEnd.toFixed(2)} s)`, kind: 'audio', mime: 'audio/wav', base64: clip.bytes.toString('base64') });
           break;

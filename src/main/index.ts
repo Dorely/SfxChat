@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { mkdir, readFile } from 'node:fs/promises';
 import { Store } from './store';
 import { MediaLibrary } from './media';
+import { decodeAudio, renderClip } from './audio';
 import { MidiRenderer } from './midi-render';
 import { loadSoundfont } from './soundfont';
 import { midiDurationSeconds } from '../shared/midi';
@@ -150,6 +151,12 @@ else {
         const key = await providerKeys.get(input.providerId);
         if (!key) throw new Error('Save the shared provider API key in Settings first.');
         return voiceClient.list(input, key, AbortSignal.timeout(30_000));
+      },
+      renderMidi: async (asset, input) => {
+        const seconds = asset.midi?.durationSeconds ?? (asset.request?.kind === 'midi' ? midiDurationSeconds(asset.request.composition) : 0);
+        if (!(seconds > 0)) throw new Error('This MIDI clip has no length to render.');
+        const wav = await midiRenderer.renderClip(await readFile(media.path(asset)), await resolveSoundfont(), { seconds });
+        return renderClip(await decodeAudio(wav, 'wav'), input);
       },
       safeError
     };

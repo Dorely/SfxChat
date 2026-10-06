@@ -3,7 +3,8 @@ import { z } from 'zod';
 import type { AudioProviderId, MusicProviderEntry, VoiceProviderEntry } from '../shared/types';
 import { VOICE_MODELS } from '../shared/voice-models';
 import { musicProviderLabel } from '../shared/music-models';
-import { analysisSchema, clipSchema, generationSchema, idSchema, musicToolSchema, voiceToolSchema, patchSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
+import { analysisSchema, clipSchema, generationSchema, idSchema, midiToolSchema, musicToolSchema, voiceToolSchema, patchSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
+import { MIDI_MAX_DURATION_SECONDS, MIDI_MAX_NOTES, MIDI_MAX_TRACKS } from '../shared/midi';
 
 import { guidanceDocuments } from '../shared/guidance';
 export const instructions = ['design.md', 'elevenlabs-sfx.md', 'workflow.md', 'editing.md'].map(name => guidanceDocuments[name]).join('\n\n') + '\nThe internal assistant cannot read arbitrary files or execute shell commands.';
@@ -26,6 +27,16 @@ export function musicInstructions(providers: MusicProviderEntry[], activeMusicId
   return `${header}\n${[...new Set(providers.map(p => p.kind))].map(kind => kind === 'elevenlabs-music' ? elevenlabsMusicInstructions : lyriaMusicInstructions).join('\n\n')}`;
 }
 
+/**
+ * MIDI composition guidance. The worked references are appended when present so the model
+ * receives the composing knowledge at runtime; missing files simply drop out.
+ */
+export function midiInstructions(): string {
+  const header = `MIDI composition: compose_midi writes note data into a Standard MIDI File that plays through the app's bundled General MIDI bank, so it needs no provider, API key, or spend. Positions and lengths are in quarter-note beats (a quarter note is 1, an eighth 0.5). Put percussion on a track with drums true and give each melodic track a General MIDI program number (0-127). Limits: ${MIDI_MAX_TRACKS} tracks, ${MIDI_MAX_NOTES} notes, ${MIDI_MAX_DURATION_SECONDS / 60} minutes. To revise, send a complete new composition with parentId; existing clips are never modified. You cannot hear a composition unless the audio_listen tool is available to your model, and a render is the bank's approximation, not a performance. Finish by placing the chosen clip in the comparison playground like any other sound.`;
+  return [header, guidanceDocuments['music-craft.md'], guidanceDocuments['midi-instruments.md'], guidanceDocuments['midi-workflow.md']]
+    .filter(entry => typeof entry === 'string' && entry.length > 0).join('\n\n');
+}
+
 export function voiceInstructions(providers: VoiceProviderEntry[], activeId: AudioProviderId): string {
   const roster = providers.map(p => `${p.label}, providerId "${p.id}", ${p.ready ? 'key saved' : 'key needed'}, model ${p.model}, voiceId "${p.voiceId}"${p.id === activeId ? ', active' : ''}`).join('; ');
   const models = providers.map(p => `${p.id}: ${VOICE_MODELS[p.id].map(m => m.id).join(', ')}`).join('; ');
@@ -40,6 +51,7 @@ export const toolSchemas = {
   generate_sounds: generationSchema,
   generate_music: musicToolSchema,
   generate_voice: voiceToolSchema,
+  compose_midi: midiToolSchema,
   search_assets: z.object({ query: z.string() }).strict(),
   inspect_asset: z.object({ id: idSchema }).strict(),
   analyze_audio: analysisSchema.extend({ id: idSchema }),
@@ -55,6 +67,7 @@ const descriptions: Record<keyof typeof toolSchemas, string> = {
   generate_voice: 'Generate single-speaker voice clips from an exact script. Discover voice IDs with list_voices. Keep original wording in text and any deliberate tags or requested pronunciation changes in providerText. Gemini style is separate; Eleven v4 uses square-bracket vocal tags and rejects SSML and speed. Waits for results and returns jobs and assets in the voice library and playground. Each candidate is separately billed; follow requested scope.',
   generate_sounds: 'Generate ElevenLabs sound effects from a complete audible description. Each candidate receives the same prompt with no chat history or reference audio. Use the fields for duration, looping and adherence; inspect field descriptions. Waits for results and returns jobs and assets to organize; results appear automatically in the effects library and playground.',
   generate_music: 'Generate music on the configured music provider. Use it for songs, tracks, background beds, loops, jingles, scores, themes, and anything with musical structure or lyrics; isolated musical sounds stay with generate_sounds. The prompt is the complete musical direction, including arrangement and lyrics, and the same wording behaves differently on different providers, so follow the active provider block in your instructions. Each candidate is a separate billed generation and tracks are slower than sound effects, so respect the requested count. durationMs sets whole-track length, instrumental leaves vocals out, and providerId targets another configured provider for one request instead of the active one. Waits for results and returns jobs and assets to organize; results appear automatically in the music library and playground.',
+  compose_midi: 'Compose a MIDI clip from note data. This is how you write music as notes rather than requesting audio from a provider: it costs nothing and needs no key. Give a short prompt describing the clip and a composition of up to 8 tracks in quarter-note beats, each with an optional General MIDI program (0-127) or drums true for the GM percussion kit. Follow the composing guidance in your instructions. You cannot hear the result unless the audio_listen tool is available to your model. To revise, resend the whole composition with parentId pointing at the clip you are changing. Waits for the result and returns the asset in the MIDI library and playground.',
   search_assets: 'Search names, descriptions, tags, collections, original prompts, and feedback across the effects, music and voice libraries. An empty query lists everything.',
   inspect_asset: 'Get immutable generation provenance and editable metadata for one asset, whether an effect, music track or voice clip.',
   analyze_audio: 'Measure decoded audio locally. Returns absolute seconds, sample frames, sample rate, channel count and linear full-scale min/max/peak/RMS bins across all channels. Default 96 bins, maximum 512. Optional startSeconds/endSeconds zoom into a smaller absolute source interval. events:true also returns energy-based event intervals (exact frames) as candidate cut regions. seamProbe measures how the interval end wraps back to its start for loop design. Source files and decoded audio are bounded to 64 MiB. These measurements are not semantic hearing.',
