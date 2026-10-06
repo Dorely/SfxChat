@@ -182,3 +182,31 @@ list; build/install hashes cover the exact texts. Vendored ElevenLabs skills and
 licenses remain unchanged historical snapshots. No sibling credentials, databases,
 media, or audition decisions were copied. Provider terms determine generated-media
 rights independently of source/skill licensing.
+
+## MIDI synthesis and SoundFont playback (2026-10-06)
+
+The MIDI creator renders note data through FluidSynth and a bundled General MIDI bank. The
+dated reviews, pins, build recipe, licensing, and spike evidence are recorded in
+[MIDI synthesis](research/midi.md); this section records the provenance decisions.
+
+Sources consulted: FluidSynth [release notes](https://www.fluidsynth.org/wiki/ChangeLog/),
+[building with CMake](https://www.fluidsynth.org/wiki/BuildingWithCMake/),
+[download](https://www.fluidsynth.org/wiki/Download), and
+[reverbators](https://www.fluidsynth.org/wiki/reverbators/); [gcem](https://github.com/kthohr/gcem);
+[GeneralUser GS](https://github.com/mrbumpy409/GeneralUser-GS) and its
+[license v2.0.3](https://github.com/mrbumpy409/GeneralUser-GS/blob/main/documentation/LICENSE.txt).
+
+FluidSynth 2.4.8 still required GLib; 2.5.0 made GLib optional and 2.6.0 removed it entirely, so
+2.6.1 was pinned as the first GLib-free release. Its required `gcem` dependency is vendored
+rather than downloaded during the build. Pinned SHA-256 values:
+
+| Artifact | URL | SHA-256 |
+| --- | --- | --- |
+| FluidSynth 2.6.1 | `https://codeload.github.com/FluidSynth/fluidsynth/tar.gz/refs/tags/v2.6.1` | `3d258a3bf97cc20c59eeebfe62c2432fae88adda74d3ad098681c76e0ebf446b` |
+| gcem `012ae73` | `https://github.com/kthohr/gcem/archive/012ae73c6d0a2cb09ffe86475f5c6fba3926e200.zip` | `28159274c54e9640354852e172d10d88eb159f4e7f2fea42edbcd20105ed3526` |
+| GeneralUser GS v2.0.3 | `https://raw.githubusercontent.com/mrbumpy409/GeneralUser-GS/main/GeneralUser-GS.sf2` | `9575028c7a1f589f5770fccc8cff2734566af40cd26ed836944e9a5152688cf` |
+
+The runtime form is the helper's `render-midi` command and the packaged sound font, not these
+notes. No listening evaluation or timbre-quality claim was made; engine and bank licensing,
+including the bank's sample-provenance caveat, are recorded in
+[third-party notices](../THIRD_PARTY_NOTICES.md).

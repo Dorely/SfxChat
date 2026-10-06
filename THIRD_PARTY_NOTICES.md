@@ -39,3 +39,16 @@ copyright Xiph.Org Foundation and contributors, under their preserved
 Pinned source archives, hashes and upstream checksum listings are retained under
 `third-party/encoding` and shipped with the app. [Build/provenance instructions](docs/research/agent-runtime.md)
 describe the helper and runtime; this bookkeeping does not license generated media.
+
+The native helper also statically links unmodified FluidSynth 2.6.1, copyright Peter Hanappe
+and others, under the GNU Lesser General Public License 2.1 — its preserved
+[license](third-party/synthesis/fluidsynth-LICENSE.txt) — together with Apache-2.0-licensed
+[gcem](third-party/synthesis/gcem-LICENSE.txt). Pinned source archives, hashes and the rebuild
+recipe are retained under `third-party/synthesis` and shipped with the app; see
+[MIDI synthesis provenance](docs/research/midi.md). The bundled General MIDI bank is
+[GeneralUser GS v2.0.3](https://github.com/mrbumpy409/GeneralUser-GS) by S. Christian Collins,
+distributed under its own [license](resources/soundfonts/GeneralUser-GS-LICENSE.txt), which
+permits unrestricted use in music creation and in software projects. That license also records
+that some contained samples originate from third-party banks of imperfectly documented
+provenance. The bank and engine are runtime resources, not SfxChat-authored material, and this
+bookkeeping does not license generated audio.

@@ -1,4 +1,4 @@
-// SfxChat MIT. Uses unmodified BSD-licensed libogg/libvorbis; see third-party notices.
+// SfxChat MIT. Uses unmodified BSD-licensed libogg/libvorbis and LGPL-2.1-licensed FluidSynth; see third-party notices.
 #include <windows.h>
 #include <wincrypt.h>
 #include <aclapi.h>
@@ -11,6 +11,7 @@
 #include <string>
 #include <algorithm>
 #include <vorbis/vorbisenc.h>
+#include <fluidsynth.h>
 
 static int fail(const char* message) { fprintf(stderr, "%s\n", message); return 1; }
 static bool page(ogg_page* p) {
@@ -119,13 +120,85 @@ static int updatePath(const wchar_t* directory, bool remove) {
     }
     RegCloseKey(ownership); RegCloseKey(environment); return error==ERROR_SUCCESS ? 0 : fail("Cannot update user PATH or installation record.");
 }
+// Renders a Standard MIDI File through a SoundFont bank to a 16-bit stereo WAV, offline and faster than realtime.
+static std::string utf8(const wchar_t* value) {
+    int size=WideCharToMultiByte(CP_UTF8,0,value,-1,nullptr,0,nullptr,nullptr);
+    std::string text(size>0?size_t(size-1):0,'\0');
+    if(size>0) WideCharToMultiByte(CP_UTF8,0,value,-1,&text[0],size,nullptr,nullptr);
+    return text;
+}
+static void put32(unsigned char* p,unsigned v){ p[0]=v&255; p[1]=(v>>8)&255; p[2]=(v>>16)&255; p[3]=(v>>24)&255; }
+static void put16(unsigned char* p,unsigned v){ p[0]=v&255; p[1]=(v>>8)&255; }
+static void quietLog(int,const char*,void*) {}
+static void wavHeader(unsigned char* h,unsigned dataBytes) {
+    memcpy(h,"RIFF",4); put32(h+4,36+dataBytes); memcpy(h+8,"WAVEfmt ",8); put32(h+16,16); put16(h+20,1); put16(h+22,2);
+    put32(h+24,44100); put32(h+28,44100*4); put16(h+32,4); put16(h+34,16); memcpy(h+36,"data",4); put32(h+40,dataBytes);
+}
+static int renderMidi(const wchar_t* midi,const wchar_t* soundfont,const wchar_t* output,double gain) {
+    fluid_settings_t* settings=new_fluid_settings();
+    if(!settings) return fail("Could not create synthesizer settings.");
+    fluid_set_log_function(FLUID_WARN,quietLog,nullptr);
+    fluid_set_log_function(FLUID_INFO,quietLog,nullptr);
+    fluid_set_log_function(FLUID_DBG,quietLog,nullptr);
+    fluid_settings_setnum(settings,"synth.sample-rate",44100.0);
+    fluid_settings_setnum(settings,"synth.gain",gain);
+    fluid_settings_setint(settings,"synth.reverb.active",1);
+    fluid_settings_setint(settings,"synth.chorus.active",1);
+    fluid_settings_setstr(settings,"player.timing-source","sample");
+    fluid_synth_t* synth=new_fluid_synth(settings);
+    fluid_player_t* player=nullptr; FILE* file=nullptr; const char* failure=nullptr;
+    if(!synth) failure="Could not create the synthesizer.";
+    else {
+        fluid_synth_add_sfloader(synth,new_fluid_defsfloader(settings));
+        if(fluid_synth_sfload(synth,utf8(soundfont).c_str(),1)==FLUID_FAILED) failure="Could not load the soundfont bank.";
+    }
+    if(!failure) {
+        player=new_fluid_player(synth);
+        if(!player || fluid_player_add(player,utf8(midi).c_str())==FLUID_FAILED) failure="Could not read the MIDI file.";
+    }
+    if(!failure) {
+        file=_wfopen(output,L"wb");
+        if(!file) failure="Could not create the WAV output.";
+    }
+    if(!failure) {
+        unsigned char header[44]; memset(header,0,sizeof(header));
+        if(fwrite(header,1,sizeof(header),file)!=sizeof(header)) failure="Could not write the WAV header.";
+    }
+    const unsigned frames=4096; std::vector<short> samples(frames*2); unsigned long long total=0, limit=44100ULL*60*12;
+    if(!failure && fluid_player_play(player)==FLUID_FAILED) failure="Could not start MIDI playback.";
+    while(!failure && fluid_player_get_status(player)==FLUID_PLAYER_PLAYING) {
+        if(total>=limit) { failure="The MIDI clip exceeds the render limit."; break; }
+        fluid_synth_write_s16(synth,frames,samples.data(),0,2,samples.data(),1,2);
+        if(fwrite(samples.data(),sizeof(short),frames*2,file)!=frames*2) { failure="Could not write rendered audio."; break; }
+        total+=frames;
+    }
+    for(unsigned i=0; !failure && i<44100*2/frames+1; i++) { // let reverb and chorus tails ring out
+        fluid_synth_write_s16(synth,frames,samples.data(),0,2,samples.data(),1,2);
+        if(fwrite(samples.data(),sizeof(short),frames*2,file)!=frames*2) failure="Could not write rendered audio.";
+        total+=frames;
+    }
+    if(file) {
+        if(!failure) {
+            unsigned char header[44]; wavHeader(header,(unsigned)(total*4));
+            if(_fseeki64(file,0,SEEK_SET) || fwrite(header,1,sizeof(header),file)!=sizeof(header)) failure="Could not finalize the WAV output.";
+        }
+        fclose(file);
+    }
+    if(player) delete_fluid_player(player);
+    if(synth) delete_fluid_synth(synth);
+    delete_fluid_settings(settings);
+    if(failure) { _wremove(output); return fail(failure); }
+    return 0;
+}
 int wmain(int argc,wchar_t** argv) {
     _setmode(_fileno(stdin),_O_BINARY); _setmode(_fileno(stdout),_O_BINARY);
     if(argc==2 && !wcscmp(argv[1],L"encode")) return encode();
+    if(argc==5 && !wcscmp(argv[1],L"render-midi")) return renderMidi(argv[2],argv[3],argv[4],0.5);
+    if(argc==6 && !wcscmp(argv[1],L"render-midi")) return renderMidi(argv[2],argv[3],argv[4],_wtof(argv[5]));
     if(argc==2 && !wcscmp(argv[1],L"protect")) return protect(false);
     if(argc==2 && !wcscmp(argv[1],L"unprotect")) return protect(true);
     if(argc==3 && !wcscmp(argv[1],L"secure-directory")) return secureDirectory(argv[2]);
     if(argc==3 && !wcscmp(argv[1],L"path-add")) return updatePath(argv[2],false);
     if(argc==3 && !wcscmp(argv[1],L"path-remove")) return updatePath(argv[2],true);
-    return fail("Expected encode, protect, unprotect, or secure-directory PATH.");
+    return fail("Expected encode, render-midi, protect, unprotect, or secure-directory PATH.");
 }

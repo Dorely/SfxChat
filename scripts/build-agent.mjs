@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { readFile, mkdir, writeFile, copyFile, access } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, copyFile, access, readdir, rename } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
@@ -43,11 +43,21 @@ try { execFileSync(cmake, ['--version'], { stdio: 'ignore' }); } catch {
   cmake = join(vs, 'Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe');
 }
 const sources = join(root, 'out/native-sources'); await mkdir(sources, { recursive: true });
-for (const entry of JSON.parse(await readFile('third-party/encoding/sources.json', 'utf8'))) {
-  const archive = resolve('third-party/encoding', entry.name);
-  if (createHash('sha256').update(await readFile(archive)).digest('hex') !== entry.sha256) throw new Error(`Source hash mismatch: ${entry.name}`);
-  try { await access(join(sources, entry.name.replace('.tar.gz', ''), 'CMakeLists.txt')); }
-  catch { execFileSync(cmake, ['-E', 'tar', 'xzf', archive], { cwd: sources, stdio: 'inherit' }); }
+for (const directory of ['third-party/encoding', 'third-party/synthesis']) {
+  for (const entry of JSON.parse(await readFile(join(directory, 'sources.json'), 'utf8'))) {
+    const archive = resolve(directory, entry.name);
+    if (createHash('sha256').update(await readFile(archive)).digest('hex') !== entry.sha256) throw new Error(`Source hash mismatch: ${entry.name}`);
+    const marker = join(sources, `.${entry.name}.extracted`);
+    try { await access(marker); continue; } catch { /* first build */ }
+    execFileSync(cmake, ['-E', 'tar', entry.name.endsWith('.zip') ? 'xf' : 'xzf', archive], { cwd: sources, stdio: 'inherit' });
+    await writeFile(marker, '');
+  }
+}
+// The gcem archive unpacks under a revision-named directory; give CMake a stable path to point GCEM_INCLUDE_DIR at.
+try { await access(join(sources, 'gcem')); }
+catch {
+  const revision = (await readdir(sources)).find(name => name.startsWith('gcem-'));
+  if (revision) await rename(join(sources, revision), join(sources, 'gcem'));
 }
 execFileSync(cmake, ['-S', 'native', '-B', 'out/native-build', '-A', 'x64', `-DSOURCES=${sources.replaceAll('\\', '/')}`, '-DCMAKE_POLICY_VERSION_MINIMUM=3.5'], { stdio: 'inherit' });
 execFileSync(cmake, ['--build', 'out/native-build', '--config', 'Release', '--target', 'sfxchat-helper', '--parallel'], { stdio: 'inherit' });

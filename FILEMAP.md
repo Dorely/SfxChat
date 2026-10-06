@@ -28,7 +28,10 @@ is recorded in [verification](docs/verification.md).
 | [docs/research/agentic-audio-editing.md](docs/research/agentic-audio-editing.md) | Dated primary-source research, timing/representation limitations, and trimming design decisions. |
 | [docs/research/audio-decoding.md](docs/research/audio-decoding.md) | Pinned MP3 decoder behavior, source revisions, licenses, and rebuild materials. |
 | [docs/research/chat-context.md](docs/research/chat-context.md) | Codex default-context evidence, tokenizer provenance, and estimate limitations. |
+| [docs/research/midi.md](docs/research/midi.md) | Pinned FluidSynth/gcem/SoundFont provenance, GM bank licensing and sample caveat, build recipe, and build-spike evidence. |
 | [third-party/](third-party/) | Decoder attribution, LGPL text, and corresponding upstream source/build archives shipped with the app. |
+| [third-party/synthesis/](third-party/synthesis/) | Pinned FluidSynth 2.6.1 and gcem archives with hashes and LGPL/Apache license texts for offline MIDI rendering. |
+| [resources/soundfonts/](resources/soundfonts/) | Bundled GeneralUser GS General MIDI bank and its license, packaged as an app resource for playback and export. |
 | [docs/knowledge/README.md](docs/knowledge/README.md) | API bundle navigation, historical-status caveats, and research boundaries. |
 | [docs/knowledge/elevenlabs.md](docs/knowledge/elevenlabs.md) | Dated official SFX prompting review, endpoint/app control mapping, revision examples, source discrepancies, and evidence limits. |
 | [docs/knowledge/elevenlabs-music.md](docs/knowledge/elevenlabs-music.md) | Dated official Music endpoint review, request mapping, limits, prompt-suggestion errors, prompting synthesis, and evidence limits. |
@@ -128,8 +131,8 @@ is recorded in [verification](docs/verification.md).
 | [resources/skill/references/elevenlabs-voice.md](resources/skill/references/elevenlabs-voice.md), [gemini-voice.md](resources/skill/references/gemini-voice.md) | Canonical voice selection, script/delivery/pronunciation guidance, examples, revisions and unsupported features. |
 | [resources/skill/references/editing.md](resources/skill/references/editing.md) | Measurement/visual/listening evidence, exact trims, fades, seam probes and loops. |
 | [resources/skill/references/elevenlabs-music.md](resources/skill/references/elevenlabs-music.md), [gemini-lyria.md](resources/skill/references/gemini-lyria.md) | Complete supported-provider music guidance, controls and examples. |
-| [scripts/build-agent.mjs](scripts/build-agent.mjs) | CLI/runtime/skill packaging, pinned source verification and native helper build. |
-| [native/helper.cpp](native/helper.cpp), [native/CMakeLists.txt](native/CMakeLists.txt) | Windows DPAPI/ACL/PATH and bounded Vorbis encoder, linked against pinned sources. |
+| [scripts/build-agent.mjs](scripts/build-agent.mjs) | CLI/runtime/skill packaging, pinned source verification (encoding and synthesis archives) and native helper build. |
+| [native/helper.cpp](native/helper.cpp), [native/CMakeLists.txt](native/CMakeLists.txt) | Windows DPAPI/ACL/PATH, bounded Vorbis encoder, and offline FluidSynth MIDI rendering, linked against pinned sources. |
 | [installer/agent.nsh](installer/agent.nsh) | User command discovery installation/removal hooks. |
 | [third-party/encoding/](third-party/encoding/) | Unmodified libogg/libvorbis source archives, SHA-256 manifests, official listings and BSD notices. |
 | [third-party/node-LICENSE.txt](third-party/node-LICENSE.txt) | Pinned redistributed Node runtime and dependency license bundle. |
