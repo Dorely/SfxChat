@@ -92,6 +92,8 @@ export interface MidiEdit {
   kind: 'midi-edit'; version: 1; sourceHash: string; ticksPerQuarter: number;
   requested: MidiComposition; outputEncoding: 'smf-1';
 }
+/** Bank metadata the studio's instrument picker needs; the local path stays in main. */
+export interface SoundfontSummary { name: string; hash: string; presets: { bank: number; program: number; name: string }[] }
 export interface VoiceProviderEntry { id: AudioProviderId; label: string; model: string; voiceId: string; ready: boolean }
 export interface VoiceListInput { providerId: AudioProviderId; search?: string; language?: string; pageToken?: string }
 export interface VoiceOption { id: string; name: string; description: string; labels: Record<string, string> }
@@ -153,6 +155,10 @@ export interface SfxApi {
   trimAsset(conversationId: string, id: string, input: TrimInput): Promise<Asset>;
   previewTrim(id: string, input: TrimInput): Promise<Uint8Array>;
   spectrogram(id: string, input: SpectrogramInput): Promise<Uint8Array>;
+  midiNotes(id: string): Promise<MidiComposition>;
+  previewMidi(composition: MidiComposition): Promise<Uint8Array>;
+  saveMidiEdit(conversationId: string, id: string | null, composition: MidiComposition, name?: string): Promise<Asset>;
+  soundfontInfo(): Promise<SoundfontSummary>;
   setPlayground(conversationId: string, assetIds: string[]): Promise<void>;
   importAudio(conversationId: string, kind?: AssetKind): Promise<void>;
   exportAsset(id: string, format?: 'original' | 'wav' | 'ogg'): Promise<void>;

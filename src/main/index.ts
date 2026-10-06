@@ -158,6 +158,8 @@ else {
         const wav = await midiRenderer.renderClip(await readFile(media.path(asset)), await resolveSoundfont(), { seconds });
         return renderClip(await decodeAudio(wav, 'wav'), input);
       },
+      renderMidiBytes: async (midi, seconds) => midiRenderer.renderClip(midi, await resolveSoundfont(), { seconds }),
+      soundfont: async () => { const bank = await resolveSoundfont(); return { name: bank.name, hash: bank.hash, presets: bank.presets }; },
       safeError
     };
     service = new WorkbenchService(store, media, livePorts, changed, diagnostics);
@@ -233,6 +235,10 @@ else {
       analyzeAudio: (id, input) => operations!.call('analyze_audio', { projectId: store.activeProjectId(), id, input }, 'user'), trimAsset: (conversationId, id, input) => operations!.call('trim_asset', { ...context(conversationId), id, input }, 'user'),
       previewTrim: (id, input) => service!.previewTrim(id, input, store.activeProjectId()),
       spectrogram: (id, input) => service!.spectrogram(id, input, store.activeProjectId()),
+      midiNotes: id => service!.midiNotes(id, store.activeProjectId()),
+      previewMidi: composition => service!.previewMidi(composition),
+      saveMidiEdit: (conversationId, id, composition, name) => service!.saveMidiEdit(conversationId, id, composition, name),
+      soundfontInfo: () => service!.soundfont(),
       setPlayground: (id, ids) => operations!.call('set_playground', { ...context(id), assetIds: ids }, 'user'),
       searchAssets: query => operations!.call('search_assets', { projectId: store.activeProjectId(), query }, 'user'),
       importAudio: async (id, kind) => {

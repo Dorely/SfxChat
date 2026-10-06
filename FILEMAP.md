@@ -107,6 +107,7 @@ is recorded in [verification](docs/verification.md).
 | [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Project switcher, session renaming, chat, effects, music, and voice libraries, Playground generation, audition, inspector, settings, and styling. |
 | [src/renderer/Icon.tsx](src/renderer/Icon.tsx) | Shared inline SVG icon set drawn for this project, replacing font glyph icons. |
 | [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Waveform trim selection, fine-window zoom, fades, spectrogram panel, exact rendered preview, and derived-asset saving. |
+| [src/renderer/MidiStudio.tsx](src/renderer/MidiStudio.tsx) | MIDI workspace: clip rail, stacked piano rolls with note editing, instrument picker, transport with playhead audition, and derivative saving. |
 | [src/renderer/ChatContextMeter.tsx](src/renderer/ChatContextMeter.tsx) | Throttled composer context indicator, threshold styling, and estimate details. |
 | [.github/workflows/windows.yml](.github/workflows/windows.yml) | Credential-free Windows typecheck and installer artifact build. |
 

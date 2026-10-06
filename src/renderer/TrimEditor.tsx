@@ -20,6 +20,8 @@ function trimValues(start: number, end: number, duration: number, fadeInMs: numb
 }
 
 export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey }: TrimEditorProps) {
+  // A MIDI clip is symbolic: it is edited as notes in the MIDI studio, not decoded and trimmed.
+  if (asset.format === 'mid') return null
   const [analysis, setAnalysis] = useState<AudioAnalysis | null>(null)
   const [loading, setLoading] = useState(true)
   const [viewLoading, setViewLoading] = useState(false)

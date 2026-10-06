@@ -1,16 +1,16 @@
 import { operationDefinitions } from './operations';
 import { Store } from './store';
 import { MediaLibrary, generatedFields } from './media';
-import { analysisSchema, clipSchema, generationSchema, midiGenerationSchema, musicGenerationSchema, voiceGenerationSchema, patchSchema, spectrogramSchema, trimSchema } from './validation';
+import { analysisSchema, clipSchema, generationSchema, midiCompositionSchema, midiGenerationSchema, musicGenerationSchema, voiceGenerationSchema, patchSchema, spectrogramSchema, trimSchema } from './validation';
 import { instructions, midiInstructions, musicInstructions, voiceInstructions, tools, toolSchemas } from './assistant';
-import { writeMidi } from './midi';
-import { midiSummary } from '../shared/midi';
+import { parseMidi, writeMidi } from './midi';
+import { MIDI_TICKS_PER_QUARTER, midiCompositionProblem, midiDurationSeconds, midiSummary, type MidiComposition } from '../shared/midi';
 import type { ClipRender } from './audio';
 import { validateVoiceTarget } from '../shared/voice-models';
-import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, MidiComposeInput, MusicProviderKind, VoiceGenerationInput, VoiceListInput, VoicePage, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
+import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, MidiComposeInput, MusicProviderKind, SoundfontSummary, VoiceGenerationInput, VoiceListInput, VoicePage, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
 import type { DiagnosticLog } from './diagnostics';
 import { diagnosticError } from './providers/errors';
-import { unlink } from 'node:fs/promises';
+import { readFile, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { ContextTokenCounter } from './chat-context';
 import { CHAT_MODELS, resolveChatModel } from '../shared/chat-models';
@@ -41,6 +41,10 @@ export interface ServicePorts {
   listVoices(input: VoiceListInput): Promise<VoicePage>;
   /** Renders a MIDI clip's interval through the SoundFont bank for listening. */
   renderMidi(asset: Asset, input: { startSeconds?: number; endSeconds?: number }): Promise<ClipRender>;
+  /** Renders an in-editor composition to WAV bytes for the studio's preview playback. */
+  renderMidiBytes(midi: Buffer, seconds: number): Promise<Buffer>;
+  /** The active bank's metadata and preset list for the studio's instrument picker. */
+  soundfont(): Promise<SoundfontSummary>;
   safeError(error: unknown): string;
 }
 export class WorkbenchService {
@@ -150,6 +154,49 @@ export class WorkbenchService {
   midiClip(id: string, raw: { startSeconds?: number; endSeconds?: number }, projectId: string) {
     this.requireOpen();
     return this.ports.renderMidi(this.store.asset(id, projectId), clipSchema.parse(raw));
+  }
+  /** Parsed notes of a stored clip, loaded into the studio's roll. */
+  async midiNotes(id: string, projectId: string): Promise<MidiComposition> {
+    this.requireOpen();
+    const asset = this.store.asset(id, projectId);
+    if (asset.format !== 'mid') throw new Error('Only MIDI clips have notes to edit.');
+    return parseMidi(await readFile(this.media.path(asset)));
+  }
+  /** Renders an unsaved composition so the studio can audition a draft before saving it. */
+  async previewMidi(raw: MidiComposition) {
+    this.requireOpen();
+    const composition = midiCompositionSchema.parse(raw) as MidiComposition;
+    const problem = midiCompositionProblem(composition);
+    if (problem) throw new Error(problem);
+    return new Uint8Array(await this.ports.renderMidiBytes(writeMidi(composition), midiDurationSeconds(composition)));
+  }
+  soundfont() { this.requireOpen(); return this.ports.soundfont(); }
+  /**
+   * Saves a composition from the studio. Editing an existing clip writes a derivative with its own
+   * lineage, so the composed original is never modified; a new draft becomes an authored clip.
+   */
+  async saveMidiEdit(conversationId: string, id: string | null, raw: MidiComposition, name?: string) {
+    this.requireOpen();
+    const composition = midiCompositionSchema.parse(raw) as MidiComposition;
+    const problem = midiCompositionProblem(composition);
+    if (problem) throw new Error(problem);
+    const conversation = this.store.conversation(conversationId);
+    const parent = id ? this.store.asset(id, conversation.projectId) : null;
+    const prompt = parent?.prompt ?? (name?.trim() || 'Authored MIDI clip');
+    const asset = await this.media.save(writeMidi(composition), 'mid', {
+      projectId: conversation.projectId, source: parent ? 'edited' : 'authored', kind: 'midi',
+      name: name?.trim() || parent?.name || 'Untitled clip', description: parent?.description ?? '',
+      tags: parent ? [...parent.tags] : [], collections: parent ? [...parent.collections] : [],
+      prompt, request: { kind: 'midi', prompt, composition }, midi: midiSummary(composition),
+      ...(parent ? {
+        parentId: parent.id,
+        midiEdit: { kind: 'midi-edit' as const, version: 1 as const, sourceHash: parent.hash, ticksPerQuarter: MIDI_TICKS_PER_QUARTER, requested: composition, outputEncoding: 'smf-1' as const }
+      } : {})
+    });
+    this.store.insertAsset(asset);
+    this.store.addToPlayground(conversationId, [asset.id]);
+    this.store.addMessage(conversationId, 'tool', parent ? `Saved note edits as “${asset.name}”. The original clip is preserved.` : `Created “${asset.name}” in the MIDI studio.`);
+    return asset;
   }
   /**
    * Admits candidates in transactions of up to 128 jobs, yielding between them so
