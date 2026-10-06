@@ -796,3 +796,15 @@ Still not run (coverage gaps):
   registered operation and tool schema, not a hosted turn.
 - **No listening evidence.** No model listened to a render, and no claim is made about the
   perceptual quality of the bank, the synthesis, or any composed clip.
+
+## GPT-6.1 Sol built-in choice (2026-10-05)
+
+OpenAI's Codex model page confirms `gpt-6.1-sol`, subject to plan and rollout. The
+local non-secret Codex model catalog (fetched 2026-10-06 UTC, client 0.160.0)
+reports a 272,000 default context window; details are in
+[chat-context research](research/chat-context.md). It was added to the built-in
+picker; the `gpt-5.6-sol` default was left unchanged.
+
+- `npm run typecheck`: passed.
+- `npm run build`: passed for main, preload, renderer, agent, and native helper.
+- No live Codex turn or account-access check was run for the new model.

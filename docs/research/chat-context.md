@@ -25,6 +25,7 @@ non-secret model metadata. No account credentials or conversations were read.
 | `gpt-6-astra` | 272,000 | 872,000 | 95 |
 | `gpt-6-luna` | 272,000 | 872,000 | 95 |
 | `gpt-6-sol` | 272,000 | 872,000 | 95 |
+| `gpt-6.1-sol` | 272,000 | 872,000 | 95 |
 
 The GPT-6 Luna and Sol rows were rechecked against the local non-secret Codex model
 catalog fetched 2026-09-23T01:05:22Z (client 0.155.0). The official
@@ -32,6 +33,14 @@ catalog fetched 2026-09-23T01:05:22Z (client 0.155.0). The official
 their availability in Codex, subject to rollout and account access. The catalog
 lists low through max for both; Sol also lists ultra. This app offers low through
 max and has not verified a live turn with either new model.
+
+The GPT-6.1 Sol row comes from the catalog fetched 2026-10-06T05:45:02Z (client
+0.160.0), which lists low through ultra. The official model page, checked
+2026-10-05, confirms `gpt-6.1-sol` for Plus, Pro, Business, Enterprise, and Edu
+plans (off by default for Enterprise/Edu until an administrator enables it; not
+Free or Go at launch) and does not state a context size. The page no longer lists
+`gpt-6-sol` or the GPT-5.6 models; their picker entries are kept for existing
+profiles. This app offers low through max and has not verified a live turn.
 
 Use **272,000** as the requested base denominator. The 95% effective-window
 reservation is not the model's base size. The checked values are pinned in
