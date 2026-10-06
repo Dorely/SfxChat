@@ -23,7 +23,7 @@ if (!runtime || createHash('sha256').update(runtime).digest('hex') !== nodeHash)
 const skillOutput = join(root, 'out/skill');
 await mkdir(join(skillOutput, 'references'), { recursive: true });
 const documents = {};
-for (const name of ['design.md', 'elevenlabs-sfx.md', 'editing.md', 'workflow.md', 'elevenlabs-music.md', 'gemini-lyria.md', 'elevenlabs-voice.md', 'gemini-voice.md']) {
+for (const name of ['design.md', 'elevenlabs-sfx.md', 'editing.md', 'workflow.md', 'elevenlabs-music.md', 'gemini-lyria.md', 'elevenlabs-voice.md', 'gemini-voice.md', 'music-craft.md', 'midi-instruments.md', 'midi-workflow.md']) {
   documents[name] = await readFile(join(root, 'resources/skill/references', name), 'utf8');
   await writeFile(join(skillOutput, 'references', name), documents[name]);
 }

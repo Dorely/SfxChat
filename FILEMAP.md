@@ -29,6 +29,7 @@ is recorded in [verification](docs/verification.md).
 | [docs/research/audio-decoding.md](docs/research/audio-decoding.md) | Pinned MP3 decoder behavior, source revisions, licenses, and rebuild materials. |
 | [docs/research/chat-context.md](docs/research/chat-context.md) | Codex default-context evidence, tokenizer provenance, and estimate limitations. |
 | [docs/research/midi.md](docs/research/midi.md) | Pinned FluidSynth/gcem/SoundFont provenance, GM bank licensing and sample caveat, build recipe, and build-spike evidence. |
+| [docs/research/music-composition.md](docs/research/music-composition.md) | Sources and limits for the composing guidance shipped as runtime prompt and skill references. |
 | [third-party/](third-party/) | Decoder attribution, LGPL text, and corresponding upstream source/build archives shipped with the app. |
 | [third-party/synthesis/](third-party/synthesis/) | Pinned FluidSynth 2.6.1 and gcem archives with hashes and LGPL/Apache license texts for offline MIDI rendering. |
 | [resources/soundfonts/](resources/soundfonts/) | Bundled GeneralUser GS General MIDI bank and its license, packaged as an app resource for playback and export. |
@@ -135,6 +136,7 @@ is recorded in [verification](docs/verification.md).
 | [resources/skill/references/elevenlabs-voice.md](resources/skill/references/elevenlabs-voice.md), [gemini-voice.md](resources/skill/references/gemini-voice.md) | Canonical voice selection, script/delivery/pronunciation guidance, examples, revisions and unsupported features. |
 | [resources/skill/references/editing.md](resources/skill/references/editing.md) | Measurement/visual/listening evidence, exact trims, fades, seam probes and loops. |
 | [resources/skill/references/elevenlabs-music.md](resources/skill/references/elevenlabs-music.md), [gemini-lyria.md](resources/skill/references/gemini-lyria.md) | Complete supported-provider music guidance, controls and examples. |
+| [resources/skill/references/music-craft.md](resources/skill/references/music-craft.md), [midi-instruments.md](resources/skill/references/midi-instruments.md), [midi-workflow.md](resources/skill/references/midi-workflow.md) | Composing craft, arranging for the General MIDI bank, and the compose_midi workflow, bounds, and evidence limits. |
 | [scripts/build-agent.mjs](scripts/build-agent.mjs) | CLI/runtime/skill packaging, pinned source verification (encoding and synthesis archives) and native helper build. |
 | [native/helper.cpp](native/helper.cpp), [native/CMakeLists.txt](native/CMakeLists.txt) | Windows DPAPI/ACL/PATH, bounded Vorbis encoder, and offline FluidSynth MIDI rendering, linked against pinned sources. |
 | [installer/agent.nsh](installer/agent.nsh) | User command discovery installation/removal hooks. |
