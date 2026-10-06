@@ -273,6 +273,44 @@ and undispatched jobs remain eligible. Interrupted tools are not re-executed.
 Closing the app aborts active work and closes the database after shutdown. There is
 no installed background service or tray process.
 
+## MIDI composition and SoundFont playback
+
+MIDI is the app's symbolic artifact form: notes rather than audio bytes. `AssetKind` gains `midi`
+and `Asset.format` gains `mid`; the kind rides the existing JSON-blob records, FTS text, jobs,
+playground, and export paths with no schema migration. `src/shared/midi.ts` owns the model in
+quarter-note beats, its bounds, the General MIDI instrument and drum names, and the duration and
+summary helpers. `src/main/midi.ts` writes format-1 Standard MIDI Files and parses format-0/1 files
+back to beats, rejecting malformed input, SMPTE division, format 2, and clips beyond the editor's
+bounds; duration is computed from the note timeline because `music-metadata` cannot probe an SMF.
+
+`compose_midi` is a normal operation and assistant tool that runs locally: the service writes the
+SMF in process, so there is no provider, credential, or network call, while keeping the same
+durable job, request-id idempotency, playground, and tool-ledger behaviour as other generation. The
+chat model is the composer; a revision resends a whole composition with `parentId`.
+
+Playback is FluidSynth rendering the clip through the bundled GeneralUser GS bank in the native
+helper (`render-midi`), cached on disk under `midi-renders/` and keyed by clip bytes, bank hash, and
+render settings, then served as WAV from `sfx-media://asset/<id>` so existing cards, waveforms, and
+review playback work unchanged. Output is bounded by a caller-supplied musical length plus a
+two-second decay tail, so a render is exactly as long as the model says.
+`src/main/soundfont.ts` resolves the bank (bundled, or a user path from Settings) and enumerates its
+presets for the instrument picker. Every audio a MIDI clip produces — card playback, listening,
+previews, exports — comes from this one render path.
+
+Symbolic clips stay off the audio path: `MediaLibrary.withAudio` rejects `mid` assets, so analysis,
+trimming, and clip rendering refuse them with a clear message instead of decoding garbage, and the
+trim editor steps aside for MIDI in the inspector. `audio_listen` is the exception and renders the
+clip for a model with audio intake. Composing knowledge ships as the MIDI instruction block plus
+three skill references (`music-craft.md`, `midi-instruments.md`, `midi-workflow.md`);
+[research/music-composition.md](research/music-composition.md) records sources and limits, and
+[research/midi.md](research/midi.md) records the engine, bank, and build provenance.
+
+The MIDI studio (`MidiStudio.tsx`) is the MIDI tab: a searchable clip rail beside stacked piano
+rolls with draw/move/resize/erase editing, per-track instrument choice from the loaded bank, tempo
+and meter, snap and zoom, and a transport that renders the draft and sweeps a playhead while
+highlighting the notes it passes. Saving writes a derivative with `midiEdit` lineage for an existing
+clip, or an `authored` clip for a new draft; composed originals are never modified.
+
 ## Providers and credentials
 
 Codex directly adapts Lorekeeper/PixelChat OAuth PKCE and Responses SSE, with no CLI.

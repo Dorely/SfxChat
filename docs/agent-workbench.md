@@ -116,6 +116,19 @@ Stable errors include `INVALID_ARGUMENTS`, `INVALID_PATH`, `REQUEST_CONFLICT`,
 errors. Existing lower-level failures use `OPERATION_FAILED`; inspect the message.
 Neither readiness nor successful compilation proves that a provider account works.
 
+## MIDI composition
+
+`compose_midi` writes note data (positions and lengths in quarter-note beats, an optional General
+MIDI program per track, or `drums` for the GM percussion kit) to a Standard MIDI File. It needs no
+provider, key, or spend, and returns durable job IDs like the other generation operations. MIDI
+clips report their musical duration, and playback renders them through the bundled General MIDI
+bank. Copy the composing guidance from the `guidance` operation's `controls.midi` schema and the
+three `midi-*`/`music-craft` documents. `audio_listen` accepts a MIDI clip and returns the clip
+rendered through the bank as mono WAV — an observation of that render rather than a performance,
+and meaningful only for a calling model that receives audio. Revising means sending a complete new
+composition with `parentId`; existing clips are never modified. Finish by arranging the comparison
+board with `set_playground` like any other sound.
+
 ## Audition and export
 
 `review_create` stores `{title,cues}` for a session. Each ordered cue has a stable

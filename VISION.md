@@ -14,6 +14,7 @@ verification should be the default; native checks cover desktop-specific behavio
 - Start from a description, a reference, an imported sound, or an existing library item.
 - Help translate intent into a clear brief and effective provider-specific prompts. Use small, informative sets of alternatives and preserve useful feedback between iterations.
 - Generate and refine sound effects, music, and voice through suitable provider capabilities. Let the assistant select and switch between configured services according to the task, available capabilities, and authorized spending. Model targets and voice defaults are chosen separately from credentials, and shared guidance covers every configured provider, including per-request overrides.
+- Compose music symbolically as well as generating audio: the assistant writes notes into standard MIDI Files that play through a bundled General MIDI sound bank, and users refine those notes by hand in a piano-roll studio. Composing is local and needs no provider or credential.
 - A request to create sounds should lead directly to generation, without separate spending approvals or app-imposed generation allowances.
 - Make audition and comparison central: playback, repeated-use testing, useful technical checks, and listener decisions should inform revisions.
 - Preserve originals, derived versions, exact generation prompts, provenance, and feedback so users can understand how a result was made and repeat useful workflows.

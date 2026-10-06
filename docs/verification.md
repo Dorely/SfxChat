@@ -675,3 +675,41 @@ left unchanged.
 - `npm run typecheck`: passed.
 - `npm run build`: passed for main, preload, and renderer.
 - No live Codex turn or account-access check was run for either new model.
+
+## MIDI creator (2026-10-06)
+
+Built and committed in reviewable steps: FluidSynth 2.6.1 with the GeneralUser GS bank in the native
+helper, the beat-based model and SMF codec, MIDI assets with rendered playback, the `compose_midi`
+operation and assistant tool, the composing guidance, and the MIDI studio workspace. Synthesis pins,
+hashes, and the build recipe are in [research/midi.md](research/midi.md); composing-guidance
+provenance is in [research/music-composition.md](research/music-composition.md).
+
+Run and passed:
+
+- `npm run typecheck` and `npm run build` (electron-vite main/preload/renderer plus the agent and
+  native helper) after each step. The packaged skill now contains the three MIDI references and the
+  guidance hash moved accordingly.
+- `render-midi` exercised directly with the built helper against the real bank: a missing or
+  non-`MThd` MIDI file fails without leaving an output file; renders are exactly `seconds + 2` long;
+  gain is honoured (peak 22,708 at gain 0.25 against 32k at 0.5); the Vorbis `encode` path still
+  emits valid Ogg after the new static link.
+- SMF codec round-trip (compiled standalone, 11 assertions): track count, drum flags, programs,
+  labels, note pitch/start/duration, default velocity, tempo, meter, and duration preserved; a
+  hand-built format-0 file splits into two tracks; malformed and out-of-bounds input rejected; the
+  generated SMF renders in FluidSynth with the last sound at the expected time.
+- Bank and renderer modules (12 assertions): 261 presets and 13 drum kits parsed from the bundled
+  bank, bank identity hashed, non-SF2 input rejected, an exact 4.000 s render for a 2 s clip,
+  identical cache reuse, a single cache file, working file export, and non-silent audio.
+
+Not run (coverage gaps):
+
+- **No live browser or desktop acceptance pass.** A SfxChat instance was already running and holds
+  the single-instance lock, so `npm run dev:browser` could not start; that process was left alone
+  rather than terminated. The studio's tab, note drawing and dragging, playhead audition,
+  instrument picker, and save-as-derivative flows are therefore verified only by typecheck, the
+  production build, and the direct helper/module checks above — not by a UI pass.
+- **No live assistant turn** composing a clip and **no CLI/MCP invocation** of `compose_midi`. The
+  operation is registered and published through the catalog by construction, but it was not called
+  end to end.
+- **No listening evidence.** No model listened to a render, and no claim is made about the
+  perceptual quality of the bank, the synthesis, or any composed clip.
