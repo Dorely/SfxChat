@@ -308,7 +308,8 @@ three skill references (`music-craft.md`, `midi-instruments.md`, `midi-workflow.
 The MIDI studio (`MidiStudio.tsx`) is the MIDI tab: a searchable clip rail (a strip on narrow
 workspaces) beside an arrangement of track lanes that share one ruler and horizontal scroll. Each
 lane has a sticky header (name, instrument from the loaded bank or the drum kit, audition, remove)
-and a clickable key gutter, and supports draw/move/resize/erase plus keyboard nudging and a
+and a clickable key gutter (drum lanes always list the full General MIDI kit, 35-81, and mark
+keys outside it), and supports draw/move/resize/erase plus keyboard nudging and a
 selected-note velocity control. Tempo, meter, snap and zoom sit in the transport, which renders the
 draft and sweeps a playhead while highlighting the notes it passes; unsaved drafts prompt before
 being replaced. Saving writes a derivative with `midiEdit` lineage for an existing

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import type { Asset, SoundfontSummary } from '../shared/types'
 import type { MidiComposition, MidiNote, MidiTrack } from '../shared/midi'
-import { GM_PROGRAMS, MIDI_BPM_MAX, MIDI_BPM_MIN, MIDI_DEFAULT_VELOCITY, MIDI_MAX_TRACKS, MIDI_TIME_SIG_DENOMINATORS, midiCompositionProblem, midiDrumName, midiDurationSeconds, midiLengthBeats, midiNoteCount, midiTimeSignature, midiTrackLabel } from '../shared/midi'
+import { GM_DRUMS, GM_PROGRAMS, MIDI_BPM_MAX, MIDI_BPM_MIN, MIDI_DEFAULT_VELOCITY, MIDI_MAX_TRACKS, MIDI_TIME_SIG_DENOMINATORS, midiCompositionProblem, midiDrumName, midiDurationSeconds, midiLengthBeats, midiNoteCount, midiTimeSignature, midiTrackLabel } from '../shared/midi'
 import Icon from './Icon'
 
 /**
@@ -21,12 +21,14 @@ type MidiStudioProps = {
 
 const ROW = 12
 const HEAD_WIDTH = 220
-const KEYS_WIDTH = 92
+const KEYS_WIDTH = 112
 const MIN_TRACK_ROWS = 20
 const PITCH_PADDING = 5
 const SNAPS = [{ value: 1, label: '1/4' }, { value: 0.5, label: '1/8' }, { value: 0.25, label: '1/16' }, { value: 0, label: 'Free' }]
 const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B']
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10])
+const DRUM_LOW = 35
+const DRUM_HIGH = 81
 
 const noteName = (pitch: number) => `${NOTE_NAMES[pitch % 12]}${Math.floor(pitch / 12) - 1}`
 const blankComposition = (): MidiComposition => ({ bpm: 120, timeSig: { numerator: 4, denominator: 4 }, tracks: [{ name: 'Piano', program: 0, notes: [] }] })
@@ -153,7 +155,12 @@ export default function MidiStudio({ assets, conversationId, selectedId, onSelec
 
   const pitchWindow = (track: MidiTrack) => {
     const pitches = track.notes.map(note => note.pitch)
-    const centre = pitches.length ? pitches : track.drums ? [36, 51] : [60, 72]
+    // A drum lane always lists the whole General MIDI kit so every instrument has a labelled row.
+    if (track.drums) {
+      const low = Math.min(DRUM_LOW, ...pitches), high = Math.max(DRUM_HIGH, ...pitches)
+      return { low, high, rows: high - low + 1 }
+    }
+    const centre = pitches.length ? pitches : [60, 72]
     const low = Math.max(0, Math.min(...centre) - PITCH_PADDING)
     const high = Math.min(127, Math.max(Math.max(...centre) + PITCH_PADDING, low + MIN_TRACK_ROWS - 1))
     return { low, high, rows: high - low + 1 }
@@ -326,8 +333,9 @@ export default function MidiStudio({ assets, conversationId, selectedId, onSelec
                   <div className="midi-keys" style={{ height: view.rows * ROW }}>
                     {rows.map(pitch => {
                       const black = !track.drums && BLACK_KEYS.has(pitch % 12)
-                      const label = track.drums ? (midiDrumName(pitch).startsWith('Percussion') ? '' : midiDrumName(pitch)) : pitch % 12 === 0 ? noteName(pitch) : ''
-                      return <button key={pitch} className={`midi-key${black ? ' midi-key-black' : ''}${pitch % 12 === 0 && !track.drums ? ' midi-key-c' : ''}`} style={{ height: ROW }} title={track.drums ? midiDrumName(pitch) : noteName(pitch)} tabIndex={-1} onMouseDown={event => { event.preventDefault(); audition(track, [{ pitch, startBeat: 0, durationBeats: 1 }]) }}>{label}</button>
+                      const unmapped = track.drums && !GM_DRUMS[pitch]
+                      const label = track.drums ? GM_DRUMS[pitch] ?? noteName(pitch) : pitch % 12 === 0 ? noteName(pitch) : ''
+                      return <button key={pitch} className={`midi-key${black ? ' midi-key-black' : ''}${pitch % 12 === 0 && !track.drums ? ' midi-key-c' : ''}${unmapped ? ' midi-key-unmapped' : ''}`} style={{ height: ROW }} title={unmapped ? `${noteName(pitch)}: no General MIDI drum on this key` : track.drums ? midiDrumName(pitch) : noteName(pitch)} tabIndex={-1} onMouseDown={event => { event.preventDefault(); audition(track, [{ pitch, startBeat: 0, durationBeats: 1 }]) }}>{label}</button>
                     })}
                   </div>
                   <div className="midi-grid" style={gridStyle(view.rows)} onMouseDown={event => { if (event.button === 0 && event.target === event.currentTarget) addNote(event, trackIndex, view.high) }}>
@@ -340,9 +348,9 @@ export default function MidiStudio({ assets, conversationId, selectedId, onSelec
                       return (
                         <div
                           key={`${noteIndex}-${note.pitch}-${note.startBeat}`}
-                          className={`midi-note${isSelected ? ' midi-note-selected' : ''}${active ? ' midi-note-active' : ''}`}
+                          className={`midi-note${isSelected ? ' midi-note-selected' : ''}${active ? ' midi-note-active' : ''}${track.drums && !GM_DRUMS[note.pitch] ? ' midi-note-unmapped' : ''}`}
                           style={{ left: note.startBeat * zoom, width, top: (view.high - note.pitch) * ROW, height: ROW - 1, opacity: 0.45 + (0.55 * velocity) / 127 }}
-                          title={`${track.drums ? midiDrumName(note.pitch) : noteName(note.pitch)} · bar ${Math.floor(note.startBeat / beatsPerBar) + 1} · velocity ${velocity}`}
+                          title={`${track.drums ? (GM_DRUMS[note.pitch] ?? `${noteName(note.pitch)} (outside the drum kit)`) : noteName(note.pitch)} · bar ${Math.floor(note.startBeat / beatsPerBar) + 1} · velocity ${velocity}`}
                           onMouseDown={event => dragNote(event, trackIndex, noteIndex, 'move')}
                           onContextMenu={event => { event.preventDefault(); removeNote(trackIndex, noteIndex) }}
                         >
@@ -364,7 +372,7 @@ export default function MidiStudio({ assets, conversationId, selectedId, onSelec
           <div className="midi-statusbar">
             {selectedNote && selected && selectedTrack
               ? <>
-                  <span className="midi-selected-pill" style={trackColor(selected.track)}><i />{selectedTrack.drums ? midiDrumName(selectedNote.pitch) : noteName(selectedNote.pitch)}</span>
+                  <span className="midi-selected-pill" style={trackColor(selected.track)}><i />{selectedTrack.drums ? GM_DRUMS[selectedNote.pitch] ?? noteName(selectedNote.pitch) : noteName(selectedNote.pitch)}</span>
                   <span>Bar {Math.floor(selectedNote.startBeat / beatsPerBar) + 1} · beat {((selectedNote.startBeat % beatsPerBar) + 1).toFixed(2).replace(/\.?0+$/, '')}</span>
                   <span>{selectedNote.durationBeats} {selectedNote.durationBeats === 1 ? 'beat' : 'beats'}</span>
                   <label className="midi-field midi-velocity"><span>Velocity</span><input type="range" min={1} max={127} value={selectedNote.velocity ?? MIDI_DEFAULT_VELOCITY} onChange={event => { const value = Number(event.target.value); const { track, note } = selected; update(draft => { draft.tracks[track].notes[note].velocity = value }) }} aria-label="Note velocity" /><output>{selectedNote.velocity ?? MIDI_DEFAULT_VELOCITY}</output></label>

@@ -416,3 +416,5 @@ body.midi-resizing, body.midi-resizing * { cursor: ew-resize !important; user-se
 .workspace-tabs button span.icon, .workspace-tabs .tab-active span.icon { display: inline-grid; min-width: 0; height: auto; padding: 0; border-radius: 0; color: inherit; background: transparent; font-size: 15px; }
 .workspace-tabs .tab-active span.icon { color: var(--accent); }
 .workspace-panel.midi-panel:focus:not(:focus-visible) { outline: none; }
+.midi-key-unmapped { color: color-mix(in srgb, var(--quiet) 55%, transparent); background: var(--sunken); font-style: italic; }
+.midi-note-unmapped { background: repeating-linear-gradient(135deg, var(--track-color) 0 4px, color-mix(in srgb, var(--track-color) 45%, transparent) 4px 8px); }

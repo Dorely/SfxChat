@@ -1,3 +1,13 @@
+# MIDI drum lane labels (2026-10-05)
+
+- Reported: a drum lane left key rows blank. Rows above 81 have no General MIDI drum
+  name and were rendered empty. Drum lanes now always span the kit (35-81), extended to
+  any out-of-kit notes; those keys show their note name dimmed and their notes are striped.
+- `npm run typecheck` and `npm run build` (via `npm run dev:browser`) passed. In the in-app browser, a new
+  unsaved draft with notes nudged above the kit and switched to Drums showed 73 rows with
+  no blank labels and two striped out-of-kit notes. The draft was discarded; no audio was
+  played and nothing was saved.
+
 # UI pass: themes, composer model picker, settings, MIDI studio (2026-10-05)
 
 - Renderer colors now come from theme tokens (`themes.css`); a top-bar palette popover
