@@ -33,6 +33,14 @@ export function ReviewLauncher({ snapshot, sessionId, onSelect }: { snapshot: Sn
   </div>;
 }
 
+/** Per-card audition settings: loop toggle and preview gain (never applied to the original file). */
+function CardControls({ name, loop, onLoop, gainDb, onGain }: { name: string; loop: boolean; onLoop(checked: boolean): void; gainDb: number; onGain(gainDb: number): void }) {
+  return <div className="review-card-controls">
+    <label className="review-toggle"><input type="checkbox" role="switch" aria-label={`Loop ${name}`} checked={loop} onChange={e => onLoop(e.target.checked)} /><span aria-hidden="true" />Loop</label>
+    <label className="review-gain">Preview<span className="review-gain-field"><input type="number" min="-60" max="12" step="1" aria-label={`Preview gain for ${name} in dB`} value={gainDb} onChange={e => onGain(Number(e.target.value))} /><span>dB</span></span></label>
+  </div>;
+}
+
 export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect, onSelectAsset, playback, onPlay, onStop }: { snapshot: Snapshot; sessionId: string; selectedId: string; onSelect(id: string | null): void; onSelectAsset(id: string): void; playback: PlaybackState; onPlay(input: AuditionRequest): Promise<void>; onStop(): void }) {
   const boards = snapshot.reviews.filter(r => r.sessionId === sessionId);
   const board = boards.find(r => r.id === selectedId);
@@ -77,7 +85,7 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
           <div className="review-card-grid">
             {reference && <div className="playground-slot review-reference"><div className="slot-label"><span>Current reference</span></div>
               <AudioCardFrame onSelect={() => onSelectAsset(reference.id)} asset={reference} isPlaying={isPlaying(reference.id)} onToggle={() => toggle(cue, reference.id)} disabled={busy} compact>
-                <div className="review-card-controls"><label className="review-check"><input type="checkbox" aria-label={`Loop ${reference.name}`} checked={!!loops[reference.id]} onChange={e => loopToggle(reference.id, e.target.checked)} /> Loop</label><label>Preview dB<input type="number" min="-60" max="12" value={cue.referenceGainDb} onChange={e => cueChange(index, { referenceGainDb: Number(e.target.value) })} /></label></div>
+                <CardControls name={reference.name} loop={!!loops[reference.id]} onLoop={checked => loopToggle(reference.id, checked)} gainDb={cue.referenceGainDb} onGain={gainDb => cueChange(index, { referenceGainDb: gainDb })} />
                 <p className="field-hint">Compare candidates against this sound.</p>
               </AudioCardFrame>
             </div>}
@@ -87,7 +95,7 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
               return <div className="playground-slot" key={candidate.assetId}>
                 <div className="slot-label"><span>Candidate {String(ci + 1).padStart(2, '0')}</span><button className="mini-button" aria-label={`Remove candidate ${ci + 1}`} onClick={remove}><Icon name="close" /></button></div>
                 {asset ? <AudioCardFrame onSelect={() => onSelectAsset(asset.id)} asset={asset} title={candidate.label} selected={picked} review={picked ? 'accepted' : cue.decision === 'rejected' ? 'rejected' : 'unreviewed'} isPlaying={isPlaying(asset.id)} onToggle={() => toggle(cue, asset.id)} disabled={busy} compact>
-                  <div className="review-card-controls"><label className="review-check"><input type="checkbox" aria-label={`Loop ${asset.name}`} checked={!!loops[asset.id]} onChange={e => loopToggle(asset.id, e.target.checked)} /> Loop</label><label>Preview dB<input type="number" min="-60" max="12" value={candidate.gainDb} onChange={e => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, gainDb: Number(e.target.value) } : c) })} /></label></div>
+                  <CardControls name={asset.name} loop={!!loops[asset.id]} onLoop={checked => loopToggle(asset.id, checked)} gainDb={candidate.gainDb} onGain={gainDb => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, gainDb } : c) })} />
                   <button className={`secondary-button review-pick ${picked ? 'review-pick-active' : ''}`} aria-pressed={picked} onClick={() => cueChange(index, { decision: 'selected', selectedAssetId: asset.id })}><Icon name="check" /> {picked ? 'Selected for this cue' : 'Select this candidate'}</button>
                   <label className="review-candidate-notes">Candidate notes<textarea value={candidate.notes} placeholder="What works? What needs changing?" onChange={e => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, notes: e.target.value } : c) })} /></label>
                 </AudioCardFrame> : <p role="alert">Candidate is unavailable. Remove it or reload the review.</p>}

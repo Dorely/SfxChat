@@ -290,8 +290,9 @@ chat model is the composer; a revision resends a whole composition with `parentI
 
 Playback is FluidSynth rendering the clip through the bundled GeneralUser GS bank in the native
 helper (`render-midi`), cached on disk under `midi-renders/` and keyed by clip bytes, bank hash, and
-render settings, then served as WAV from `sfx-media://asset/<id>` so existing cards, waveforms, and
-review playback work unchanged. Output is bounded by a caller-supplied musical length plus a
+render settings, then served as WAV from `sfx-media://asset/<id>` so existing cards and review
+playback work unchanged. MIDI cards draw a note roll from `midiNotes` (pitched notes above a drum
+strip) instead of a decoded waveform. Output is bounded by a caller-supplied musical length plus a
 two-second decay tail, so a render is exactly as long as the model says.
 `src/main/soundfont.ts` resolves the bank (bundled, or a user path from Settings) and enumerates its
 presets for the instrument picker. Every audio a MIDI clip produces — card playback, listening,
@@ -440,8 +441,9 @@ across unrelated edits. Candidate-note stamps and `review_history` preserve feed
 attribution independently of general asset reviews. UI drafts survive stale-save errors.
 
 ReviewPanel occupies the existing Playground results slot. AudioCardFrame supplies
-the same title, waveform, format, duration and tags as library/inspector cards; review
-cards attach cue selection, preview gain and candidate notes underneath. Cue controls
+the same title, waveform (or MIDI note roll), format, duration and tags as library/inspector
+cards; review cards attach a loop switch, preview gain, cue selection and candidate notes
+underneath. Cue controls
 and feedback sit beside the cards, moving below at narrower container widths. The
 Playground header, generation form and jobs remain in place. ReviewLauncher opens or
 creates a board from the header; returning to all sounds restores regular results.

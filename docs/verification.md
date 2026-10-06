@@ -1,3 +1,19 @@
+# Review candidate card polish (2026-10-05)
+
+- Reported: the Loop checkbox floated in the middle of review cards. Both control labels
+  had `margin-left: auto`, which split the free space. The row is now a left-aligned
+  Loop switch and a right-aligned `Preview [n] dB` field, shared by reference and
+  candidate cards.
+- MIDI cards (library, Playground, inspector, review) now draw a note roll from
+  `midiNotes`, with pitched notes above a drum strip, instead of flat placeholder bars.
+  The duplicate duration was dropped from the card footer, and MIDI subtitles add BPM and
+  track count.
+- `npm run typecheck` and `npm run build` (via `npm run dev:browser`) passed. In the
+  in-app browser at 1500x950, opened the "Below the Blue" review: the roll drew 218 notes
+  including 30 drum hits. Loop sat at the left and gain at the right; the switch turned
+  on and back off without marking the review dirty. No audio was played and nothing was
+  saved. The host was shut down afterwards.
+
 # F5 renderer attach over IPv4 (2026-10-05)
 
 - Reported: the "Cannot connect to the target at localhost:9222 … Socket closed before

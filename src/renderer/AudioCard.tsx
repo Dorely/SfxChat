@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { midiLengthBeats, midiVelocity } from '../shared/midi';
 import type { Asset, Review } from '../shared/types';
 import Icon from './Icon';
 
@@ -46,6 +47,39 @@ function Waveform({ active, url }: { active?: boolean; url: string }) {
   return <div className={`waveform ${active ? 'waveform-active' : ''} ${bars.length ? '' : 'waveform-loading'}`} aria-hidden="true">{(bars.length ? bars : Array.from({ length: 48 }, () => 16)).map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}</div>
 }
 
+interface RollNote { x: number; width: number; pitch: number; drum: boolean; strength: number }
+
+/** MIDI has no decodable waveform; show its notes instead: pitched notes above, drum hits in a strip below. */
+function MidiRoll({ active, assetId }: { active?: boolean; assetId: string }) {
+  const [roll, setRoll] = useState<{ notes: RollNote[]; low: number; high: number } | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    window.sfx.midiNotes(assetId).then(composition => {
+      const length = Math.max(midiLengthBeats(composition), 1e-6)
+      const notes = composition.tracks.flatMap(track => track.notes.map(note => ({
+        x: note.startBeat / length * 1000,
+        width: Math.max(note.durationBeats / length * 1000, 3),
+        pitch: note.pitch,
+        drum: track.drums === true,
+        strength: .45 + .55 * midiVelocity(note) / 127
+      })))
+      const pitches = notes.filter(note => !note.drum).map(note => note.pitch)
+      const low = pitches.length ? Math.min(...pitches) : 60, high = pitches.length ? Math.max(...pitches) : 60
+      const span = Math.max(high - low, 11)
+      if (!cancelled) setRoll({ notes, low: low - (span - (high - low)) / 2, high: high + (span - (high - low)) / 2 })
+    }).catch(() => undefined)
+    return () => { cancelled = true }
+  }, [assetId])
+  const hasDrums = !!roll?.notes.some(note => note.drum)
+  const pitchedHeight = hasDrums ? 33 : 41
+  const rowHeight = roll ? pitchedHeight / (roll.high - roll.low + 1) : 0
+  return <svg className={`midi-roll ${active ? 'midi-roll-active' : ''}`} viewBox="0 0 1000 41" preserveAspectRatio="none" aria-hidden="true">
+    {roll?.notes.map((note, index) => note.drum
+      ? <rect key={index} className="midi-roll-drum" x={note.x} y={36} width={3} height={5} opacity={note.strength} />
+      : <rect key={index} x={note.x} y={(roll.high - note.pitch) * rowHeight} width={note.width} height={Math.max(rowHeight, 2)} opacity={note.strength} />)}
+  </svg>
+}
+
 /** Shared visual card used by library, Playground, inspector, and cue audition. */
 export function AudioCardFrame({ asset, selected = false, isPlaying, onToggle, onSelect, compact = false, title, review = asset.review, disabled = false, activeAction = 'Stop', seek, children }: {
   asset: Asset; selected?: boolean; isPlaying: boolean; onToggle(): void; onSelect?(): void;
@@ -54,12 +88,12 @@ export function AudioCardFrame({ asset, selected = false, isPlaying, onToggle, o
   return <article data-asset-id={asset.id} className={`asset-card ${selected ? 'asset-selected' : ''} ${compact ? 'asset-compact' : ''}`} onClick={onSelect}>
     <div className="asset-card-top">
       <button className={`play-button ${isPlaying ? 'playing' : ''}`} disabled={disabled && !isPlaying} onClick={event => { event.stopPropagation(); onToggle(); }} aria-label={`${isPlaying ? activeAction : 'Play'} ${title || asset.name}`}><Icon name={isPlaying ? 'pause' : 'play'} /></button>
-      <div className="asset-title"><strong>{title || asset.name || 'Untitled sound'}</strong><span>{asset.format.toUpperCase()} · {formatDuration(asset.duration)}</span></div>
+      <div className="asset-title"><strong>{title || asset.name || 'Untitled sound'}</strong><span>{[asset.format.toUpperCase(), formatDuration(asset.duration), asset.midi && `${Math.round(asset.midi.bpm)} BPM`, asset.midi && `${asset.midi.tracks.length} ${asset.midi.tracks.length === 1 ? 'track' : 'tracks'}`].filter(Boolean).join(' · ')}</span></div>
       <span className={`review-mark review-${review}`} title={review} role="img" aria-label={`Review: ${review}`}><Icon name={review === 'accepted' ? 'check' : review === 'rejected' ? 'x' : 'dot'} /></span>
     </div>
-    <Waveform active={isPlaying} url={window.sfx.mediaUrl(`asset/${asset.id}`)} />
+    {asset.kind === 'midi' ? <MidiRoll active={isPlaying} assetId={asset.id} /> : <Waveform active={isPlaying} url={window.sfx.mediaUrl(`asset/${asset.id}`)} />}
     {seek}
-    <div className="asset-card-bottom"><span className={`kind-chip kind-${asset.kind ?? 'effect'}`}>{asset.kind === 'midi' ? 'MIDI' : asset.kind === 'voice' ? 'VOICE' : asset.kind === 'music' ? 'MUSIC' : 'SFX'}</span><span>{formatDuration(asset.duration)}</span><div className="asset-tags">{asset.tags.slice(0, 3).map(tag => <span key={tag}>{tag}</span>)}</div><span className="asset-date">{shortDate(asset.createdAt)}</span></div>
+    <div className="asset-card-bottom"><span className={`kind-chip kind-${asset.kind ?? 'effect'}`}>{asset.kind === 'midi' ? 'MIDI' : asset.kind === 'voice' ? 'VOICE' : asset.kind === 'music' ? 'MUSIC' : 'SFX'}</span><div className="asset-tags">{asset.tags.slice(0, 3).map(tag => <span key={tag}>{tag}</span>)}</div><span className="asset-date">{shortDate(asset.createdAt)}</span></div>
     {children}
   </article>;
 }
