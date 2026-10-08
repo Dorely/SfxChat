@@ -63,6 +63,8 @@ and export. The desktop starts on demand; disconnecting a client leaves admitted
 jobs running. Generation request IDs prevent accidental repeat purchases.
 
 Opening a review displays cue-grouped sound cards in the Playground results area.
+Candidate and reference cards show a moving playhead and elapsed/total time, with a
+seek bar available during playback.
 Candidate notes and selection controls sit under each card, with cue feedback and
 manual Loop toggles alongside or below. The Playground header and generation form stay
 in place; **All Playground sounds** returns to the session’s regular results.

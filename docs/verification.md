@@ -1,3 +1,22 @@
+# Review cue playback feedback (2026-10-08)
+
+- Candidate and reference cards now show an elapsed/total time readout, a seek bar
+  enabled during playback, and a playhead over the waveform or MIDI note roll.
+  Review progress follows the WebAudio context clock and decoded duration; seeking
+  retains preview gain and Loop, and stop/completion clear progress. Native audio
+  cards reuse the transport and playhead presentation.
+- `npm run typecheck`: passed. `npm run build`: passed for main, preload, renderer,
+  agent and native helper. The first build encountered an ignored native CMake cache
+  from Visual Studio 2026 while the available toolchain selected Visual Studio 2022;
+  the old cache was preserved under the excluded native-build directory and a fresh
+  cache built successfully. No build-script or dependency changes were needed.
+- `npm run package`: passed, including a rebuild of the final renderer, agent and
+  helper, and the Windows NSIS installer. The installer was built locally without
+  publishing or installing it.
+- Live browser/desktop playback, seeking, loop wrapping and visual checks were
+  skipped at the user's request. No host was started, no audio was played, and no
+  provider calls, library edits or changes to the running installed app were made.
+
 # App icon (2026-10-05)
 
 - Added the app icon: a lime speech bubble carrying a sound burst, centered on the

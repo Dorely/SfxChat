@@ -130,9 +130,9 @@ is recorded in [verification](docs/verification.md).
 | [src/shared/guidance.ts](src/shared/guidance.ts) | Canonical packaged guidance imports shared by app and CLI. |
 | [src/shared/install.ts](src/shared/install.ts) | Project/user/custom skills and Codex/Claude MCP config installation with conflict/backups. |
 | [src/shared/native.ts](src/shared/native.ts) | Narrow bounded helper transport for DPAPI and directory ACL operations. |
-| [src/renderer/AudioCard.tsx](src/renderer/AudioCard.tsx) | Shared sound-card presentation, waveform or MIDI note roll, and native preview controls for libraries, Playground and inspector; cue reviews reuse the card frame. |
+| [src/renderer/AudioCard.tsx](src/renderer/AudioCard.tsx) | Shared sound-card frame, waveform/MIDI roll playhead, seek/time transport, and native preview controls for libraries, Playground, inspector and cue reviews. |
 | [src/renderer/ReviewPanel.tsx](src/renderer/ReviewPanel.tsx) | Cue-grouped Playground result cards, review launcher, references, preview settings, decisions/notes, stale revisions and pack export. |
-| [src/renderer/audition.ts](src/renderer/audition.ts) | User-controlled single-source WebAudio playback/Loop, cancellation and state reports. |
+| [src/renderer/audition.ts](src/renderer/audition.ts) | User-controlled single-source WebAudio playback/Loop, clock-based renderer progress, seeking, cancellation and lifecycle reports. |
 | [src/renderer/AgentSettings.tsx](src/renderer/AgentSettings.tsx) | Scoped integration installation, explicit MCP registration, status and previews. |
 | [resources/skill/SKILL.md](resources/skill/SKILL.md) | Installable workflow and required reference/version discovery instructions. |
 | [resources/skill/references/design.md](resources/skill/references/design.md), [workflow.md](resources/skill/references/workflow.md) | Complete shared creative direction, music brief examples, scope, jobs, session naming, reviews and export. |

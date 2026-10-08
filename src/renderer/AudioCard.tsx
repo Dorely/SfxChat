@@ -81,9 +81,9 @@ function MidiRoll({ active, assetId }: { active?: boolean; assetId: string }) {
 }
 
 /** Shared visual card used by library, Playground, inspector, and cue audition. */
-export function AudioCardFrame({ asset, selected = false, isPlaying, onToggle, onSelect, compact = false, title, review = asset.review, disabled = false, activeAction = 'Stop', seek, children }: {
+export function AudioCardFrame({ asset, selected = false, isPlaying, onToggle, onSelect, compact = false, title, review = asset.review, disabled = false, activeAction = 'Stop', position = 0, duration = asset.duration ?? 0, seek, children }: {
   asset: Asset; selected?: boolean; isPlaying: boolean; onToggle(): void; onSelect?(): void;
-  compact?: boolean; title?: string; review?: Review; disabled?: boolean; activeAction?: 'Stop' | 'Pause'; seek?: ReactNode; children?: ReactNode;
+  compact?: boolean; title?: string; review?: Review; disabled?: boolean; activeAction?: 'Stop' | 'Pause'; position?: number; duration?: number; seek?: ReactNode; children?: ReactNode;
 }) {
   return <article data-asset-id={asset.id} className={`asset-card ${selected ? 'asset-selected' : ''} ${compact ? 'asset-compact' : ''}`} onClick={onSelect}>
     <div className="asset-card-top">
@@ -91,11 +91,26 @@ export function AudioCardFrame({ asset, selected = false, isPlaying, onToggle, o
       <div className="asset-title"><strong>{title || asset.name || 'Untitled sound'}</strong><span>{[asset.format.toUpperCase(), formatDuration(asset.duration), asset.midi && `${Math.round(asset.midi.bpm)} BPM`, asset.midi && `${asset.midi.tracks.length} ${asset.midi.tracks.length === 1 ? 'track' : 'tracks'}`].filter(Boolean).join(' · ')}</span></div>
       <span className={`review-mark review-${review}`} title={review} role="img" aria-label={`Review: ${review}`}><Icon name={review === 'accepted' ? 'check' : review === 'rejected' ? 'x' : 'dot'} /></span>
     </div>
-    {asset.kind === 'midi' ? <MidiRoll active={isPlaying} assetId={asset.id} /> : <Waveform active={isPlaying} url={window.sfx.mediaUrl(`asset/${asset.id}`)} />}
+    <div className="card-waveform">
+      {asset.kind === 'midi' ? <MidiRoll active={isPlaying} assetId={asset.id} /> : <Waveform active={isPlaying} url={window.sfx.mediaUrl(`asset/${asset.id}`)} />}
+      {(isPlaying || position > 0) && duration > 0 && <span className="card-playhead" style={{ left: `${Math.max(0, Math.min(1, position / duration)) * 100}%` }} aria-hidden="true" />}
+    </div>
     {seek}
     <div className="asset-card-bottom"><span className={`kind-chip kind-${asset.kind ?? 'effect'}`}>{asset.kind === 'midi' ? 'MIDI' : asset.kind === 'voice' ? 'VOICE' : asset.kind === 'music' ? 'MUSIC' : 'SFX'}</span><div className="asset-tags">{asset.tags.slice(0, 3).map(tag => <span key={tag}>{tag}</span>)}</div><span className="asset-date">{shortDate(asset.createdAt)}</span></div>
     {children}
   </article>;
+}
+
+function playbackTime(seconds: number) {
+  const tenths = Math.floor(Math.max(0, seconds) * 10);
+  return `${Math.floor(tenths / 600)}:${String(Math.floor(tenths / 10) % 60).padStart(2, '0')}.${tenths % 10}`;
+}
+
+export function AudioSeekBar({ position, duration, onSeek, disabled = false, name }: { position: number; duration: number; onSeek(position: number): void; disabled?: boolean; name: string }) {
+  return <div className="card-transport" onClick={event => event.stopPropagation()}>
+    <input className="scrub" type="range" min="0" max={duration || 1} step="0.01" value={position} disabled={disabled || duration <= 0} onChange={event => onSeek(Number(event.target.value))} aria-label={`Seek ${name}`} aria-valuetext={`${playbackTime(position)} of ${playbackTime(duration)}`} />
+    <span className="card-playback-time">{playbackTime(position)} / {playbackTime(duration)}</span>
+  </div>;
 }
 
 export default function AudioCard({ asset, onSelect, selected, onPlay, playerKey, isPlaying, compact = false }: { asset: Asset; onSelect: () => void; selected: boolean; onPlay: (key: string, playing: boolean) => void; playerKey?: string; isPlaying: boolean; compact?: boolean }) {
@@ -109,8 +124,9 @@ export default function AudioCard({ asset, onSelect, selected, onPlay, playerKey
     else audio.pause();
   }, [isPlaying, asset.id, onPlay, effectivePlayerKey]);
   useEffect(() => { if (audioRef.current) audioRef.current.volume = gain; }, [gain]);
-  return <AudioCardFrame activeAction="Pause" asset={asset} selected={selected} compact={compact} isPlaying={isPlaying} onSelect={onSelect} onToggle={() => onPlay(effectivePlayerKey, !isPlaying)} seek={
-    <input className="scrub" type="range" min="0" max={loaded && audioRef.current?.duration ? audioRef.current.duration : asset.duration || 1} step="0.01" value={position} onChange={event => { const next = Number(event.target.value); if (audioRef.current) audioRef.current.currentTime = next; setPosition(next); }} aria-label="Seek audio" />
+  const duration = loaded && Number.isFinite(audioRef.current?.duration) ? audioRef.current!.duration : asset.duration ?? 0;
+  return <AudioCardFrame activeAction="Pause" asset={asset} selected={selected} compact={compact} isPlaying={isPlaying} position={position} duration={duration} onSelect={onSelect} onToggle={() => onPlay(effectivePlayerKey, !isPlaying)} seek={
+    <AudioSeekBar name={asset.name} position={position} duration={duration} onSeek={next => { if (audioRef.current) audioRef.current.currentTime = next; setPosition(next); }} />
   }>
     <audio ref={audioRef} src={window.sfx.mediaUrl(`asset/${asset.id}`)} loop={loop} preload="metadata" onLoadedMetadata={() => setLoaded(true)} onTimeUpdate={event => setPosition(event.currentTarget.currentTime)} onEnded={() => onPlay(effectivePlayerKey, false)} />
     <div className="preview-controls"><label><input type="checkbox" checked={loop} onChange={event => setLoop(event.target.checked)} /> Loop</label><label className="gain-control">Gain <input type="range" min="0" max="1" step="0.05" value={gain} onChange={event => setGain(Number(event.target.value))} aria-label="Preview gain" /></label></div>

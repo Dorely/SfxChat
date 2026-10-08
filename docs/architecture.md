@@ -453,6 +453,14 @@ membership and preview gains do not disable auditioning candidates or references
 any cue; playback uses the current draft's preview gain. Saving remains explicit,
 and manual review navigation or exporting requires saving or discarding the draft first.
 
+Review candidate and reference cards show elapsed/total time, a seek bar, and a playhead
+over the waveform or MIDI roll. The renderer tracks position from the WebAudio context
+clock and decoded buffer duration; seeking during playback replaces the source at the
+chosen offset while retaining preview gain and Loop. Stop and natural completion reset
+progress. Position updates stay local to the renderer; RendererPort receives lifecycle
+status only, rather than per-frame progress reports. Ordinary audio cards reuse the same
+transport presentation with their native media position.
+
 RendererPort acknowledges UI commands and reports actual player state. Open commands
 never autoplay. Conflicting simultaneous switches return UI_BUSY. The renderer's
 AuditionPlayer owns one WebAudio context and a single source with preview gain.
