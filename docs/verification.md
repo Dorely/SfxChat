@@ -13,9 +13,22 @@
 - `npm run package`: passed, including a rebuild of the final renderer, agent and
   helper, and the Windows NSIS installer. The installer was built locally without
   publishing or installing it.
-- Live browser/desktop playback, seeking, loop wrapping and visual checks were
-  skipped at the user's request. No host was started, no audio was played, and no
-  provider calls, library edits or changes to the running installed app were made.
+- Initial live checks were skipped at the user's request. On the follow-up request,
+  `npm run dev:browser` rebuilt successfully and a brief in-app browser pass opened
+  an existing review. With Loop off, a 24.9 s WAV candidate's elapsed time advanced
+  from 0.18 s to 8.15 s and its waveform playhead moved. Keyboard seeking back to
+  the start reset the position and continued playback; Stop reset the slider to 0,
+  disabled seeking and removed the playhead. A separate 0.5 s candidate completed
+  naturally and reset the same controls. The seek bar, readout and playhead were
+  visually inspected. No review changes were saved and no provider calls were made.
+- Playback was stopped, the temporary browser tab closed, and the development host
+  shut down. Reference playback, MIDI playback, loop wrapping and native desktop
+  presentation were not separately checked. No listening judgment is claimed.
+- After explicit approval, stopped the installed MCP server that held its runtime
+  file open and ran the new NSIS installer silently (exit code 0). The installed
+  executable, app archive, CLI, Node runtime, native helper and icon matched the
+  release files by SHA-256. The updated app was left closed; the MCP connection
+  needs reconnecting when used again.
 
 # App icon (2026-10-05)
 
