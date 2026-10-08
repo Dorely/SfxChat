@@ -1,3 +1,28 @@
+# Installed speech discovery build and agent skills (2026-10-08)
+
+- At the user's request, `npm run package` rebuilt commit `2ff1889` and produced
+  the Windows NSIS installer. `npm run typecheck` passed. Closed the installed app
+  normally after checking there were no queued/running generation jobs, and stopped
+  its MCP process to release the installed runtime. Silent installation completed
+  with exit code 0 at `%LOCALAPPDATA%/Programs/SfxChat`.
+- Installed executable, app archive, icon, CLI, Node runtime, native helper, skill
+  entry point, guidance hash and ElevenLabs voice reference matched release bytes
+  by SHA-256. The package version remains 0.2.0; this is the updated local build.
+- Installed the complete user-scope SfxChat skills under `~/.agents/skills/sfxchat`
+  (Codex) and `~/.claude/skills/sfxchat`, plus both MCP registrations. These standard
+  user-scope targets were previously absent. All 28 integration entries report
+  up-to-date; every installed reference and guidance hash matches the running app.
+- The installer's atomic rename of the Codex config failed with `EPERM`. Preserved
+  its backup, confirmed the current file still matched that backup, wrote the exact
+  installer-generated content in place and removed its temporary file. Rerunning
+  installation completed the Claude registration and verified both configurations.
+- The installed CLI reopened the app and refreshed the authenticated model catalog:
+  nine speech models, seven selectable, with the saved v4 default preserved. No
+  synthesis or paid generation was invoked. A manual installed MCP stdio exchange
+  initialized successfully, listed `list_voice_models` and queried all nine models;
+  its verification subprocess exited afterward. The app was left open as before;
+  existing harness connections need reconnecting to use the updated MCP process.
+
 # ElevenLabs speech model discovery (2026-10-08)
 
 - `npm run typecheck`: passed. `npm run build` (via `npm run dev:browser`): passed
