@@ -29,8 +29,12 @@ direct Gemini chat. Model and default-voice choices are independent of credentia
 Equal legacy keys consolidate automatically; differing saved keys remain encrypted
 until you choose which to retain. No capability-specific key fields remain.
 
-Voice defaults to Eleven v4 or Gemini 3.8 Flash TTS, with Multilingual v2 and Gemini
-3.8 Flash-Lite TTS alternatives. Choose an existing voice, discover regional voices,
+Voice defaults to Eleven v4 or Gemini 3.8 Flash TTS. ElevenLabs models are discovered
+live with the saved key; **Refresh models** checks current availability. Reviewed
+v4/v3, Multilingual v2, Flash and legacy Turbo profiles supply different prompting
+guidance and controls; newly discovered TTS IDs use a conservative plain-text profile.
+Realtime-only variants are shown as unavailable. Gemini retains its labeled built-in
+Flash/Flash-Lite catalog. Choose an existing voice, discover regional voices,
 and set supported delivery controls. Gemini style stays separate from its verbatim
 transcript. Originals are MP3 for ElevenLabs and WAV for Gemini. The inspector preserves
 script/voice/settings provenance and offers editable regeneration with parent lineage.
@@ -73,6 +77,7 @@ review changes before switching reviews or exporting selected sounds.
 
 ```powershell
 sfxchat guidance
+sfxchat call list_voice_models --json '{"providerId":"elevenlabs","refresh":true}'
 sfxchat skill install --scope project --project C:\work\game --target codex --target claude --mcp --dry-run
 sfxchat skill install --scope user --target codex --target claude --mcp
 ```

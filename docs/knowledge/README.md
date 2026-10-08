@@ -1,5 +1,9 @@
 # API knowledge bundle
 
+ElevenLabs TTS model discovery and model-specific guidance were rechecked on
+2026-10-08. See [voice generation](voice-generation.md#live-model-discovery--2026-10-08)
+for the live endpoint evidence, discovery/control contract, and review boundaries.
+
 This bundle carries forward knowledge related to using audio APIs properly. Single-speaker ElevenLabs/Gemini voice documentation was reviewed on 2026-10-02; its canonical skill references are new authored guidance, not upstream snapshots. ElevenLabs sound-effect and Music guidance and the Gemini Lyria guidance were rechecked against official sources on 2026-09-21; the older Gemini audio-input notes and the sound-effects skill snapshot remain historical handoff material. It is not a complete sound-design curriculum.
 
 Runtime guidance for the assistant lives in [assistant.ts](../../src/main/assistant.ts), which

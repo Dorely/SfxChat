@@ -1,4 +1,4 @@
-# Voice generation review — 2026-10-02
+# Voice generation review — 2026-10-02, discovery update 2026-10-08
 
 Both providers support single-speaker TTS. This implementation uses direct REST;
 no new SDK or provider credentials are introduced. The canonical instructions are
@@ -32,7 +32,7 @@ SfxChat scripts, not copied provider examples or instructions to purchase a batc
 | Recommendation | Guidance/control or explicit boundary | Sources |
 | --- | --- | --- |
 | Choose appropriate existing voice, inspect timbre/accent/use case | Both references, `list_voices`, shared dropdown and ID entry | E1/E2/E6/E8, G1/G4 |
-| Match model to acting versus narration/throughput | Both references; two choices per vendor; never silent fallback | E3/E4, G1/G2/G3 |
+| Match model to acting versus narration/throughput | Live ElevenLabs TTS discovery, reviewed model-specific profiles, labeled Gemini catalog; never silent fallback | E3/E4, G1/G2/G3; update below |
 | Match language and region | Labels, language discovery filter, v4 cross-language caveat, Gemini inferred language | E3/E4/E6, G1/G4 |
 | Preserve user-authored words | Exact untrimmed `text`; distinct optional `providerText`; searchable original transcript | E5, G1 |
 | v4 emotion, combinations, placement | Sparse compatible square tags, auditory-only direction, character/whisper examples | E2/E3 |
@@ -40,7 +40,7 @@ SfxChat scripts, not copied provider examples or instructions to purchase a batc
 | Pauses | v4 punctuation/tags, v2 sparse break markup; Gemini point-event tags, no exact timing promise | E2/E3, G1 |
 | IPA/phonetic alternatives | v4 slash IPA/stress, v2/Gemini agreed phonetic rendering; no dictionary API | E2/E3/E5, G1 |
 | Numbers/dates/units/abbreviations/URLs | Confirm ambiguous readings; requested expansion in `providerText`; no app normalization switch | E2/E5 |
-| Supported numeric settings | Stability/similarity 0–1; only v2 speed 0.7–1.2; reject v4 speed and SSML | E3/E5/E7/E8 |
+| Supported numeric settings | v4 stability/similarity; v3 stability presets; reviewed legacy stability/similarity/speed; shared model guards | E3/E5/E7/E8; update below |
 | Separate Gemini style from transcript | `style` maps to speech metadata; concise sustained emotion/pace/prosody/pitch | G1 |
 | Vocal bursts versus sustained delivery | English angle tags for local breaths/sighs/pauses; sustained whisper in style, including foreign scripts | G1 |
 | Stable voice identity and concise directions | Same voice/model; long persona blocks and permanent-trait style changes discouraged | G1/G4 |
@@ -53,7 +53,8 @@ SfxChat scripts, not copied provider examples or instructions to purchase a batc
 
 ElevenLabs posts to `/v1/text-to-speech/{voiceId}?output_format=mp3_44100_128` with
 `text`, `model_id`, and supported `voice_settings`. Original MP3 is retained. The
-model table's 10,000-character limit is validated before admission; no split is made.
+model's conservative reviewed bound, reduced by a smaller live limit, is validated
+before admission; no split is made. Bounds vary from 5,000 to 40,000 characters.
 The app deliberately exposes the conservative 0.7–1.2 legacy speed range despite
 wider values appearing in some endpoint schemas. It exposes neither legacy style
 exaggeration/boost nor language override, normalization modes, dictionary locators,
@@ -79,6 +80,9 @@ provenance on their immutable parent.
 
 ## Budget and evidence
 
+The following budget belongs to the original 2026-10-02 generation check; the
+2026-10-08 discovery work performed no synthesis or paid model-quality comparison.
+
 The authorized live check permits one short clip per provider, two total, within $1.
 On this date ElevenLabs listed v4 at $0.022/1,000 characters temporarily, with a
 $0.08 regular rate. Gemini listed Flash TTS audio at $9/million tokens temporarily
@@ -87,3 +91,52 @@ the combined budget at these list rates. Rates are estimates, not an invoice.
 Read [verification](../verification.md) for actual attempts, failures, technical
 results, and listening limits. No provider recommendation to experiment expands
 that authorization.
+
+## Live model discovery — 2026-10-08
+
+Re-read official [List models](https://elevenlabs.io/docs/api-reference/models/list),
+[Models](https://elevenlabs.io/docs/overview/models),
+[best practices](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/best-practices),
+[v4](https://elevenlabs.io/docs/overview/capabilities/text-to-speech/eleven-v4),
+[Playground TTS](https://elevenlabs.io/docs/eleven-creative/playground/text-to-speech),
+[conversion](https://elevenlabs.io/docs/api-reference/text-to-speech/convert),
+[voice settings](https://elevenlabs.io/docs/api-reference/voices/settings/get),
+[API pricing](https://elevenlabs.io/pricing/api), and
+[terms](https://elevenlabs.io/terms-of-use). Official Markdown representations supplied
+the v4 text and full models/prompting sections. No numeric price or license guarantee
+was added. Existing vendored skill/license snapshots remain byte-identical.
+
+The unauthenticated `GET /v1/models` failed with `workspace_not_found`; the same
+endpoint through SfxChat's saved key returned nine TTS IDs: v4, v4 Turbo, v3,
+v3 Conversational, Multilingual v2, Flash v2.5/v2 and Turbo v2.5/v2. This is actual
+discovery evidence for this account/time, not evidence of successful synthesis or
+entitlement to every returned model. The app sends the key only through its main-process
+provider boundary, never through agent arguments or returned metadata.
+
+The API identifies TTS capability and `maximum_text_length_per_request`; the old
+free/subscriber limit fields are deprecated and unenforced. The provider owner filters
+to explicit TTS capability, bounds/normalizes metadata, and adds reviewed app guidance
+and controls. Availability is live; reviewed prompting/control profiles are maintained
+locally. A five-minute memory cache is credential-scoped, and refresh bypasses it.
+No discovery failure is replaced by an allegedly live static catalog. The metadata
+does not guarantee fixed pricing, account access, voice suitability, or endpoint-specific
+features not described by the TTS flag. The two documented realtime variants are
+unselectable because their Text to Dialogue WebSocket is outside this implementation.
+
+Model guidance now distinguishes v4 acting/native IPA/accent behavior, v3 tags and
+clone limitations, Multilingual v2 narration, Flash throughput and normalization,
+Flash v2 word-level phoneme support, and deprecated Turbo replacements. v4/v3 reject
+SSML; v3 exposes only the app's conservative stability presets 0/0.5/1, without
+similarity or speed. The current product guide explicitly excludes v3 similarity/speed.
+Multilingual/Flash/Turbo keep the app's conservative speed range. Unknown discovered
+TTS IDs are selectable with a plain-text-only profile, no tuning/markup claims, and
+a 10,000-character cap reduced by a smaller returned limit. Reviewed models retain
+their documented app caps even when the provider reports a higher value.
+
+`list_voice_models` is shared by UI, internal assistant, CLI and MCP. It returns exact
+IDs, selectable/guidance status, model notes, controls, caps, languages/access flags,
+source/time and saved defaults. Agents select an ID through `generate_voice.input.model`
+for one request. Defaults and admitted requests are never silently upgraded. The
+canonical [voice reference](../../resources/skill/references/elevenlabs-voice.md)
+contains decision guidance and a full MCP query/selection example. Gemini is explicitly
+built-in; SFX/Music remain endpoint-specific catalogs, outside this TTS discovery.

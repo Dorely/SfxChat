@@ -6,8 +6,7 @@ import { instructions, midiInstructions, musicInstructions, voiceInstructions, t
 import { parseMidi, writeMidi } from './midi';
 import { MIDI_TICKS_PER_QUARTER, midiCompositionProblem, midiDurationSeconds, midiSummary, type MidiComposition } from '../shared/midi';
 import type { ClipRender } from './audio';
-import { validateVoiceTarget } from '../shared/voice-models';
-import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, MidiComposeInput, MusicProviderKind, SoundfontSummary, VoiceGenerationInput, VoiceListInput, VoicePage, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
+import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, MidiComposeInput, MusicProviderKind, SoundfontSummary, VoiceGenerationInput, VoiceListInput, VoicePage, VoiceModelListInput, VoiceModelCatalog, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
 import type { DiagnosticLog } from './diagnostics';
 import { diagnosticError } from './providers/errors';
 import { readFile, unlink } from 'node:fs/promises';
@@ -39,6 +38,8 @@ export interface ServicePorts {
   generateMusic(input: MusicGenerationInput, signal: AbortSignal): Promise<GenerationResult>;
   generateVoice(input: VoiceGenerationInput, signal: AbortSignal): Promise<GenerationResult>;
   listVoices(input: VoiceListInput): Promise<VoicePage>;
+  listVoiceModels(input: VoiceModelListInput): Promise<VoiceModelCatalog>;
+  validateVoiceTarget(input: VoiceGenerationInput): Promise<void>;
   /** Renders a MIDI clip's interval through the SoundFont bank for listening. */
   renderMidi(asset: Asset, input: { startSeconds?: number; endSeconds?: number }): Promise<ClipRender>;
   /** Renders an in-editor composition to WAV bytes for the studio's preview playback. */
@@ -132,12 +133,13 @@ export class WorkbenchService {
     const target = settings.voiceProviders.find(p => p.id === (parsed.providerId ?? settings.activeVoiceId));
     if (!target?.ready) throw new Error('Save or resolve the shared provider key in Settings before generating voice.');
     const input: VoiceGenerationInput = { ...parsed, kind: 'voice', providerId: target.id, model: parsed.model ?? target.model, voiceId: parsed.voiceId ?? target.voiceId };
-    validateVoiceTarget(input);
+    await this.ports.validateVoiceTarget(input); this.requireOpen();
     const jobs = await this.queueCandidates(conversationId, input, 'voice', callId);
     this.store.addMessage(conversationId, 'tool', `Queued ${jobs.length} voice clip${jobs.length === 1 ? '' : 's'} on ${target.label} (${input.model}, ${input.voiceId}): ${input.text}`);
     this.pump(); return { jobIds: jobs.map(j => j.id) };
   }
   listVoices(input: VoiceListInput) { this.requireOpen(); return this.ports.listVoices(input); }
+  listVoiceModels(input: VoiceModelListInput) { this.requireOpen(); return this.ports.listVoiceModels(input); }
   /** Composing MIDI is local: it writes a Standard MIDI File and needs no provider, key, or network call. */
   async generateMidi(conversationId: string, raw: MidiComposeInput, callId?: string) {
     this.requireOpen();

@@ -98,6 +98,18 @@ export interface VoiceProviderEntry { id: AudioProviderId; label: string; model:
 export interface VoiceListInput { providerId: AudioProviderId; search?: string; language?: string; pageToken?: string }
 export interface VoiceOption { id: string; name: string; description: string; labels: Record<string, string> }
 export interface VoicePage { voices: VoiceOption[]; nextPageToken: string | null }
+export interface VoiceModelListInput { providerId: AudioProviderId; refresh?: boolean }
+export interface VoiceModelOption {
+  id: string; label: string; note: string; maxCharacters: number | null;
+  controls: { stability: boolean; similarity: boolean; speed: boolean; stabilityValues?: number[] };
+  guidanceStatus: 'reviewed' | 'generic' | 'unavailable'; selectable: boolean;
+  languages: { id: string; name: string }[]; description: string;
+  requiresAlphaAccess: boolean | null; deprecated?: boolean; replacementModelId?: string;
+}
+export interface VoiceModelCatalog {
+  providerId: AudioProviderId; source: 'live' | 'built-in'; fetchedAt: string | null;
+  models: VoiceModelOption[]; defaultModel: string; defaultVoiceId: string;
+}
 export interface ProviderKeyStatus { id: AudioProviderId; ready: boolean; candidates: { id: string; label: string }[] }
 export interface Job { id: string; conversationId: string; kind: AssetKind; status: JobStatus; input: AnyGenerationInput; assetId: string | null; error: string | null; createdAt: string }
 export type GenericProviderKind = 'chat-completions' | 'responses' | 'anthropic';
@@ -145,6 +157,7 @@ export interface SfxApi {
   generateMusic(conversationId: string, input: MusicGenerationInput): Promise<void>;
   generateVoice(conversationId: string, input: VoiceGenerationInput): Promise<void>;
   listVoices(input: VoiceListInput): Promise<VoicePage>;
+  listVoiceModels(input: VoiceModelListInput): Promise<VoiceModelCatalog>;
   saveVoiceProvider(input: { id: AudioProviderId; model: string; voiceId: string }): Promise<void>;
   setActiveVoice(id: AudioProviderId): Promise<void>;
   saveProviderKey(id: AudioProviderId, key: string): Promise<void>;

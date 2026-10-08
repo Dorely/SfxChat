@@ -27,6 +27,7 @@ import { MusicRegistry } from './music-registry';
 import { ProviderKeys } from './provider-keys';
 import { VoiceRegistry } from './voice-registry';
 import { VoiceClient } from './providers/voice';
+import { VOICE_MODELS } from '../shared/voice-models';
 import { AnthropicClient } from './providers/generic/anthropic';
 import { ChatCompletionsClient, toChatMessages, toResponsesOutput } from './providers/generic/chat';
 import { GenericResponsesClient } from './providers/generic/responses';
@@ -175,6 +176,18 @@ void acquireInstanceLock().then(acquired => {
         if (!key) throw new Error('Save the shared provider API key in Settings first.');
         return voiceClient.list(input, key, AbortSignal.timeout(30_000));
       },
+      listVoiceModels: async input => {
+        const key = input.providerId === 'elevenlabs' ? await providerKeys.get(input.providerId) : '';
+        const catalog = await voiceClient.models(input, key ?? '', AbortSignal.timeout(30_000));
+        const defaults = voice.configuration(input.providerId);
+        return { ...catalog, defaultModel: defaults.model, defaultVoiceId: defaults.voiceId };
+      },
+      validateVoiceTarget: async input => {
+        if (!input.providerId) throw new Error('Choose a voice provider.');
+        const key = await providerKeys.get(input.providerId);
+        if (!key) throw new Error('Save the shared provider API key in Settings first.');
+        await voiceClient.validateTarget(input, key, AbortSignal.timeout(30_000));
+      },
       renderMidi: async (asset, input) => {
         const seconds = asset.midi?.durationSeconds ?? (asset.request?.kind === 'midi' ? midiDurationSeconds(asset.request.composition) : 0);
         if (!(seconds > 0)) throw new Error('This MIDI clip has no length to render.');
@@ -251,7 +264,16 @@ void acquireInstanceLock().then(acquired => {
       generateMusic: (id, input) => { const { kind: _kind, ...fields } = input; return operations!.call('generate_music', { ...context(id), requestId: randomUUID(), input: fields }, 'user').then(requireAdmission); },
       generateVoice: (id, input) => { const { kind: _kind, ...fields } = input; return operations!.call('generate_voice', { ...context(id), requestId: randomUUID(), input: fields }, 'user').then(requireAdmission); },
       listVoices: input => operations!.call('list_voices', input, 'user'),
-      saveVoiceProvider: input => { voice.save(input); changed(); }, setActiveVoice: id => { voice.setActive(id); changed(); },
+      listVoiceModels: input => operations!.call('list_voice_models', input, 'user'),
+      saveVoiceProvider: async input => {
+        if (input.id === 'elevenlabs') {
+          const key = await providerKeys.get(input.id);
+          if (key) await voiceClient.validateTarget({ kind: 'voice', providerId: input.id, model: input.model, voiceId: input.voiceId, text: 'Configuration validation' }, key, AbortSignal.timeout(30_000));
+          else if (!VOICE_MODELS.elevenlabs.some(m => m.id === input.model)) throw new Error('Save the shared key and discover this model before selecting it as a default.');
+        }
+        if (quitting) throw new Error('SfxChat is closing.');
+        voice.save(input); changed();
+      }, setActiveVoice: id => { voice.setActive(id); changed(); },
       saveProviderKey: async (id, key) => { await providerKeys.save(id, key); credentialError = null; changed(); },
       selectProviderKey: async (id, candidateId) => { await providerKeys.select(id, candidateId); credentialError = null; changed(); },
       updateAsset: (id, patch, conversationId) => operations!.call('update_asset', { ...context(conversationId ?? store.ensureConversation(store.activeProjectId())), id, patch }, 'user'),

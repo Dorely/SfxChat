@@ -62,13 +62,13 @@ export const musicToolSchema = z.object(musicInputFields).strict();
 const voiceInputFields = {
   text: z.string().min(1).max(64000).refine(value => !!value.trim(), 'Spoken text is required.').describe('Exact user script, preserved without trimming or rewriting. Spoken by one voice. For revisions keep the full script, not bare feedback.'),
   providerId: audioProviderSchema.optional().describe('elevenlabs or gemini. Omit to use the active voice provider; one shared API key serves each provider.'),
-  model: z.string().trim().min(1).max(120).optional().describe('Supported TTS model from guidance. Omit for the saved voice model.'),
+  model: z.string().trim().regex(/^[a-zA-Z0-9._-]{1,120}$/).optional().describe('Exact selectable model ID from list_voice_models. Read its note, controls, language coverage and guidanceStatus. Omit for the saved voice model; no automatic upgrade or fallback.'),
   voiceId: z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/).optional().describe('Exact voice ID from list_voices, or Gemini prebuilt name. Omit for the saved default voice.'),
   providerText: z.string().min(1).max(64000).refine(value => !!value.trim()).optional().describe('Optional prepared script, e.g. requested normalization or expressive tags. Original text stays separately preserved. Do not change user words unless authorized.'),
   style: z.string().max(1000).optional().describe('Gemini only: concise turn-level delivery such as restrained urgency. Keep stage directions out of spoken text. Empty means natural delivery.'),
-  stability: z.number().min(0).max(1).optional().describe('ElevenLabs only: lower permits more expressive variation; higher steadies delivery. Omit for the voice setting.'),
-  similarity: z.number().min(0).max(1).optional().describe('ElevenLabs only: reference-voice adherence, mapped to similarity_boost. Omit for the voice setting.'),
-  speed: z.number().min(0.7).max(1.2).optional().describe('Multilingual v2 only: speech speed, 1 is normal. Eleven v4 and Gemini reject this field.'),
+  stability: z.number().min(0).max(1).optional().describe('Only when controls.stability is true in list_voice_models. Lower permits variation; higher steadies delivery. Respect stabilityValues when present (v3: 0, 0.5, 1). Omit for the voice setting.'),
+  similarity: z.number().min(0).max(1).optional().describe('Only when controls.similarity is true in list_voice_models: reference-voice adherence, mapped to similarity_boost. v3 and unreviewed models reject it. Omit for the voice setting.'),
+  speed: z.number().min(0.7).max(1.2).optional().describe('Only when list_voice_models reports controls.speed: speech speed, 1 is normal. v4, v3, unreviewed models and Gemini reject it.'),
   count: z.number().int().positive().safe().optional().describe('Separate billed candidates. Defaults to one; follow user scope.'),
   name: z.string().trim().min(1).max(200).optional(),
   parentId: idSchema.nullable().optional().describe('Local revision lineage only; no source audio or chat history is sent.')
@@ -103,6 +103,7 @@ export const midiGenerationSchema = z.object({ kind: z.literal('midi').optional(
 /** Agent-facing tool schema: the kind is implied by the tool name. */
 export const midiToolSchema = z.object(midiInputFields).strict();
 export const voiceListSchema = z.object({ providerId: audioProviderSchema, search: z.string().max(200).optional(), language: z.string().regex(/^[a-zA-Z0-9-]{1,40}$/).optional(), pageToken: z.string().max(2000).optional() }).strict();
+export const voiceModelListSchema = z.object({ providerId: audioProviderSchema, refresh: z.boolean().optional().describe('Fetch a fresh ElevenLabs catalog instead of using the up-to-five-minute cache. No synthesis or purchase.') }).strict();
 export const patchSchema = z.object({ name: z.string().trim().min(1).optional(), description: z.string().optional(), tags: z.array(z.string().trim().min(1)).optional(), collections: z.array(z.string().trim().min(1)).optional(), review: z.enum(['unreviewed','accepted','rejected']).optional(), feedback: z.string().optional() }).strict();
 export const projectNameSchema = z.string().trim().min(1).max(60);
 export const titleSchema = z.string().trim().min(1).max(70);
@@ -118,7 +119,7 @@ export const commandSchemas = {
   sendMessage: z.tuple([idSchema, z.string().trim().min(1)]), cancelTurn: z.tuple([idSchema]),
   generate: z.tuple([idSchema, generationSchema]), cancelJob: z.tuple([idSchema]),
   generateMusic: z.tuple([idSchema, musicGenerationSchema]),
-  generateVoice: z.tuple([idSchema, voiceGenerationSchema]), listVoices: z.tuple([voiceListSchema]),
+  generateVoice: z.tuple([idSchema, voiceGenerationSchema]), listVoices: z.tuple([voiceListSchema]), listVoiceModels: z.tuple([voiceModelListSchema]),
   saveVoiceProvider: z.tuple([z.object({ id: audioProviderSchema, model: z.string().min(1).max(120), voiceId: voiceInputFields.voiceId.unwrap() }).strict()]),
   setActiveVoice: z.tuple([audioProviderSchema]),
   saveProviderKey: z.tuple([audioProviderSchema, z.string().max(1000)]),

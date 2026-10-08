@@ -2,7 +2,7 @@ import { isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { WorkbenchService } from './service';
-import { analysisSchema, assetKindSchema, clipSchema, generationSchema, idSchema, midiToolSchema, musicToolSchema, voiceToolSchema, voiceListSchema, patchSchema, projectNameSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
+import { analysisSchema, assetKindSchema, clipSchema, generationSchema, idSchema, midiToolSchema, musicToolSchema, voiceToolSchema, voiceListSchema, voiceModelListSchema, patchSchema, projectNameSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
 import { boardInputSchema, WorkbenchError, type UiCommand, type PlaybackState } from '../shared/workbench';
 import { guidanceDocuments } from '../shared/guidance';
 import type { Exporter } from './exporter';
@@ -27,9 +27,10 @@ export const operationDefinitions = {
   rename_session: { schema: obj({ ...session, title: titleSchema }), description: 'Keep a session label specific to the current work.' },
   generate_sounds: { schema: obj({ ...generation, input: generationSchema }), description: 'Queue sound-effect candidates. Returns durable IDs immediately. Respect requested count; never retry uncertain work with a new request ID.' },
   generate_music: { schema: obj({ ...generation, input: musicToolSchema }), description: 'Queue music candidates on a configured provider. Returns durable IDs immediately; read guidance for the selected provider.' },
-  generate_voice: { schema: obj({ ...generation, input: voiceToolSchema }), description: 'Queue single-speaker speech from an exact script. Discover voices with list_voices and read provider guidance. Gemini style is separate from text; ElevenLabs v4 uses square-bracket audio tags. Returns durable job IDs; never retry uncertain work.' },
+  generate_voice: { schema: obj({ ...generation, input: voiceToolSchema }), description: 'Queue single-speaker speech from an exact script. Query list_voice_models, choose a selectable model ID in input.model, follow its guidance and supported controls, and discover voice IDs with list_voices. Omitted model uses the saved default. Returns durable job IDs; never retry uncertain work.' },
   compose_midi: { schema: obj({ ...generation, input: midiToolSchema }), description: 'Compose a MIDI clip from note data into a Standard MIDI File that plays through the bundled General MIDI bank. No provider, key, or spend. Returns durable job IDs immediately.' },
   list_voices: { schema: voiceListSchema, description: 'Discover provider voice IDs, descriptions and language/accent labels. Read successive pages with the same filters. Uses the shared saved key, without synthesis.' },
+  list_voice_models: { schema: voiceModelListSchema, description: 'Query available TTS models before choosing input.model in generate_voice. ElevenLabs uses its saved key and live /v1/models (five-minute cache; refresh:true bypasses it); Gemini returns a labeled built-in catalog. Returns exact IDs, selectable status, model-specific prompting notes, controls, limits, languages, access flags and saved defaults. Generic guidance means plain text only. Realtime-only models are unavailable in this workbench. Discovery makes no purchase and does not change defaults.' },
   inspect_jobs: { schema: obj(session), description: 'Inspect this session’s jobs and resulting asset IDs.' },
   jobs_wait: { schema: obj({ ...session, jobIds: z.array(idSchema).min(1), ...wait }), description: 'Bounded wait for specified jobs; timeout does not cancel generation.' },
   cancel_job: { schema: obj({ ...session, id: idSchema }), description: 'Cancel queued work or stop a running request with uncertain provider outcome.' },
@@ -93,6 +94,7 @@ export class Operations {
       case 'session_get': return { session: store.conversation(a.sessionId), playground: store.playground(a.projectId)[a.sessionId] ?? [], jobs: sessionJobs() };
       case 'rename_session': return store.renameConversation(a.sessionId, a.title, origin === 'user' ? 'user' : 'assistant');
       case 'list_voices': return s.listVoices(a as unknown as import('../shared/types').VoiceListInput);
+      case 'list_voice_models': return s.listVoiceModels(a as unknown as import('../shared/types').VoiceModelListInput);
       case 'generate_sounds': case 'generate_music': case 'generate_voice': case 'compose_midi': {
         const id = `external:${a.requestId}`;
         if (store.beginExternal(id, a.projectId, a.sessionId, name, canonical(a.input))) {

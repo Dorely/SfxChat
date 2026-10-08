@@ -1,3 +1,37 @@
+# ElevenLabs speech model discovery (2026-10-08)
+
+- `npm run typecheck`: passed. `npm run build` (via `npm run dev:browser`): passed
+  for main, preload, renderer, CLI, packaged skill and native helper. The final
+  implementation was rebuilt after review. Skill-creator `quick_validate.py`:
+  passed for `resources/skill`. `git diff --check`: passed.
+- Anonymous `GET /v1/models` failed with `workspace_not_found`. The authenticated
+  request through the real app owner and its OS-backed saved key succeeded, returning
+  nine TTS models: seven selectable REST speech models and two documented realtime
+  variants explicitly marked unavailable. Metadata included language coverage,
+  request bounds and alpha-access flags. No key was read into the renderer, CLI
+  arguments, helper scripts, source, or returned catalog.
+- Real bundled CLI `list_voice_models` calls verified refreshed ElevenLabs data and
+  the labeled built-in Gemini catalog. A manual stdio MCP initialize, `tools/list`,
+  and `tools/call` exchange verified the new operation's schema and successful live
+  structured result, including selectable status and model-specific control flags.
+- Browser verification used `npm run dev:browser` and the printed loopback URLs in
+  the in-app browser. Settings and Playground loaded the live catalog; v4 showed
+  stability/similarity without speed, v3 showed its stability presets without
+  similarity/speed, and Flash v2.5 showed speed and its 40,000-character limit.
+  Switching Flash → v4 → Flash cleared an incompatible speed value. Refresh updated
+  the catalog time; switching to Gemini showed the built-in label and style control.
+  No audio was played and all Loop toggles remained off.
+- Privileged live settings requests rejected the realtime v4 Turbo ID and an absent
+  model ID without changing defaults or admitting jobs. Saving Flash v2.5 succeeded
+  and discovery returned it as the saved default; the original v4/voice default was
+  restored immediately. Runtime guidance and packaged skill text/hash matched.
+- No synthesis, paid model-quality comparison, login change, or installer deployment
+  was performed. Native desktop coverage, future unreviewed model IDs, malformed
+  provider catalogs, provider-outage UI, and new-model synthesis remain gaps. Shared
+  guards were inspected; compilation is not evidence of those provider behaviors.
+  Development hosts and the manual MCP subprocess were stopped after verification;
+  no temporary helpers, fixtures, or automated suites were added to the repository.
+
 # Review cue playback feedback (2026-10-08)
 
 - Candidate and reference cards now show an elapsed/total time readout, a seek bar

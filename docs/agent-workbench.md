@@ -83,10 +83,30 @@ intentionally switches the visible workspace. Concurrent UI switches can return
 `model`, `voiceId`, optional Gemini `style` or supported ElevenLabs numeric controls,
 `count`, `name`, and `parentId`. Omitting model/voice uses saved defaults, frozen at
 admission. `list_voices` accepts providerId, search, language, and pageToken without
-project/session scope. `guidance` includes canonical voice references, roster/defaults,
+project/session scope. `list_voice_models` accepts `providerId` and optional `refresh`
+without project/session scope. ElevenLabs uses its saved key and a live TTS catalog
+(up-to-five-minute cache); Gemini returns a labeled built-in catalog. Read each entry's
+`selectable`, `note`, `guidanceStatus`, `controls`, `maxCharacters`, `languages`, and
+`requiresAlphaAccess`, then put an exact selectable ID into `generate_voice.input.model`.
+The response also includes saved `defaultModel` and `defaultVoiceId`. Discovery does
+not generate speech or change defaults. New/unreviewed IDs accept plain text only;
+realtime variants cannot use this workbench's speech transport. Missing models and
+failed discovery are explicit errors, never automatic replacements. Music/SFX are
+separate endpoint-specific catalogs; this operation discovers speech models only.
+`guidance` includes canonical voice references, roster/defaults,
 and schemas; read the applicable provider document before preparing speech. One shared
 vendor key is configured in Settings, never in CLI/MCP requests. Voice libraries,
 review/export operations, and transcript search use the same scoped asset operations.
+
+```powershell
+sfxchat call list_voice_models --json '{"providerId":"elevenlabs","refresh":true}'
+sfxchat call list_voices --json '{"providerId":"elevenlabs","language":"en"}'
+```
+
+MCP calls those same operations directly. Read the model-specific reference returned
+by `guidance` before preparing speech: v4/v3 tags differ from legacy narration/Flash
+prompting, and supported controls change with the model. Per-request model selection
+preserves the user's Settings defaults and is frozen in admitted jobs.
 
 Generation input has this envelope (replace IDs with real IDs):
 

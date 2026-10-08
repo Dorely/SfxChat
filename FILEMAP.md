@@ -66,12 +66,12 @@ is recorded in [verification](docs/verification.md).
 | [src/renderer/browser-api.ts](src/renderer/browser-api.ts) | Same-origin browser calls, byte restoration, change/UI events, and host-path file dialogs. |
 | [src/shared/types.ts](src/shared/types.ts) | Renderer/preload/application operation, project, and snapshot contracts. |
 | [src/shared/chat-models.ts](src/shared/chat-models.ts) | Configured model IDs, Codex effort lists, default context sizes, and legacy/default resolution. |
-| [src/shared/voice-models.ts](src/shared/voice-models.ts) | TTS catalog, standard Gemini voices, defaults, model-specific admission guards. |
+| [src/shared/voice-models.ts](src/shared/voice-models.ts) | Reviewed TTS profiles/controls, Gemini catalog/voices, defaults, conservative future-model guidance and admission guards. |
 | [src/shared/provider-identities.ts](src/shared/provider-identities.ts) | Shared official Gemini host recognition for credential routing. |
 | [src/main/provider-keys.ts](src/main/provider-keys.ts) | Serialized shared vendor credentials and safe legacy consolidation/conflict selection. |
 | [src/main/voice-registry.ts](src/main/voice-registry.ts) | Independent saved model/default voice and active vendor. |
-| [src/main/providers/voice.ts](src/main/providers/voice.ts) | Bounded ElevenLabs/Gemini REST TTS and voice discovery, original bytes and provenance. |
-| [src/renderer/VoiceControls.tsx](src/renderer/VoiceControls.tsx) | Reusable voice discovery/model/delivery controls and Playground voice form. |
+| [src/main/providers/voice.ts](src/main/providers/voice.ts) | Bounded REST TTS, voice discovery, cached authenticated ElevenLabs model discovery and target validation, original bytes/provenance. |
+| [src/renderer/VoiceControls.tsx](src/renderer/VoiceControls.tsx) | Shared live-model refresh/picker, model guidance/controls, voice discovery and Playground voice form. |
 | [src/renderer/ProviderSettings.tsx](src/renderer/ProviderSettings.tsx) | Vendor key entry, encrypted-key conflict selection, and voice defaults. |
 | [src/shared/music-models.ts](src/shared/music-models.ts) | Music provider presets, reviewed model catalogs, and app-side duration bounds. |
 | [src/main/chat-registry.ts](src/main/chat-registry.ts) | Generic provider/model registry, combined selection, test-gated saves, and active chat resolution. |

@@ -1,6 +1,6 @@
 ---
 name: sfxchat
-description: Design, generate, audition, refine, organize, and export sound effects, music, and single-speaker voice through the installed SfxChat workbench. Includes provider-specific speech delivery, script preservation, revisions, and shared candidate reviews.
+description: Design, generate, audition, refine, organize, and export sound effects, music, and single-speaker voice through the installed SfxChat workbench. Includes live speech-model discovery, model-specific delivery guidance, script preservation, revisions, and shared candidate reviews.
 ---
 
 # SfxChat
@@ -11,7 +11,7 @@ Before designing audio, read [design](references/design.md) and [workflow](refer
 
 1. Run `sfxchat guidance`. Compare its hash with `guidance.json` beside this skill; when different, use the returned current documents. Inspect the configured provider roster and supported controls. Never invent provider IDs or ask for secret values; missing credentials are configured in SfxChat Settings.
 2. Run `sfxchat tools` to discover current operation names and JSON schemas. Use `sfxchat call <operation> --input <request.json>` (or `--json <JSON>`). MCP exposes the same named operations. Use `sfxchat help` for installation and command syntax.
-3. Select or create an explicit project and session. Include their IDs in scoped requests. The visible UI project is not your workflow context.
+3. Select or create an explicit project and session. Include their IDs in scoped requests. The visible UI project is not your workflow context. Before choosing a speech model, query `list_voice_models` with the provider ID (and `refresh:true` when a fresh catalog is needed). Read selectable status, guidance, controls, language coverage, limits and access flags; pass the exact returned ID as `generate_voice.input.model`. Use `list_voices` separately for voice identity. Omitted model/voice uses saved defaults; per-request selection does not change them. ElevenLabs discovery is live; Gemini's catalog is explicitly built-in. Unreviewed models use plain text without specialized tags or tuning. Follow the provider reference's model-specific advice; unavailable/realtime models cannot be selected.
 4. For generation, supply a unique `requestId` and preserve it with returned job IDs. Reuse that ID only to recover the exact same request. Use `jobs_wait` for bounded waits; inspect existing jobs after a disconnect. Never retry uncertain paid work as a new request without user direction. Defaults and requested candidate counts follow the design guidance.
 5. Use `review_create` and `review_update` to group candidates and current references by named cue. `review_open` opens the existing desktop audition UI without autoplay. Playback is user-controlled; agents have no play/stop tools. Users can enable Loop in the UI. Review writes require `expectedRevision`; fetch and reconcile conflicts instead of overwriting feedback.
 6. Read saved selections, reject-all decisions, and notes through `review_get` or `review_wait`. Prepare revisions from those observations and complete parent prompts. An unreviewed cue differs from rejection. Agent-written decisions are marked as agent-origin; never present them as human approval.

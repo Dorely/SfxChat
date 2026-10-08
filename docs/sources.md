@@ -1,5 +1,18 @@
 # Source provenance
 
+## ElevenLabs TTS model discovery and guidance (2026-10-08)
+
+Official endpoint/models, v4, TTS best practices/product guide, voice settings,
+pricing and terms were re-read for live model discovery. Dated sources, control
+distinctions, authenticated endpoint evidence, and explicit limits are recorded in
+[voice generation](knowledge/voice-generation.md#live-model-discovery--2026-10-08).
+Shared guidance remains authored SfxChat synthesis in the existing canonical
+[voice reference](../resources/skill/references/elevenlabs-voice.md), embedded for
+the app assistant, CLI/MCP and installable skill. No provider payloads, credentials,
+or media were copied into the repository, and vendored upstream skills/licenses
+were not modified. Discovery used the app's own secure provider boundary; no
+synthesis or listening-quality claim follows from the catalog response.
+
 Extracted on **2026-09-10 UTC** (2026-09-09 America/Los_Angeles). This foundation uses local source snapshots, not new provider research. Historical model IDs, parameters, limits, pricing estimates, SDK signatures, and account terms must be checked before future implementation or use.
 
 ## Source roots and revisions

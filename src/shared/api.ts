@@ -24,6 +24,7 @@ export function createApi({ call, onChanged, onUiCommand, mediaUrl, hostMode }: 
   sendMessage: (id, text) => call('sendMessage', id, text), cancelTurn: id => call('cancelTurn', id),
   generate: (id, input) => call('generate', id, input), generateMusic: (id, input) => call('generateMusic', id, input), cancelJob: id => call('cancelJob', id),
   generateVoice: (id, input) => call('generateVoice', id, input), listVoices: input => call('listVoices', input),
+  listVoiceModels: input => call('listVoiceModels', input),
   saveVoiceProvider: input => call('saveVoiceProvider', input), setActiveVoice: id => call('setActiveVoice', id),
   saveProviderKey: (id, key) => call('saveProviderKey', id, key), selectProviderKey: (id, candidateId) => call('selectProviderKey', id, candidateId),
   updateAsset: (id, patch, conversationId) => call('updateAsset', id, patch, conversationId), setPlayground: (id, ids) => call('setPlayground', id, ids),

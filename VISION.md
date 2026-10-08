@@ -25,6 +25,12 @@ The intended chat assistant supports Codex account login. ElevenLabs and Gemini 
 
 Provider roles must follow verified capabilities. Sound-effect prompting and endpoints are documented in [docs/knowledge](docs/knowledge/README.md), as are the music providers implemented so far: ElevenLabs Music and Google's Lyria models. Neither note establishes perceptual quality, and unverified provider behavior stays marked as such. Extend the same research practice — dated official sources, recorded request mapping, explicit evidence limits — when adding another provider.
 
+Speech model selection uses the current provider catalog where available, with
+model-specific prompting and supported controls shared across the UI, assistant,
+and agent tools. New model IDs can be discovered without changing saved defaults;
+specialized behavior needs reviewed guidance, and availability never establishes
+listener quality or permission to generate additional candidates.
+
 The assistant should explain consequential choices, show progress and results, and acknowledge uncertainty. Automated measurements and model observations support the workflow; actual listening remains important for deciding whether a sound fits.
 
 ## Libraries the assistant maintains

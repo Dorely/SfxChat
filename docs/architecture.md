@@ -363,24 +363,52 @@ one model/default-voice selection per vendor plus the active voice vendor. These
 independent of shared credential selection. Music and voice requests have ten-minute
 transport timeouts; effects retain three minutes. Discovery has a 30-second timeout.
 
-`providers/voice.ts` dispatches single-speaker TTS. ElevenLabs v4/Multilingual v2 use
+`providers/voice.ts` dispatches single-speaker TTS. Selectable ElevenLabs speech models use
 `/v1/text-to-speech/{voiceId}` and retain original MP3; Gemini 3.8 Flash/Flash-Lite use
 Interactions with `store:false`, one voice, separate style metadata, and original unary
-WAV. Shared validation rejects unsupported models, controls, SSML on v4, and oversize
+WAV. Shared validation rejects unavailable models, controls, SSML on v4/v3, and oversize
 scripts before admission. Voice request JSON preserves original untrimmed `text`,
 optional prepared `providerText`, model/voice, controls, count/name, and revision parent.
 Resolved model and voice are frozen at admission; optional controls retain omission
-when provider defaults are intended. Keys resolve only at dispatch. No fallback,
+when provider defaults are intended. Keys resolve inside privileged discovery, admission
+validation, and dispatch. No fallback,
 automatic splitting, or retries occur. Usage/request IDs are retained when returned.
 `list_voices` discovers existing account/region voices; Gemini also has 30 bundled
 standard choices. Voice design, cloning, dictionaries, dialogue, and live chat are absent.
+
+`list_voice_models` uses the same provider owner for UI, assistant, CLI, and MCP.
+ElevenLabs `GET /v1/models` is authenticated with the app's shared key, read with a
+4 MiB bound and 30-second deadline, and filtered to `can_do_text_to_speech:true`.
+An in-memory five-minute cache is scoped by a credential fingerprint; `refresh:true`
+bypasses it. Responses carry source/time, saved model/voice defaults, language coverage,
+alpha-access flags, prompting status, selectable status, controls and character bounds.
+Discovery has no paid synthesis and does not change defaults. Failures surface explicitly;
+there is no static fallback masquerading as current availability. Gemini returns its
+reviewed built-in catalog, labeled as such. Music/SFX continue using their endpoint-specific
+catalogs because this discovered roster describes TTS.
+
+`shared/voice-models.ts` owns reviewed prompting/control profiles rather than ElevenLabs
+availability. v4, v3, Multilingual v2, Flash v2/v2.5 and deprecated Turbo have distinct
+guidance. Realtime v4 Turbo/v3 Conversational require the unimplemented Text to Dialogue
+WebSocket and are unselectable. Unknown TTS IDs use plain text with no numeric controls
+or markup claims and a conservative 10,000-character bound. A smaller live character
+limit always wins; deprecated free/subscriber limit fields are ignored. Model metadata
+is provider data, not an instruction source. Admission and dispatch check the catalog
+and shared controls before synthesis; an absent saved model fails without replacement.
+Settings, Playground and inspector share the refreshing picker. Model switches remove
+incompatible numeric controls but leave the prepared script for deliberate editing.
+The canonical skill reference provides the fuller model-specific workflows and MCP
+selection example; `generate_voice.input.model` overrides one request only.
+Reviewed defaults can still be saved before configuring credentials; newly discovered
+ElevenLabs defaults require authenticated discovery. Generation checks the live-backed
+catalog (including its bounded cache) before admission.
 
 The Voice Library, Playground Voice mode, and inspector use existing scoped jobs,
 originals, playback, trimming, reviews, search, and exports. Transcript is indexed as
 asset prompt; prepared script is stored separately. Trims preserve kind and point to
 the immutable generation parent. The inspector exposes editable voice regeneration
 controls without modifying original provenance. The same `generate_voice` and
-`list_voices` operations serve UI, assistant, CLI, and MCP.
+`list_voices` and `list_voice_models` operations serve UI, assistant, CLI, and MCP.
 
 Two adapters sit behind `ServicePorts.generateMusic`. `providers/elevenlabs-music.ts`
 posts to `/v1/music` with `output_format=auto`, maps app fields to `prompt`,

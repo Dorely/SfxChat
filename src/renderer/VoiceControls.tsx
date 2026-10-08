@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { VoiceGenerationInput, VoiceOption, VoiceProviderEntry } from '../shared/types';
-import { GEMINI_VOICES, providerLabel, VOICE_DEFAULTS, VOICE_MODELS } from '../shared/voice-models';
+import type { VoiceGenerationInput, VoiceModelCatalog, VoiceOption, VoiceProviderEntry } from '../shared/types';
+import { GEMINI_VOICES, providerLabel, voiceModelProfile, VOICE_DEFAULTS, VOICE_MODELS } from '../shared/voice-models';
 
 /** Provider-aware controls reused by manual generation, settings and regeneration. */
 export default function VoiceControls({ value, providers, onChange, configurationOnly = false }: {
@@ -17,6 +17,27 @@ export default function VoiceControls({ value, providers, onChange, configuratio
   const [page, setPage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [catalog, setCatalog] = useState<VoiceModelCatalog | null>(null);
+  const [modelLoading, setModelLoading] = useState(false);
+  const [modelError, setModelError] = useState<string | null>(null);
+  const modelSerial = useRef(0);
+  const ready = providers.find(p => p.id === providerId)?.ready ?? false;
+  const modelOptions = catalog?.providerId === providerId ? catalog.models : VOICE_MODELS[providerId];
+  const selectedModel = modelOptions.find(m => m.id === model) ?? voiceModelProfile(providerId, model);
+  const loadModels = async (refresh = false) => {
+    const version = ++modelSerial.current;
+    setModelLoading(true); setModelError(null);
+    try {
+      const result = await window.sfx.listVoiceModels({ providerId, refresh });
+      if (version === modelSerial.current) setCatalog(result);
+    } catch (e) { if (version === modelSerial.current) setModelError(e instanceof Error ? e.message : 'Model discovery failed.'); }
+    finally { if (version === modelSerial.current) setModelLoading(false); }
+  };
+  useEffect(() => {
+    ++modelSerial.current; setCatalog(null); setModelError(null); setModelLoading(false);
+    if (providerId === 'gemini' || ready) void loadModels();
+    return () => { ++modelSerial.current; };
+  }, [providerId, ready]);
   const serial = useRef(0);
   useEffect(() => { ++serial.current; setVoices(providerId === 'gemini' ? GEMINI_VOICES : []); setPage(null); setSearch(''); setLanguage(''); setError(null); setLoading(false); }, [providerId]);
   useEffect(() => { ++serial.current; setPage(null); setLoading(false); }, [search, language]);
@@ -40,11 +61,24 @@ export default function VoiceControls({ value, providers, onChange, configuratio
         const next = providers.find(p => p.id === id) ?? VOICE_DEFAULTS[id];
         onChange({ kind: 'voice', text: value.text, count: value.count, name: value.name, parentId: value.parentId, providerId: id, model: next.model, voiceId: next.voiceId });
       }}>{(['elevenlabs', 'gemini'] as const).map(id => <option key={id} value={id}>{providerLabel(id)}{providers.find(p => p.id === id)?.ready ? '' : ' — key needed'}</option>)}</select></label>
-      <label>Model<select aria-label="Voice model" value={model} onChange={e => { const next = { ...value, providerId, voiceId, model: e.target.value }; if (next.model === 'eleven_v4') delete next.speed; onChange(next) }}>{VOICE_MODELS[providerId].map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></label>
+      <label>Model<select aria-label="Voice model" value={model} onChange={e => {
+        const next = { ...value, providerId, voiceId, model: e.target.value };
+        const target = modelOptions.find(m => m.id === next.model);
+        if (!target?.selectable) return;
+        for (const field of ['stability', 'similarity', 'speed'] as const) if (!target.controls[field]) delete next[field];
+        if (target.controls.stabilityValues && next.stability !== undefined && !target.controls.stabilityValues.includes(next.stability)) delete next.stability;
+        onChange(next);
+      }}>{!modelOptions.some(m => m.id === model) && <option value={model}>{model} — unavailable in this catalog</option>}{modelOptions.map(m => <option key={m.id} value={m.id} disabled={!m.selectable}>{m.label}{!m.selectable ? ' — unavailable' : m.guidanceStatus === 'generic' ? ' — plain text only' : m.deprecated ? ' — deprecated' : ''}</option>)}</select></label>
       <label>Voice<select aria-label="Voice selection" value={selected?.id ?? voiceId} onChange={e => update({ voiceId: e.target.value })}>
         {!selected && <option value={voiceId}>{voiceId}</option>}{voices.map(v => <option value={v.id} key={v.id}>{v.name}{v.description ? ` — ${v.description.slice(0, 60)}` : ''}</option>)}
       </select></label>
     </div>
+    <div className="generation-options"><button type="button" className="secondary-button" disabled={modelLoading || (providerId === 'elevenlabs' && !ready)} onClick={() => void loadModels(true)}>{modelLoading ? 'Loading models…' : 'Refresh models'}</button>
+      <p className="field-hint">{providerId === 'gemini' ? 'Gemini uses the reviewed built-in model catalog.' : catalog?.providerId === providerId ? `Available ElevenLabs speech models · checked ${new Date(catalog.fetchedAt!).toLocaleTimeString()}` : ready ? 'Showing reviewed profiles until availability is loaded.' : 'Showing reviewed profiles. Save the shared key to query availability.'}</p></div>
+    <p className="field-hint">{selectedModel.note}{selectedModel.maxCharacters ? ` Up to ${selectedModel.maxCharacters.toLocaleString()} characters per clip.` : ''}{selectedModel.requiresAlphaAccess ? ' Provider alpha access required.' : ''}</p>
+    {catalog?.providerId === providerId && !catalog.models.some(m => m.id === model) && <p className="settings-error" role="alert">The selected model is absent from the available catalog. Choose another model explicitly.</p>}
+    {selectedModel.languages.length > 0 && <details><summary>Model language coverage</summary><p className="field-hint">{selectedModel.languages.map(l => `${l.name} (${l.id})`).join(' · ')}</p></details>}
+    {modelError && <p className="settings-error" role="alert">{modelError} Saved selection is retained; refresh to check availability.</p>}
     <details className="voice-discovery"><summary>Find a voice or enter its ID</summary>
       <div className="generation-options"><label>Voice ID<input aria-label="Voice ID" value={voiceId} onChange={e => update({ voiceId: e.target.value })} /></label>
         <label>Search<input aria-label="Voice search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Narrator, warm…" /></label>
@@ -57,11 +91,12 @@ export default function VoiceControls({ value, providers, onChange, configuratio
     </details>
     {!configurationOnly && <>
       {providerId === 'gemini' ? <label>Delivery style<textarea rows={2} aria-label="Voice delivery style" value={value.style ?? ''} onChange={e => update({ style: e.target.value })} placeholder="Optional: quiet, restrained urgency" /><span className="field-hint">Separate from spoken text. Use &lt;sigh&gt; or &lt;short pause&gt; for momentary vocal events; keep style brief.</span></label> : <div className="generation-options">
-        <label>Stability<input aria-label="Voice stability" type="number" min="0" max="1" step="0.05" value={value.stability ?? ''} placeholder="Voice default" onChange={e => update({ stability: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
-        <label>Similarity<input aria-label="Voice similarity" type="number" min="0" max="1" step="0.05" value={value.similarity ?? ''} placeholder="Voice default" onChange={e => update({ similarity: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
-        {model === 'eleven_multilingual_v2' && <label>Speed<input aria-label="Voice speed" type="number" min="0.7" max="1.2" step="0.05" value={value.speed ?? ''} placeholder="Voice default" onChange={e => update({ speed: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>}
+        {selectedModel.controls.stability && <label>Stability{selectedModel.controls.stabilityValues
+          ? <select aria-label="Voice stability" value={value.stability ?? ''} onChange={e => update({ stability: e.target.value === '' ? undefined : Number(e.target.value) })}><option value="">Voice default</option>{selectedModel.controls.stabilityValues.map(v => <option key={v} value={v}>{v === 0 ? 'Creative (0)' : v === 0.5 ? 'Natural (0.5)' : 'Robust (1)'}</option>)}</select>
+          : <input aria-label="Voice stability" type="number" min="0" max="1" step="0.05" value={value.stability ?? ''} placeholder="Voice default" onChange={e => update({ stability: e.target.value === '' ? undefined : Number(e.target.value) })} />}</label>}
+        {selectedModel.controls.similarity && <label>Similarity<input aria-label="Voice similarity" type="number" min="0" max="1" step="0.05" value={value.similarity ?? ''} placeholder="Voice default" onChange={e => update({ similarity: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>}
+        {selectedModel.controls.speed && <label>Speed<input aria-label="Voice speed" type="number" min="0.7" max="1.2" step="0.05" value={value.speed ?? ''} placeholder="Voice default" onChange={e => update({ speed: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>}
       </div>}
-      <p className="field-hint">{providerId === 'elevenlabs' ? model === 'eleven_v4' ? 'Use square-bracket vocal tags such as [whispering] and punctuation for delivery. v4 supports slash-delimited IPA, but has no SSML or speed setting.' : 'Multilingual v2 supports speed and restrained SSML pauses. Narrative directions can be spoken aloud; keep the script intentional.' : 'Select a voice matching the language and accent. Natural delivery usually needs no style instruction.'}</p>
       <details><summary>Prepared script (optional)</summary><label>Provider text<textarea rows={3} aria-label="Prepared voice script" value={value.providerText ?? ''} onChange={e => update({ providerText: e.target.value || undefined })} placeholder="Use only for deliberate tags, pronunciation changes, or requested normalization." /><span className="field-hint">Original text remains preserved separately. Empty sends the original text exactly.</span></label></details>
     </>}
   </div>;

@@ -1,5 +1,6 @@
-import type { AudioProviderId, VoiceGenerationInput, VoiceListInput, VoiceOption, VoicePage } from '../../shared/types';
-import { GEMINI_VOICES, providerLabel, validateVoiceTarget } from '../../shared/voice-models';
+import { createHash } from 'node:crypto';
+import type { AudioProviderId, VoiceGenerationInput, VoiceListInput, VoiceModelListInput, VoiceModelCatalog, VoiceModelOption, VoiceOption, VoicePage } from '../../shared/types';
+import { GEMINI_VOICES, providerLabel, validateVoiceTarget, voiceModelProfile, VOICE_MODELS, VOICE_DEFAULTS } from '../../shared/voice-models';
 import { redactText } from '../diagnostics';
 import { ProviderHttpError } from './errors';
 import type { GenerationResult } from '../service';
@@ -40,6 +41,7 @@ function stringLabels(value: unknown): Record<string, string> {
 }
 
 export class VoiceClient {
+  private modelCache?: { fingerprint: string; expires: number; catalog: VoiceModelCatalog };
   constructor(private fetcher: typeof fetch = globalThis.fetch.bind(globalThis)) {}
   private async safe<T>(key: string, action: () => Promise<T>): Promise<T> {
     try { return await action(); } catch (e) {
@@ -47,9 +49,43 @@ export class VoiceClient {
       throw new Error(redactText(e instanceof Error ? e.message : 'Voice request failed.', [key]));
     }
   }
+  async models(input: VoiceModelListInput, key: string, signal: AbortSignal): Promise<VoiceModelCatalog> {
+    const defaults = VOICE_DEFAULTS[input.providerId];
+    if (input.providerId === 'gemini') return { providerId: 'gemini', source: 'built-in', fetchedAt: null, models: VOICE_MODELS.gemini, defaultModel: defaults.model, defaultVoiceId: defaults.voiceId };
+    if (!key.trim()) throw new Error('Save the shared ElevenLabs API key in Settings to discover available models.');
+    const fingerprint = createHash('sha256').update(key).digest('hex');
+    if (!input.refresh && this.modelCache?.fingerprint === fingerprint && this.modelCache.expires > Date.now()) return this.modelCache.catalog;
+    return this.safe(key, async () => {
+      const response = await this.fetcher(`${ELEVEN}/v1/models`, { headers: { 'xi-api-key': key }, signal });
+      if (!response.ok) throw await ProviderHttpError.fromResponse(response, 'ElevenLabs models', [key]);
+      const payload: unknown = JSON.parse((await readBytes(response, 4 * 1024 * 1024)).toString('utf8'));
+      if (!Array.isArray(payload) || payload.length > 500) throw new Error('ElevenLabs returned an invalid model catalog.');
+      const models: VoiceModelOption[] = [];
+      for (const item of payload) {
+        if (!record(item) || item.can_do_text_to_speech !== true) continue;
+        if (typeof item.model_id !== 'string' || !/^[a-zA-Z0-9._-]{1,120}$/.test(item.model_id) || models.some(m => m.id === item.model_id)) throw new Error('ElevenLabs returned an invalid or duplicate TTS model ID.');
+        const profile = voiceModelProfile('elevenlabs', item.model_id);
+        const limit = Number.isSafeInteger(item.maximum_text_length_per_request) && item.maximum_text_length_per_request > 0 ? item.maximum_text_length_per_request as number : null;
+        // Reviewed profiles retain conservative app bounds; unknown models get no
+        // invented controls or specialized prompt syntax. Provider text is data.
+        const languages = (Array.isArray(item.languages) ? item.languages : []).filter(record).flatMap(language => typeof language.language_id === 'string' ? [{ id: language.language_id.slice(0, 40), name: typeof language.name === 'string' ? language.name.slice(0, 100) : language.language_id.slice(0, 40) }] : []).slice(0, 200);
+        models.push({ ...profile, label: typeof item.name === 'string' ? item.name.slice(0, 200) : profile.label, description: typeof item.description === 'string' ? item.description.slice(0, 2000) : '', maxCharacters: Math.min(limit ?? profile.maxCharacters ?? 10000, profile.maxCharacters ?? 10000), languages, requiresAlphaAccess: typeof item.requires_alpha_access === 'boolean' ? item.requires_alpha_access : null });
+      }
+      const catalog: VoiceModelCatalog = { providerId: 'elevenlabs', source: 'live', fetchedAt: new Date().toISOString(), models, defaultModel: defaults.model, defaultVoiceId: defaults.voiceId };
+      this.modelCache = { fingerprint, expires: Date.now() + 5 * 60_000, catalog };
+      return catalog;
+    });
+  }
+  async validateTarget(input: VoiceGenerationInput, key: string, signal: AbortSignal): Promise<void> {
+    if (!input.providerId || !input.model) throw new Error('Choose a voice provider and model.');
+    const catalog = await this.models({ providerId: input.providerId }, key, signal);
+    const model = catalog.models.find(m => m.id === input.model);
+    if (!model) throw new Error(`Model "${input.model}" is not currently listed for this provider. Query list_voice_models and choose an available model; no fallback was made.`);
+    validateVoiceTarget(input, model);
+  }
   async generate(input: VoiceGenerationInput, key: string, signal: AbortSignal): Promise<GenerationResult> {
-    validateVoiceTarget(input);
     if (!key.trim()) throw new Error('Save the shared provider API key in Settings.');
+    await this.validateTarget(input, key, signal);
     return this.safe(key, async () => {
       const id = input.providerId!;
       const text = input.providerText ?? input.text;
