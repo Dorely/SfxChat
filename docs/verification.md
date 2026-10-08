@@ -959,7 +959,37 @@ automatically by an older snapshot.
 - Browser host launch was refused because an existing SfxChat owner was running.
   The user requested continuing without live verification. No existing process
   was terminated, and the attempted development host exited.
-- Coverage gap: decision persistence after reopening, pending-edit behavior,
-  save failures/conflicts, and playback interactions were not checked in the UI.
-  No provider calls, paid generation, audio playback, or native desktop checks
-  were performed.
+- Follow-up browser verification ran after the user closed the existing owner:
+  `npm run dev:browser` built and opened the real renderer/library on loopback.
+  A separate `Cue save verification - 2026-10-08` board used the existing
+  `ui_move` and `ui_accept` candidates; original review choices were unchanged.
+- Selecting a candidate with pending cue feedback saved revision 2 without
+  clicking Save review. Reject all saved revision 3. Both decisions and the
+  feedback survived leaving and reopening the board. Unreviewed saved revision 4;
+  a full browser reload and reopening retained the selected/unreviewed states and
+  feedback. Save review was disabled after successful saves.
+- An empty review title made a decision save fail with `INVALID_ARGUMENTS`.
+  The decision draft and unsaved banner remained, and Save review was enabled.
+  Correcting the title and clicking the decision again saved revision 5 and
+  cleared the error/draft banner. Pending operations visibly disabled decisions.
+- Verification ended with both cues unreviewed at revision 7. The separate board
+  remains as a manual verification record, explicitly labeled as having no
+  listening decision. Stop audio was clicked before leaving; the browser tab was
+  closed and the development host shut down gracefully with exit code 0.
+- Coverage gap: edits during an in-flight request, external revision conflicts,
+  and playback interactions were not exercised. No provider calls, paid
+  generation, or audio playback were performed.
+- Installer build: `npm run package` compiled successfully but packaging failed
+  with `EPERM` renaming Electron's extracted directory under `release/`; retrying
+  in a new directory under `release/` had the same result. Packaging succeeded
+  with `npx electron-builder --win nsis --x64 --publish never` and an output
+  override to `%LOCALAPPDATA%/Temp/SfxChat-cue-review-release-20261008`.
+- The new 0.2.0 NSIS installer completed `/S` installation with exit code 0 at
+  `%LOCALAPPDATA%/Programs/SfxChat`. SHA-256 comparisons matched the built package
+  for `SfxChat.exe`, `resources/app.asar`, the agent CLI, native helper, and bundled
+  Node runtime. The installer and its block map/update metadata were copied back
+  to `release/`; nothing was published.
+- The installed CLI's `status` returned ready, the installed executable launched,
+  and `review_get` read revision 7 with both verification cues unreviewed and the
+  retained feedback. The installed app was left running for the user. Native UI
+  behavior was not separately exercised.
