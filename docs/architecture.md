@@ -478,8 +478,14 @@ creates a board from the header; returning to all sounds restores regular result
 The WebAudio player reports state to the card presentation as well as RendererPort;
 review cards do not introduce a second native audio player. Unsaved decisions, notes,
 membership and preview gains do not disable auditioning candidates or references in
-any cue; playback uses the current draft's preview gain. Saving remains explicit,
-and manual review navigation or exporting requires saving or discarding the draft first.
+any cue; playback uses the current draft's preview gain. Selecting a candidate,
+rejecting all, or marking a cue unreviewed immediately submits the current review
+draft through the same revision-checked `review_update` operation as Save review.
+Decision controls are disabled during a pending operation to prevent competing
+saves. Edits made while a save is in flight remain dirty on the returned revision;
+older snapshots cannot replace a successful save response. Failed saves retain the
+draft and display the error. Other edits can still be saved explicitly, and manual
+review navigation or exporting requires saving or discarding remaining edits first.
 
 Review candidate and reference cards show elapsed/total time, a seek bar, and a playhead
 over the waveform or MIDI roll. The renderer tracks position from the WebAudio context

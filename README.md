@@ -72,8 +72,10 @@ seek bar available during playback.
 Candidate notes and selection controls sit under each card, with cue feedback and
 manual Loop toggles alongside or below. The Playground header and generation form stay
 in place; **All Playground sounds** returns to the session’s regular results.
-Selections and notes stay editable while you continue auditioning any cue. Save
-review changes before switching reviews or exporting selected sounds.
+Selecting a candidate, rejecting all candidates, or marking a cue unreviewed saves
+immediately, including any pending review edits. Notes and other edits can also be
+saved with **Save review**. Save remaining edits before switching reviews or exporting
+selected sounds; failed saves keep the draft available for retry.
 
 ```powershell
 sfxchat guidance

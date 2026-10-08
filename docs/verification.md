@@ -942,3 +942,24 @@ picker; the `gpt-5.6-sol` default was left unchanged.
 - `npm run typecheck`: passed.
 - `npm run build`: passed for main, preload, renderer, agent, and native helper.
 - No live Codex turn or account-access check was run for the new model.
+
+## Immediate cue decision saves (2026-10-08)
+
+Candidate selection, Reject all, and Unreviewed now submit the current review draft
+immediately through `review_update`, including pending notes and other edits. Save
+review remains available for edits made independently of a decision. Pending
+operations disable decision controls; failed saves retain the draft. Successful
+responses preserve edits made in flight on the new revision and cannot be replaced
+automatically by an older snapshot.
+
+- `npm run typecheck`: passed.
+- Production build (run by `npm run dev:browser`): passed for main, preload,
+  renderer, agent, and native helper.
+- `git diff --check`: passed.
+- Browser host launch was refused because an existing SfxChat owner was running.
+  The user requested continuing without live verification. No existing process
+  was terminated, and the attempted development host exited.
+- Coverage gap: decision persistence after reopening, pending-edit behavior,
+  save failures/conflicts, and playback interactions were not checked in the UI.
+  No provider calls, paid generation, audio playback, or native desktop checks
+  were performed.

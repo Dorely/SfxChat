@@ -159,6 +159,10 @@ These are separate from an asset's general library review. Each saved revision i
 retained; current decision and notes attribution survives unrelated board edits.
 `review_update` requires `expectedRevision`; `review_get`, `review_history`, and
 `review_wait` retrieve feedback without erasing another person's edit.
+In the UI, selecting a candidate, rejecting all, or marking a cue unreviewed saves
+the current draft immediately, including pending notes and other edits. Save review
+also saves edits independently of a decision. Failed saves retain the draft and
+surface revision conflicts for reconciliation.
 
 `review_open` never autoplays. CLI/MCP and assistant tools have no playback start
 or stop controls. Users click Play/Stop in a review card; Loop is an optional user

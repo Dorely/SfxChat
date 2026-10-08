@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Asset, Snapshot } from '../shared/types';
 import type { ReviewBoard, ReviewContent, ReviewCue } from '../shared/workbench';
 import { AudioCardFrame, AudioSeekBar } from './AudioCard';
@@ -48,12 +48,41 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
   const [format, setFormat] = useState<'original' | 'wav' | 'ogg'>('original'), [destination, setDestination] = useState('');
   const [result, setResult] = useState(''), [busy, setBusy] = useState(false);
   const [loops, setLoops] = useState<Record<string, boolean>>({});
+  const draftRef = useRef(draft), busyRef = useRef(false);
   const scope = { projectId: snapshot.activeProjectId, sessionId };
-  useEffect(() => { if (!dirty) setDraft(board ?? null); }, [board?.revision, dirty]);
-  const attempt = async (action: () => Promise<unknown>) => { setError(''); setBusy(true); try { await action(); } catch (e) { setError(e instanceof Error ? e.message : 'Review operation failed.'); } finally { setBusy(false); } };
-  const change = (content: ReviewContent) => { if (draft) { setDraft({ ...draft, ...content }); setDirty(true); } };
-  const cueChange = (index: number, patch: Partial<ReviewCue>) => draft && change({ title: draft.title, cues: draft.cues.map((cue, i) => i === index ? { ...cue, ...patch } : cue) });
-  const save = () => attempt(async () => { if (!draft) return; const updated = await workbench<ReviewBoard>('review_update', { ...scope, reviewId: draft.id, expectedRevision: draft.revision, content: { title: draft.title, cues: draft.cues } }); setDraft(updated); setDirty(false); });
+  const replaceDraft = (next: ReviewBoard | null, unsaved: boolean) => { draftRef.current = next; setDraft(next); setDirty(unsaved); };
+  useEffect(() => {
+    // A change notification can arrive before the save response (or vice versa).
+    // Never replace that response with an older snapshot.
+    if (!dirty && !busy && board && board.revision > (draftRef.current?.revision ?? 0)) replaceDraft(board, false);
+  }, [board?.revision, dirty, busy]);
+  const attempt = async (action: () => Promise<unknown>) => {
+    if (busyRef.current) return;
+    busyRef.current = true; setError(''); setBusy(true);
+    try { await action(); } catch (e) { setError(e instanceof Error ? e.message : 'Review operation failed.'); }
+    finally { busyRef.current = false; setBusy(false); }
+  };
+  const change = (content: ReviewContent) => {
+    if (!draftRef.current) return null;
+    const next = { ...draftRef.current, ...content }; replaceDraft(next, true); return next;
+  };
+  const cueChange = (index: number, patch: Partial<ReviewCue>) => {
+    const current = draftRef.current;
+    return current && change({ title: current.title, cues: current.cues.map((cue, i) => i === index ? { ...cue, ...patch } : cue) });
+  };
+  const save = (submitted = draftRef.current) => attempt(async () => {
+    if (!submitted) return;
+    const updated = await workbench<ReviewBoard>('review_update', { ...scope, reviewId: submitted.id, expectedRevision: submitted.revision, content: { title: submitted.title, cues: submitted.cues } });
+    const current = draftRef.current;
+    // Keep edits made while the request was in flight, rebased onto its saved revision.
+    const edited = current !== submitted && current !== null;
+    replaceDraft(edited ? { ...updated, title: current.title, cues: current.cues } : updated, edited);
+  });
+  const decide = (index: number, decision: ReviewCue['decision'], selectedAssetId: string | null = null) => {
+    if (busyRef.current) return;
+    const next = cueChange(index, { decision, selectedAssetId });
+    if (next) void save(next);
+  };
   const stop = () => { setError(''); onStop(); };
   const play = (cue: ReviewCue, assetId: string) => attempt(async () => {
     if (!board) return;
@@ -76,12 +105,12 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
   return <div className="review-results" aria-label="Playground audition results">
     <div className="review-board-bar">
       <div className="review-board-title"><span className="section-kicker">Cue review</span><select aria-label="Review board" value={selectedId} disabled={dirty || busy} onChange={e => onSelect(e.target.value)}>{boards.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}</select></div>
-      <span className="field-hint">Revision {draft.revision} · saved by {draft.origin}</span>
+      <span className="field-hint" role="status">{busy ? 'Review operation in progress…' : `Revision ${draft.revision} · saved by ${draft.origin}`} · Cue decisions save immediately.</span>
       <div className="header-actions"><button className="secondary-button" disabled={dirty || busy} onClick={() => onSelect(null)}>All Playground sounds</button><button className="secondary-button" onClick={() => void stop()}>Stop audio</button><button className="primary-button" disabled={!dirty || busy} onClick={() => void save()}>Save review</button></div>
     </div>
-    {dirty && <div className="review-board-bar"><span className="field-hint">Unsaved changes. Keep auditioning; save before switching reviews or exporting.</span><button className="secondary-button" disabled={busy} onClick={() => { setDraft(board ?? null); setDirty(false); }}>Discard / reload</button></div>}
+    {dirty && <div className="review-board-bar"><span className="field-hint">Unsaved changes. Save review or choose a cue decision to save; save before switching reviews or exporting.</span><button className="secondary-button" disabled={busy} onClick={() => replaceDraft(board ?? null, false)}>Discard / reload</button></div>}
     {error && <p role="alert" className="settings-error">{error}</p>}
-    {board && board.revision !== draft.revision && <p role="alert" className="settings-error">New feedback was saved elsewhere. Reload and reconcile before saving.</p>}
+    {board && board.revision > draft.revision && <p role="alert" className="settings-error">New feedback was saved elsewhere. Reload and reconcile before saving.</p>}
     <details className="review-details"><summary>Review details</summary><label>Review title<input value={draft.title} onChange={e => change({ ...draft, title: e.target.value })} /></label></details>
     {draft.cues.map((cue, index) => {
       const reference = snapshot.assets.find(a => a.id === cue.referenceId);
@@ -102,7 +131,7 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
                 <div className="slot-label"><span>Candidate {String(ci + 1).padStart(2, '0')}</span><button className="mini-button" aria-label={`Remove candidate ${ci + 1}`} onClick={remove}><Icon name="close" /></button></div>
                 {asset ? <AudioCardFrame onSelect={() => onSelectAsset(asset.id)} asset={asset} title={candidate.label} selected={picked} review={picked ? 'accepted' : cue.decision === 'rejected' ? 'rejected' : 'unreviewed'} isPlaying={isPlaying(asset.id)} {...transport(asset, candidate.label || asset.name)} onToggle={() => toggle(cue, asset.id)} disabled={busy} compact>
                   <CardControls name={asset.name} loop={!!loops[asset.id]} onLoop={checked => loopToggle(asset.id, checked)} gainDb={candidate.gainDb} onGain={gainDb => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, gainDb } : c) })} />
-                  <button className={`secondary-button review-pick ${picked ? 'review-pick-active' : ''}`} aria-pressed={picked} onClick={() => cueChange(index, { decision: 'selected', selectedAssetId: asset.id })}><Icon name="check" /> {picked ? 'Selected for this cue' : 'Select this candidate'}</button>
+                  <button className={`secondary-button review-pick ${picked ? 'review-pick-active' : ''}`} aria-pressed={picked} disabled={busy} onClick={() => decide(index, 'selected', asset.id)}><Icon name="check" /> {picked ? 'Selected for this cue' : 'Select this candidate'}</button>
                   <label className="review-candidate-notes">Candidate notes<textarea value={candidate.notes} placeholder="What works? What needs changing?" onChange={e => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, notes: e.target.value } : c) })} /></label>
                 </AudioCardFrame> : <p role="alert">Candidate is unavailable. Remove it or reload the review.</p>}
               </div>;
@@ -111,7 +140,7 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
           </div>
           <aside className="review-cue-sidebar" aria-label={`${cue.label} controls and feedback`}>
             <span className="section-kicker">Playback & feedback</span>
-            <div className="review-buttons"><button className={cue.decision === 'unreviewed' ? 'review-active unreviewed' : ''} aria-pressed={cue.decision === 'unreviewed'} onClick={() => cueChange(index, { decision: 'unreviewed', selectedAssetId: null })}>Unreviewed</button><button className={cue.decision === 'rejected' ? 'review-active rejected' : ''} aria-pressed={cue.decision === 'rejected'} onClick={() => cueChange(index, { decision: 'rejected', selectedAssetId: null })}><Icon name="x" /> Reject all</button></div>
+            <div className="review-buttons"><button className={cue.decision === 'unreviewed' ? 'review-active unreviewed' : ''} aria-pressed={cue.decision === 'unreviewed'} disabled={busy} onClick={() => decide(index, 'unreviewed')}>Unreviewed</button><button className={cue.decision === 'rejected' ? 'review-active rejected' : ''} aria-pressed={cue.decision === 'rejected'} disabled={busy} onClick={() => decide(index, 'rejected')}><Icon name="x" /> Reject all</button></div>
             <label>Cue feedback<textarea value={cue.notes} placeholder="Direction for the next revision…" onChange={e => cueChange(index, { notes: e.target.value })} /></label>
             {draft.cueAudit?.[cue.key] && <p className="field-hint">Decision saved by {draft.cueAudit[cue.key].decision.origin} · {new Date(draft.cueAudit[cue.key].decision.at).toLocaleString()}</p>}
             <label>Add candidate<select value="" onChange={e => { if (e.target.value) cueChange(index, { candidates: [...cue.candidates, { assetId: e.target.value, label: '', notes: '', gainDb: 0 }] }); }}><option value="">Choose a sound…</option>{snapshot.assets.filter(a => !cue.candidates.some(c => c.assetId === a.id)).map(a => <option value={a.id} key={a.id}>{a.name}</option>)}</select></label>
