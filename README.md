@@ -239,3 +239,10 @@ before contacting Codex; the repair does not generate audio again.
 - [Architecture](docs/architecture.md) and [FILEMAP](FILEMAP.md): runtime and navigation.
 - [Accepted plan](docs/implementation-plan.md): v0.1 scope.
 - [API knowledge](docs/knowledge/README.md) and [sources](docs/sources.md): provenance.
+## Review completion
+
+Reviews support **Done**, an **Archived** list, and explicit **Reopen**. Done saves
+and locks the review while preserving playback and export. CLI/MCP expose attributed
+completion status, completion-aware waits, and review resource notifications; see
+[agent workflow](docs/agent-workbench.md#completing-and-archiving-reviews).
+Libraries upgrade to schema v4 and cannot be opened by older builds.

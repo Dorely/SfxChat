@@ -54,6 +54,33 @@ backups remain. Use status after resolving any partial installation.
 
 ## CLI and MCP
 
+### Completing and archiving reviews
+
+Done saves pending edits and completes/archives a review atomically, including
+reviews with unresolved cues. Completed content is locked until Reopen; playback,
+local Loop, inspection, and export remain available. Completion means the session
+ended, not that every candidate was accepted. Both users and agents can finish or
+reopen reviews, with attribution retained in immutable history.
+
+- `review_complete` takes projectId, sessionId, reviewId, expectedRevision, and
+  optional final content. `review_reopen` takes the same scope and revision, without content.
+- `review_update` refuses completed boards with REVIEW_COMPLETED; stale writes
+  return REVISION_CONFLICT. Reconcile before retrying; never silently reopen.
+- `review_list` accepts status: active (default), completed (archive), or all.
+- Reads, history, waits, and export manifests expose status, completedAt, and
+  completedBy (user or agent; completion fields are null while active).
+- `review_wait` accepts condition: revision (default) or completed, afterRevision,
+  and timeoutMs (0–30000). It returns the current board even on timeout. Inspect
+  status/revision; an already-completed board satisfies completed immediately.
+- Resources use `sfxchat://projects/{projectId}/sessions/{sessionId}/reviews/{reviewId}`.
+  Read/open a review to observe it. Subscribe using the host's negotiated protocol:
+  modern `subscriptions/listen` or legacy `resources/subscribe`. An update notification
+  identifies the URI to read again. At most 128 reviews are watched per connection;
+  reading an evicted review restores its watch. Reconnect and read after interruption.
+  Host notification behavior varies; `review_wait` is the reliable fallback.
+
+Protocol reference: [MCP resources and subscriptions](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/specification/2026-07-28/server/resources.mdx).
+
 ```powershell
 sfxchat status
 sfxchat guidance

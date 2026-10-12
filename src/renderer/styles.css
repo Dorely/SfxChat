@@ -150,7 +150,10 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .review-results textarea { width: 100%; min-height: 65px; resize: vertical; line-height: 1.45; }
 .review-board-bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 16px; }
 .review-board-bar > .header-actions { margin-left: auto; }
-.review-board-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.review-current-title { margin: 0 0 12px; font-size: 18px; }
+.review-completed { padding: 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-2); color: var(--text-2); line-height: 1.5; }
+.review-results :is(input, select, textarea):disabled { opacity: .65; }
+.review-board-title { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
 .review-board-title .section-kicker { margin: 0; white-space: nowrap; }
 .review-board-title select { max-width: 250px; }
 .review-details { color: var(--quiet); font-size: 12px; }

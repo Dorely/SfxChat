@@ -20,6 +20,7 @@ export type ReviewContent = z.infer<typeof boardInputSchema>;
 export interface ReviewStamp { origin: 'user' | 'agent'; at: string; revision: number }
 export interface CueAudit { decision: ReviewStamp; notes: ReviewStamp; candidates: Record<string, ReviewStamp> }
 export interface ReviewBoard extends ReviewContent {
+  status: 'active' | 'completed'; completedAt: string | null; completedBy: 'user' | 'agent' | null;
   cueAudit: Record<string, CueAudit>;
   id: string; projectId: string; sessionId: string; revision: number; createdAt: string; updatedAt: string; origin: 'user' | 'agent';
 }

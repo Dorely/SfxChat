@@ -31,7 +31,7 @@ export class Store {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 3) { this.db.close(); throw new Error('This library was created by a newer SfxChat version.'); }
+    if (version > 4) { this.db.close(); throw new Error('This library was created by a newer SfxChat version.'); }
     if (version === 0) this.db.transaction(() => {
       // Fresh library gets the complete v2 shape. project_id carries no REFERENCES clause so a
       // fresh and an upgraded database stay structurally identical; projects are never deleted.
@@ -74,27 +74,34 @@ export class Store {
         PRAGMA user_version = 3;
       `);
     })();
+    if (version < 4) this.db.transaction(() => {
+      this.db.exec(`UPDATE reviews SET json=json_set(json, '$.status', 'active', '$.completedAt', NULL, '$.completedBy', NULL); PRAGMA user_version = 4;`);
+    })();
   }
-  reviews(projectId: string, sessionId?: string): ReviewBoard[] {
+  reviews(projectId: string, sessionId?: string, status: 'active' | 'completed' | 'all' = 'all'): ReviewBoard[] {
     return (sessionId ? this.db.prepare('SELECT json FROM reviews WHERE project_id=? AND session_id=? ORDER BY rowid DESC').all(projectId, sessionId)
-      : this.db.prepare('SELECT json FROM reviews WHERE project_id=? ORDER BY rowid DESC').all(projectId)).map(readReview);
+      : this.db.prepare('SELECT json FROM reviews WHERE project_id=? ORDER BY rowid DESC').all(projectId)).map(readReview).filter(board => status === 'all' || board.status === status);
   }
   review(id: string, projectId: string): ReviewBoard {
     const row = this.db.prepare('SELECT json FROM reviews WHERE id=? AND project_id=?').get(id, projectId);
     if (!row) throw new WorkbenchError('NOT_FOUND', 'Review not found.');
     return readReview(row);
   }
-  saveReview(projectId: string, sessionId: string, content: ReviewContent, origin: 'user' | 'agent', id?: string, expectedRevision?: number): ReviewBoard {
+  saveReview(projectId: string, sessionId: string, content: ReviewContent | undefined, origin: 'user' | 'agent', id?: string, expectedRevision?: number, transition?: 'completed' | 'active'): ReviewBoard {
     if (this.conversation(sessionId).projectId !== projectId) throw new WorkbenchError('NOT_FOUND', 'Session not found in project.');
-    for (const cue of content.cues) {
-      for (const candidate of cue.candidates) this.asset(candidate.assetId, projectId);
-      if (cue.referenceId) this.asset(cue.referenceId, projectId);
-    }
     const result = this.db.transaction(() => {
       const old = id ? this.review(id, projectId) : undefined;
       if (old && (old.sessionId !== sessionId || old.revision !== expectedRevision)) throw new WorkbenchError('REVISION_CONFLICT', 'Review changed; read it again and reconcile your edit.', { revision: old.revision });
+      if (old?.status === 'completed' && transition !== 'active') throw new WorkbenchError('REVIEW_COMPLETED', 'Review is completed. Explicitly reopen it before editing.');
+      if (transition === 'active' && old?.status !== 'completed') throw new WorkbenchError('REVIEW_ACTIVE', 'Review is already active.');
+      const finalContent = content ?? old;
+      if (!finalContent) throw new WorkbenchError('INVALID_ARGUMENTS', 'Review content is required.');
+      for (const cue of finalContent.cues) {
+        for (const candidate of cue.candidates) this.asset(candidate.assetId, projectId);
+        if (cue.referenceId) this.asset(cue.referenceId, projectId);
+      }
       const stamp = { origin, at: now(), revision: (old?.revision ?? 0) + 1 };
-      const cueAudit = Object.fromEntries(content.cues.map(cue => {
+      const cueAudit = Object.fromEntries(finalContent.cues.map(cue => {
         const previous = old?.cues.find(c => c.key === cue.key), audit = old?.cueAudit?.[cue.key];
         const fallback = old ? { origin: old.origin, at: old.updatedAt, revision: old.revision } : stamp;
         return [cue.key, {
@@ -103,7 +110,7 @@ export class Store {
           candidates: Object.fromEntries(cue.candidates.map(c => [c.assetId, previous?.candidates.find(p => p.assetId === c.assetId)?.notes === c.notes ? audit?.candidates[c.assetId] ?? fallback : stamp]))
         }];
       }));
-      const board: ReviewBoard = { ...content, cueAudit, id: old?.id ?? randomUUID(), projectId, sessionId, revision: (old?.revision ?? 0) + 1, createdAt: old?.createdAt ?? now(), updatedAt: now(), origin };
+      const board: ReviewBoard = { title: finalContent.title, cues: finalContent.cues, status: transition ?? 'active', completedAt: transition === 'completed' ? stamp.at : null, completedBy: transition === 'completed' ? origin : null, cueAudit, id: old?.id ?? randomUUID(), projectId, sessionId, revision: stamp.revision, createdAt: old?.createdAt ?? stamp.at, updatedAt: stamp.at, origin };
       this.db.prepare('INSERT INTO reviews VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,json=excluded.json').run(board.id, projectId, sessionId, board.revision, JSON.stringify(board));
       this.db.prepare('INSERT INTO review_history VALUES (?,?,?)').run(board.id, board.revision, JSON.stringify(board));
       return board;
@@ -112,7 +119,7 @@ export class Store {
   }
   reviewHistory(id: string, projectId: string): ReviewBoard[] {
     this.review(id, projectId);
-    return this.db.prepare('SELECT json FROM review_history WHERE review_id=? ORDER BY revision').all(id).map(decode<ReviewBoard>);
+    return this.db.prepare('SELECT json FROM review_history WHERE review_id=? ORDER BY revision').all(id).map(normalizeReview);
   }
   beginExternal(id: string, projectId: string, sessionId: string, operation: string, args: string) {
     const old = this.db.prepare('SELECT * FROM external_requests WHERE id=?').get(id) as { project_id: string; session_id: string; operation: string; args: string } | undefined;
@@ -376,9 +383,13 @@ export class Store {
   }
 }
 
+function normalizeReview(row: unknown): ReviewBoard {
+  const board = decode<ReviewBoard>(row);
+  return { ...board, status: board.status ?? 'active', completedAt: board.completedAt ?? null, completedBy: board.completedBy ?? null };
+}
 /** Obsolete repeat scheduling remains in immutable history, never active controls. */
 function readReview(row: unknown): ReviewBoard {
-  const board = decode<ReviewBoard>(row);
+  const board = normalizeReview(row);
   return { ...board, cues: board.cues.map(cue => {
     const { repeatIntervalMs: _interval, singleVoice: _single, ...current } = cue as typeof cue & { repeatIntervalMs?: number; singleVoice?: boolean };
     return current;

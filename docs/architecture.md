@@ -56,7 +56,7 @@ reasoning omitted and flagged. See [evidence and limits](research/chat-context.m
 
 ## Persistence and originals
 
-SQLite uses WAL, foreign keys, transactional migrations, and FTS5 search. Schema v3
+SQLite uses WAL, foreign keys, transactional migrations, and FTS5 search. Schema v4
 stores conversations, messages, assets, jobs, Playground ordering, settings/wire
 history, turn state, and a tool-call ledger. Newer schema versions are rejected.
 
@@ -460,6 +460,30 @@ model and voice at admission rather than following later UI changes. Existing qu
 
 ## Cue reviews, playback and export
 
+Reviews have an active/completed lifecycle. Done saves the draft and completes the
+review in one revision-checked transaction, even with unresolved cues. Completed
+reviews move to Archived selectors and are read-only until explicitly reopened;
+audition, local Loop, inspection, and export remain available. Completion means the
+session ended, not that every cue was accepted. Completion time and user/agent
+attribution accompany status in reads and exports. Completion/reopen revisions
+remain in immutable history; reopen clears only the current completion stamp.
+Stale drafts survive conflicts, and drafts overtaken by completion must be reloaded
+before reopening. The store enforces completion locks for every caller.
+
+Schema v4 initializes existing reviews as active and prevents older applications
+from opening the library and bypassing completion locks. Historical JSON is
+normalized on read without rewriting history. Renderer snapshots include both
+active and archived reviews; review_list defaults to active.
+
+MCP exposes scoped review resource templates with subscription notifications through
+the SDK's modern/legacy stdio routing. Reads, opens, and returned review mutations
+start deduplicated revision watches (maximum 128 per connection; oldest evicted).
+Watches use bounded review_wait calls over the existing private bridge, back off
+from 1 to 30 seconds on failure, never launch the desktop, and abort their sockets
+and timers when stdio closes. Notifications identify the changed URI; reads and
+waits remain authoritative across disconnects and hosts that do not surface
+notifications. Explicit reads restart evicted watches.
+
 Reviews belong to one project/session and store ordered cue briefs, candidate/reference
 IDs, preview gain, decisions and notes. Legacy repeat settings are ignored when
 reading a current board and retained in immutable history. Candidate membership is checked
@@ -481,9 +505,8 @@ membership and preview gains do not disable auditioning candidates or references
 any cue; playback uses the current draft's preview gain. Selecting a candidate,
 rejecting all, or marking a cue unreviewed immediately submits the current review
 draft through the same revision-checked `review_update` operation as Save review.
-Decision controls are disabled during a pending operation to prevent competing
-saves. Edits made while a save is in flight remain dirty on the returned revision;
-older snapshots cannot replace a successful save response. Failed saves retain the
+Review editing controls are disabled during a pending operation to prevent competing
+changes. Older snapshots cannot replace a successful save response. Failed saves retain the
 draft and display the error. Other edits can still be saved explicitly, and manual
 review navigation or exporting requires saving or discarding remaining edits first.
 

@@ -1,3 +1,46 @@
+# Review completion and archiving (2026-10-12)
+
+- `npm run typecheck` and `npm run build` passed. No automated test infrastructure
+  was added. Modified Markdown links and `git diff --check` passed.
+- `npm run dev:browser` ran the real renderer/main process and existing library.
+  The schema v3 library opened after upgrading to v4; existing reviews remained active.
+  A separate verification session reused one existing WAV, without paid generation
+  or changes to existing review decisions. Its two verification reviews remain archived.
+- Browser checks covered Done with pending candidate notes and with already-saved
+  content, unresolved cues, active/archive selectors, explicit reopening, read-only
+  editing controls, preserved drafts when an MCP client completes concurrently,
+  discard/reload, archived one-shot playback (Loop off), and persistence after reload.
+  Playback was stopped before navigation. These checks establish transport/UI behavior,
+  not listening quality. Audio and the browser development host were stopped afterward.
+- Live CLI/MCP checks covered empty-review completion, invalid final content without
+  a revision change, completed-write rejection, stale-revision rejection, agent/user
+  completion attribution, immutable history, active/archive lists, timeout state,
+  completion waits waking on a UI click, and archived original export with a selected
+  file and completion metadata in its manifest. Temporary export/helper files were removed.
+- Manual stdio exchanges verified both 2025-11-25 `resources/subscribe` and
+  2026-07-28 `subscriptions/listen`, resource reads, and update notifications after
+  reopening/completion (including modern subscription IDs). Closing stdin after a
+  resource read exited naturally with code 0 in 24 ms. Background watches did not
+  relaunch the desktop after host shutdown; verification MCP clients were stopped.
+- Limits: no claim that a particular agent host automatically wakes its model on a
+  notification. Maximum-watch eviction, every historical schema upgrade path, and
+  native playback were not manually exercised. Durable reads/waits remain the fallback.
+- `npm run package` encountered Windows EBUSY/EPERM errors in Electron archive
+  extraction. Packaging was retried with the already-installed, matching Electron
+  44.3.0 distribution and an isolated release output directory.
+- Final installer: `release/review-completion-final/SfxChat Setup 0.2.0.exe`, built
+  with `npx electron-builder --win nsis --x64 --publish never
+  --config.electronDist=node_modules/electron/dist
+  --config.directories.output=release/review-completion-final`. Silent installation
+  exited 0. Installed executable, app archive, CLI, runtime, helper, skill entry point,
+  and workflow reference matched release SHA-256 hashes. Version remains 0.2.0.
+- Updated both existing user-scope Codex and Claude skills with per-file backups;
+  existing copies matched the prior source, and MCP registrations required no changes.
+  All 28 integration entries report up-to-date. Installed CLI reopened the app and
+  read persisted completion; installed MCP initialized with subscriptions enabled,
+  read the completed resource, and exited normally. The installed desktop is left
+  open. Old MCP connections were stopped to release installation files and need reconnecting.
+
 # Installed speech discovery build and agent skills (2026-10-08)
 
 - At the user's request, `npm run package` rebuilt commit `2ff1889` and produced

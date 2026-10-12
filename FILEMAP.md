@@ -83,7 +83,7 @@ is recorded in [verification](docs/verification.md).
 | [src/main/providers/generic/anthropic.ts](src/main/providers/generic/anthropic.ts) | Anthropic Messages transport with tool_use/tool_result translation. |
 | [src/main/providers/generic/registry.ts](src/main/providers/generic/registry.ts) | Provider/model validation, base-URL normalization, and effort parsing. |
 | [src/main/providers/generic/capabilities.ts](src/main/providers/generic/capabilities.ts) | Capability probes, max-tokens discovery, vision/audio flags, and tool filtering. |
-| [src/main/store.ts](src/main/store.ts) | SQLite schema v3 migrations, review history and request replay, projects, per-project scoping, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
+| [src/main/store.ts](src/main/store.ts) | SQLite schema v4 migrations, review lifecycle locks/history and request replay, projects, per-project scoping, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
 | [src/main/media.ts](src/main/media.ts) | Original/chat storage, import, integrity checks, PCM16 conversion, serialized editing/analysis, and bounded decoded cache. |
 | [src/main/audio.ts](src/main/audio.ts) | Bounded MP3/WAV decode, timestamped amplitude windows, energy event detection, loop-seam probing, exact sample-frame trims, loop crossfades, fades, mono WAV clip rendering, and float32 WAV rendering. |
 | [src/main/png.ts](src/main/png.ts) | Minimal 8-bit RGB PNG encoder over Node zlib (filter 0 scanlines, hand-rolled CRC32 and chunks). |
@@ -121,7 +121,7 @@ is recorded in [verification](docs/verification.md).
 | [docs/agent-workbench.md](docs/agent-workbench.md) | CLI/MCP operations, scopes, installation, review/export contracts and limits. |
 | [docs/chimera-integration.md](docs/chimera-integration.md) | Migration recipe for Chimera's raw API and HTML audition workflow; no sibling edits. |
 | [docs/research/agent-runtime.md](docs/research/agent-runtime.md) | Pinned runtime/encoder rebuild, official sources and guidance extraction provenance. |
-| [src/cli/index.ts](src/cli/index.ts) | JSON CLI, on-demand desktop startup, authenticated client, stdio MCP tools/media/resource. |
+| [src/cli/index.ts](src/cli/index.ts) | JSON CLI, on-demand desktop startup, authenticated client, stdio MCP tools/media/resources and bounded review notification watches. |
 | [src/main/operations.ts](src/main/operations.ts) | Shared operation schemas, descriptions, context validation and owning-operation dispatch. |
 | [src/main/bridge.ts](src/main/bridge.ts) | Private named-pipe endpoint, authenticated framing and protected discovery. |
 | [src/main/ui-port.ts](src/main/ui-port.ts) | Explicit renderer commands, acknowledgment, visibility stop and actual playback status. |
@@ -131,7 +131,7 @@ is recorded in [verification](docs/verification.md).
 | [src/shared/install.ts](src/shared/install.ts) | Project/user/custom skills and Codex/Claude MCP config installation with conflict/backups. |
 | [src/shared/native.ts](src/shared/native.ts) | Narrow bounded helper transport for DPAPI and directory ACL operations. |
 | [src/renderer/AudioCard.tsx](src/renderer/AudioCard.tsx) | Shared sound-card frame, waveform/MIDI roll playhead, seek/time transport, and native preview controls for libraries, Playground, inspector and cue reviews. |
-| [src/renderer/ReviewPanel.tsx](src/renderer/ReviewPanel.tsx) | Cue-grouped Playground cards, launcher, references, preview settings, immediate decision saves, notes/drafts, stale revisions and pack export. |
+| [src/renderer/ReviewPanel.tsx](src/renderer/ReviewPanel.tsx) | Cue-grouped cards, active/archive launcher, Done/reopen, references, preview settings, immediate decision saves, notes/drafts, stale revisions and pack export. |
 | [src/renderer/audition.ts](src/renderer/audition.ts) | User-controlled single-source WebAudio playback/Loop, clock-based renderer progress, seeking, cancellation and lifecycle reports. |
 | [src/renderer/AgentSettings.tsx](src/renderer/AgentSettings.tsx) | Scoped integration installation, explicit MCP registration, status and previews. |
 | [resources/skill/SKILL.md](resources/skill/SKILL.md) | Installable workflow and required reference/version discovery instructions. |

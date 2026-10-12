@@ -67,6 +67,11 @@ layered timeline editor are outside this milestone.
 
 ## Product character
 
+Reviews have an explicit Done action: completion archives and freezes the review,
+retains its decisions and unresolved cues, and makes completion visible to agents.
+Users and agents can explicitly reopen a completed review for further editing;
+completion preserves whether the user or an agent performed it.
+
 SfxChat is a focused creative tool for building, testing, and managing audio. It should make iteration approachable while retaining enough provenance and control for serious production work. Library management is a core assistant responsibility.
 
 Chat lives alongside the audio workspace: a resizable left sidebar takes roughly one third of the window, while the right side switches between the library and a playground for comparing sounds. Users and the assistant can arrange candidates in the playground and carry useful feedback into the next iteration.

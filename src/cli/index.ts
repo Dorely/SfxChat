@@ -2,12 +2,13 @@ import { connect } from 'node:net';
 import { readFile, access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
-import { McpServer } from '@modelcontextprotocol/server';
+import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
+import { setTimeout as delay } from 'node:timers/promises';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod';
 import { native } from '../shared/native';
 import { installIntegration, skillText } from '../shared/install';
-import { WorkbenchError, type OperationResponse } from '../shared/workbench';
+import { WorkbenchError, type OperationResponse, type ReviewBoard } from '../shared/workbench';
 
 const helper = join(__dirname, 'sfxchat-helper.exe');
 const root = join(process.env.APPDATA || '', 'SfxChat');
@@ -37,9 +38,13 @@ async function endpoint() {
   }
   throw new WorkbenchError('APP_UNAVAILABLE', 'SfxChat did not start its local bridge. Open the app and inspect its diagnostic logs.');
 }
-function exchange(e: { pipe: string; token: string }, operation: string, args: unknown): Promise<OperationResponse> {
+function exchange(e: { pipe: string; token: string }, operation: string, args: unknown, signal?: AbortSignal): Promise<OperationResponse> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(signal.reason); return; }
     const socket = connect(e.pipe); let buffer = '';
+    const abort = () => { socket.destroy(); reject(signal?.reason); };
+    signal?.addEventListener('abort', abort, { once: true });
+    socket.once('close', () => signal?.removeEventListener('abort', abort));
     socket.setEncoding('utf8'); socket.setTimeout(180000, () => { socket.destroy(); reject(new WorkbenchError('TIMEOUT', 'Request timed out. Inspect existing jobs before resubmitting.')); });
     socket.on('connect', () => socket.write(JSON.stringify({ token: e.token, operation, args }) + '\n'));
     socket.on('error', reject);
@@ -70,14 +75,63 @@ async function main() {
     const catalogResult = await call('tools');
     if (!catalogResult.ok) throw new Error(catalogResult.error?.message);
     const catalog = catalogResult.result as { name: string; description: string; inputSchema: Record<string, unknown> }[];
-    serveStdio(() => {
-      const server = new McpServer({ name: 'sfxchat', version: '0.2.0' });
+    serveStdio(({ era }) => {
+      const server = new McpServer({ name: 'sfxchat', version: '0.2.0' }, { capabilities: { resources: { subscribe: true } } });
+      const watches = new Map<string, AbortController>(), subscribed = new Set<string>();
+      let closed = false;
+      const uriFor = (r: ReviewBoard) => `sfxchat://projects/${r.projectId}/sessions/${r.sessionId}/reviews/${r.id}`;
+      const watch = (initial: ReviewBoard) => {
+        const uri = uriFor(initial);
+        if (closed || watches.has(uri)) return;
+        // Bound idle connection state; durable get/wait remains available for every review.
+        if (watches.size >= 128) { const oldest = watches.keys().next().value!; watches.get(oldest)!.abort(); watches.delete(oldest); subscribed.delete(oldest); }
+        const controller = new AbortController(); watches.set(uri, controller);
+        void (async () => {
+          let revision = initial.revision, backoff = 1000;
+          while (!controller.signal.aborted) {
+            try {
+              // Discovery only: background observation never launches the desktop.
+              const response = await exchange(await discovery(), 'review_wait', { projectId: initial.projectId, sessionId: initial.sessionId, reviewId: initial.id, afterRevision: revision, timeoutMs: 30000 }, controller.signal);
+              if (!response.ok) throw new Error(response.error?.message);
+              const current = response.result as ReviewBoard;
+              if (current.revision !== revision) {
+                if (era === 'modern' || subscribed.has(uri)) await server.server.sendResourceUpdated({ uri });
+                revision = current.revision;
+              }
+              backoff = 1000;
+            } catch {
+              if (controller.signal.aborted) break;
+              await delay(backoff, undefined, { signal: controller.signal }).catch(() => {});
+              backoff = Math.min(backoff * 2, 30000);
+            }
+          }
+        })();
+      };
+      const readReview = async (uri: string) => {
+        const match = /^sfxchat:\/\/projects\/([^/]+)\/sessions\/([^/]+)\/reviews\/([^/]+)$/.exec(uri);
+        if (!match) throw new Error('Invalid review resource URI.');
+        const response = await call('review_get', { projectId: match[1], sessionId: match[2], reviewId: match[3] });
+        if (!response.ok) throw new Error(response.error?.message);
+        const review = response.result as ReviewBoard; watch(review); return review;
+      };
+      server.server.onclose = () => { closed = true; for (const controller of watches.values()) controller.abort(); watches.clear(); subscribed.clear(); };
+      if (era === 'legacy') {
+        server.server.setRequestHandler('resources/subscribe', async request => { await readReview(request.params.uri); subscribed.add(request.params.uri); return {}; });
+        server.server.setRequestHandler('resources/unsubscribe', async request => { subscribed.delete(request.params.uri); return {}; });
+      }
+      server.registerResource('review', new ResourceTemplate('sfxchat://projects/{projectId}/sessions/{sessionId}/reviews/{reviewId}', { list: undefined }), { mimeType: 'application/json', description: 'Review status, completion attribution, choices and feedback. Subscribe for saved changes; review_wait works without notifications.' }, async uri => ({ contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(await readReview(uri.href)) }] }));
       for (const item of catalog) server.registerTool(item.name, { description: item.description, inputSchema: z.fromJSONSchema(item.inputSchema) as z.ZodObject<any> }, async (args: unknown) => {
         const response = await call(item.name, args);
         if (!response.ok) return { isError: true, content: [{ type: 'text' as const, text: JSON.stringify(response.error) }] };
         const result = response.result as any;
+        if (item.name.startsWith('review_') && result?.id && result?.revision) watch(result as ReviewBoard);
+        if (item.name === 'review_open') {
+          const current = await call('review_get', args);
+          if (current.ok) watch(current.result as ReviewBoard);
+        }
         const content: any[] = [];
         if (result?.media) content.push(result.media);
+        if (item.name.startsWith('review_') && result?.id && result?.revision) content.push({ type: 'resource_link', uri: uriFor(result), name: result.title, mimeType: 'application/json', description: `Review ${result.status}; subscribe for saved changes.` });
         const lean = result?.media ? { ...result, media: { type: result.media.type, mimeType: result.media.mimeType } } : result;
         content.unshift({ type: 'text', text: JSON.stringify(lean) });
         return { content, structuredContent: { result: lean } };

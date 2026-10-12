@@ -43,12 +43,14 @@ export const operationDefinitions = {
   trim_asset: { schema: obj({ ...session, id: idSchema, input: trimSchema }), description: 'Save a trim or loop derivative with exact lineage; original unchanged.' },
   spectrogram_view: { schema: obj({ ...project, id: idSchema, input: spectrogramSchema.default({}) }), description: 'Return a PNG spectrogram and exact mapping. Cut points must come from sample measurements.' },
   audio_listen: { schema: obj({ ...project, id: idSchema, input: clipSchema.default({}) }), description: 'Return a bounded WAV clip. Hearing requires a capable calling model/harness; playback is not hearing.' },
-  review_list: { schema: obj(session), description: 'List cue-based review boards in a session.' },
+  review_list: { schema: obj({ ...session, status: z.enum(['active', 'completed', 'all']).default('active') }), description: 'List review boards. Defaults to active; completed finds archived reviews, all includes both.' },
   review_create: { schema: obj({ ...session, content: boardInputSchema }), description: 'Prepare named cues, candidates, references and preview settings without autoplay.' },
   review_get: { schema: obj(board), description: 'Read a review revision, selections, rejected cues and notes.' },
   review_history: { schema: obj(board), description: 'Inspect saved review revisions and decision/feedback attribution.' },
   review_update: { schema: obj({ ...board, expectedRevision: z.number().int().positive(), content: boardInputSchema }), description: 'Save review content only if its revision still matches. Reconcile conflicts with current feedback.' },
-  review_wait: { schema: obj({ ...board, afterRevision: z.number().int().min(0), ...wait }), description: 'Wait up to 30 seconds for a saved review revision change.' },
+  review_complete: { schema: obj({ ...board, expectedRevision: z.number().int().positive(), content: boardInputSchema.optional() }), description: 'Save optional final content and mark the review completed/archived atomically. Locks edits until explicitly reopened. Unreviewed cues are allowed; completion does not imply acceptance. Records agent or user attribution.' },
+  review_reopen: { schema: obj({ ...board, expectedRevision: z.number().int().positive() }), description: 'Explicitly restore a completed review to active and editable, preserving completion history.' },
+  review_wait: { schema: obj({ ...board, afterRevision: z.number().int().min(0), condition: z.enum(['revision', 'completed']).default('revision'), ...wait }), description: 'Wait up to 30 seconds for a revision change or completed status. Always returns current review; inspect status/revision to distinguish timeout. Completion does not imply all cues were accepted.' },
   review_open: { schema: obj(board), description: 'Show and focus this review in SfxChat without autoplay.' },
   playback_status: { schema: obj(session), description: 'Read actual renderer playback status. Does not imply listening approval.' },
   export_asset: { schema: obj({ ...project, id: idSchema, ...exportFields }), description: 'Export an original, PCM WAV or Ogg Vorbis plus provenance; refuses existing files.' },
@@ -121,12 +123,14 @@ export class Operations {
       case 'trim_asset': return s.trimAsset(a.sessionId, a.id, a.input);
       case 'spectrogram_view': { const { png, mapping } = await s.media.spectrogram(store.asset(a.id, a.projectId), a.input); return { mapping, media: { type: 'image', mimeType: 'image/png', data: png.toString('base64') } }; }
       case 'audio_listen': { const asset = store.asset(a.id, a.projectId); const { bytes, ...clip } = asset.format === 'mid' ? await s.midiClip(a.id, a.input, a.projectId) : await s.media.clip(asset, a.input); return { clip, media: { type: 'audio', mimeType: 'audio/wav', data: bytes.toString('base64') } }; }
-      case 'review_list': return store.reviews(a.projectId, a.sessionId);
+      case 'review_list': return store.reviews(a.projectId, a.sessionId, a.status);
       case 'review_get': return review();
       case 'review_history': review(); return store.reviewHistory(a.reviewId, a.projectId);
       case 'review_create': return store.saveReview(a.projectId, a.sessionId, a.content, origin);
       case 'review_update': review(); return store.saveReview(a.projectId, a.sessionId, a.content, origin, a.reviewId, a.expectedRevision);
-      case 'review_wait': { await this.waitUntil(() => review().revision > a.afterRevision, a.timeoutMs); return review(); }
+      case 'review_complete': review(); return store.saveReview(a.projectId, a.sessionId, a.content, origin, a.reviewId, a.expectedRevision, 'completed');
+      case 'review_reopen': review(); return store.saveReview(a.projectId, a.sessionId, undefined, origin, a.reviewId, a.expectedRevision, 'active');
+      case 'review_wait': { await this.waitUntil(() => a.condition === 'completed' ? review().status === 'completed' : review().revision > a.afterRevision, a.timeoutMs); return review(); }
       case 'review_open': review(); return this.ui.send({ action: 'open', projectId: a.projectId, sessionId: a.sessionId, reviewId: a.reviewId });
       case 'playback_status': return this.ui.state(a.sessionId);
       case 'export_asset': return this.exporter.asset(store.asset(a.id, a.projectId), a.destination, a.format);

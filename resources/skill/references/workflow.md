@@ -42,3 +42,21 @@ is 5 and currently supports mono/stereo at 8–192 kHz; use original/WAV for add
 channels. A partial export is explicitly incomplete and must not be integrated as a
 finished pack. Keep the manifest with the files and validate the selected sounds in
 their actual application context.
+## Finishing a review
+
+The user can press Done to save the draft and finish reviewing. Read status,
+completedAt, and completedBy through review_get or review_wait. Completion archives
+and freezes the board, including membership, decisions, notes, and preview gains;
+it does not imply acceptance, and unreviewed cues remain unresolved. Distinguish
+user completion from agent completion. review_list defaults to active; request
+status: completed or all to find archived reviews. Archived boards remain readable,
+auditionable by the user, and exportable.
+
+Use review_wait with condition: completed, afterRevision, and timeoutMs (up to 30000)
+when waiting for the user's finish signal; inspect returned status because a timeout
+also returns the current board. MCP review resources support subscription update
+notifications, but host support varies and durable reads/waits are authoritative.
+review_complete can optionally save final content atomically with completion;
+review_reopen explicitly restores editing. Both require expectedRevision and full
+project/session/review scope. Never automatically reopen to bypass REVIEW_COMPLETED;
+follow the user's intent, or start a new review. Reconcile REVISION_CONFLICT first.
