@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { midiLengthBeats, midiVelocity } from '../shared/midi';
 import type { Asset, Review } from '../shared/types';
 import Icon from './Icon';
@@ -14,15 +14,30 @@ function formatDuration(duration: number | null) {
   return `${duration.toFixed(duration % 1 ? 1 : 0)}s`
 }
 
-function Waveform({ active, url }: { active?: boolean; url: string }) {
-  const [bars, setBars] = useState<number[]>([])
+const waveformCache = new Map<string, number[]>();
+const Waveform = memo(function Waveform({ active, url }: { active?: boolean; url: string }) {
+  const element = useRef<HTMLDivElement>(null)
+  const [visible, setVisible] = useState(false)
+  const [bars, setBars] = useState<number[]>(() => waveformCache.get(url) ?? [])
   useEffect(() => {
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) { setVisible(true); observer.disconnect() }
+    }, { rootMargin: '300px' })
+    if (element.current) observer.observe(element.current)
+    return () => observer.disconnect()
+  }, [])
+  useEffect(() => {
+    if (!visible) return
+    const cached = waveformCache.get(url)
+    if (cached) { setBars(cached); return }
+    setBars([])
     let cancelled = false
+    const controller = new AbortController()
     const decode = async () => {
       try {
         const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
         if (!AudioContextClass) return
-        const response = await fetch(url)
+        const response = await fetch(url, { signal: controller.signal })
         if (!response.ok) return
         const buffer = await response.arrayBuffer()
         const context = new AudioContextClass()
@@ -38,19 +53,22 @@ function Waveform({ active, url }: { active?: boolean; url: string }) {
             return Math.round(16 + peak * 72)
           })
         } finally { await context.close().catch(() => undefined) }
-        if (!cancelled) setBars(next)
+        if (!cancelled) {
+          if (waveformCache.size >= 256) waveformCache.delete(waveformCache.keys().next().value!)
+          waveformCache.set(url, next); setBars(next)
+        }
       } catch { /* unavailable media stays a quiet waveform */ }
     }
     void decode()
-    return () => { cancelled = true }
-  }, [url])
-  return <div className={`waveform ${active ? 'waveform-active' : ''} ${bars.length ? '' : 'waveform-loading'}`} aria-hidden="true">{(bars.length ? bars : Array.from({ length: 48 }, () => 16)).map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}</div>
-}
+    return () => { cancelled = true; controller.abort() }
+  }, [url, visible])
+  return <div ref={element} className={`waveform ${active ? 'waveform-active' : ''} ${bars.length ? '' : 'waveform-loading'}`} aria-hidden="true">{(bars.length ? bars : Array.from({ length: 48 }, () => 16)).map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}</div>
+})
 
 interface RollNote { x: number; width: number; pitch: number; drum: boolean; strength: number }
 
 /** MIDI has no decodable waveform; show its notes instead: pitched notes above, drum hits in a strip below. */
-function MidiRoll({ active, assetId }: { active?: boolean; assetId: string }) {
+const MidiRoll = memo(function MidiRoll({ active, assetId }: { active?: boolean; assetId: string }) {
   const [roll, setRoll] = useState<{ notes: RollNote[]; low: number; high: number } | null>(null)
   useEffect(() => {
     let cancelled = false
@@ -78,16 +96,16 @@ function MidiRoll({ active, assetId }: { active?: boolean; assetId: string }) {
       ? <rect key={index} className="midi-roll-drum" x={note.x} y={36} width={3} height={5} opacity={note.strength} />
       : <rect key={index} x={note.x} y={(roll.high - note.pitch) * rowHeight} width={note.width} height={Math.max(rowHeight, 2)} opacity={note.strength} />)}
   </svg>
-}
+})
 
 /** Shared visual card used by library, Playground, inspector, and cue audition. */
-export function AudioCardFrame({ asset, selected = false, isPlaying, onToggle, onSelect, compact = false, title, review = asset.review, disabled = false, activeAction = 'Stop', position = 0, duration = asset.duration ?? 0, seek, children }: {
+export function AudioCardFrame({ asset, selected = false, isPlaying, onToggle, onSelect, compact = false, title, review = asset.review, disabled = false, loading = false, activeAction = 'Stop', position = 0, duration = asset.duration ?? 0, seek, children }: {
   asset: Asset; selected?: boolean; isPlaying: boolean; onToggle(): void; onSelect?(): void;
-  compact?: boolean; title?: string; review?: Review; disabled?: boolean; activeAction?: 'Stop' | 'Pause'; position?: number; duration?: number; seek?: ReactNode; children?: ReactNode;
+  compact?: boolean; title?: string; review?: Review; disabled?: boolean; loading?: boolean; activeAction?: 'Stop' | 'Pause'; position?: number; duration?: number; seek?: ReactNode; children?: ReactNode;
 }) {
   return <article data-asset-id={asset.id} className={`asset-card ${selected ? 'asset-selected' : ''} ${compact ? 'asset-compact' : ''}`} onClick={onSelect}>
     <div className="asset-card-top">
-      <button className={`play-button ${isPlaying ? 'playing' : ''}`} disabled={disabled && !isPlaying} onClick={event => { event.stopPropagation(); onToggle(); }} aria-label={`${isPlaying ? activeAction : 'Play'} ${title || asset.name}`}><Icon name={isPlaying ? 'pause' : 'play'} /></button>
+      <button className={`play-button ${isPlaying ? 'playing' : ''}`} disabled={disabled && !isPlaying} onClick={event => { event.stopPropagation(); onToggle(); }} aria-label={`${loading ? 'Cancel loading' : isPlaying ? activeAction : 'Play'} ${title || asset.name}`} aria-busy={loading || undefined}>{loading ? <span className="spinner" /> : <Icon name={isPlaying ? 'pause' : 'play'} />}</button>
       <div className="asset-title"><strong>{title || asset.name || 'Untitled sound'}</strong><span>{[asset.format.toUpperCase(), formatDuration(asset.duration), asset.midi && `${Math.round(asset.midi.bpm)} BPM`, asset.midi && `${asset.midi.tracks.length} ${asset.midi.tracks.length === 1 ? 'track' : 'tracks'}`].filter(Boolean).join(' · ')}</span></div>
       <span className={`review-mark review-${review}`} title={review} role="img" aria-label={`Review: ${review}`}><Icon name={review === 'accepted' ? 'check' : review === 'rejected' ? 'x' : 'dot'} /></span>
     </div>

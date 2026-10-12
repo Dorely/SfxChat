@@ -1,21 +1,29 @@
 import type { PlaybackState } from '../shared/workbench';
 
 export interface AuditionRequest { sessionId: string; reviewId: string; assetId: string; gainDb: number; loop: boolean }
-export interface AuditionState extends PlaybackState { position?: number; duration?: number }
+export interface AuditionState extends PlaybackState { position?: number; duration?: number; loading?: boolean }
 
 /** One exclusive WebAudio owner; preview gain never alters originals. */
 export class AuditionPlayer {
-  constructor(private onState: (state: AuditionState) => void) {}
+  private snapshot: AuditionState = { status: 'stopped', updatedAt: '' };
+  private listeners = new Set<() => void>();
+  getSnapshot = () => this.snapshot;
+  subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
+  private publish(state: AuditionState) {
+    this.snapshot = state;
+    for (const listener of this.listeners) listener();
+  }
   private context: AudioContext | null = null;
   private sources = new Map<AudioBufferSourceNode, GainNode>();
   private epoch = 0;
+  private loading: AbortController | null = null;
   private sessionId: string | null = null;
   private active: { command: AuditionRequest; buffer: AudioBuffer; startedAt: number; offset: number } | null = null;
   private frame: number | null = null;
   private report(state: Omit<AuditionState, 'updatedAt'>) {
     const next = { ...state, updatedAt: new Date().toISOString() };
-    this.onState(next);
-    const { position: _position, duration: _duration, ...status } = next;
+    this.publish(next);
+    const { position: _position, duration: _duration, loading: _loading, ...status } = next;
     if (this.sessionId) void window.sfx.playbackReport(this.sessionId, status).catch(() => {});
   }
   private clearSource() {
@@ -25,7 +33,7 @@ export class AuditionPlayer {
     this.sources.clear();
   }
   stop() {
-    this.epoch++;
+    this.epoch++; this.loading?.abort(); this.loading = null;
     this.clearSource(); this.active = null; this.report({ status: 'stopped' });
   }
   private start(command: AuditionRequest, buffer: AudioBuffer, offset: number) {
@@ -44,7 +52,7 @@ export class AuditionPlayer {
       if (!this.active || this.epoch !== epoch) return;
       if (now - lastUpdate >= 33) {
         const elapsed = offset + Math.max(0, context.currentTime - startedAt);
-        this.onState({ status: 'playing', assetId: command.assetId, reviewId: command.reviewId, position: command.loop ? elapsed % buffer.duration : Math.min(elapsed, buffer.duration), duration: buffer.duration, updatedAt: new Date().toISOString() });
+        this.publish({ status: 'playing', assetId: command.assetId, reviewId: command.reviewId, position: command.loop ? elapsed % buffer.duration : Math.min(elapsed, buffer.duration), duration: buffer.duration, updatedAt: new Date().toISOString() });
         lastUpdate = now;
       }
       this.frame = requestAnimationFrame(tick);
@@ -61,21 +69,26 @@ export class AuditionPlayer {
   }
   async play(command: AuditionRequest) {
     this.stop(); this.sessionId = command.sessionId;
-    const epoch = this.epoch;
+    const epoch = this.epoch, loading = new AbortController(); this.loading = loading;
+    this.report({ status: 'stopped', assetId: command.assetId, reviewId: command.reviewId, loading: true });
     document.querySelectorAll('audio').forEach(audio => audio.pause());
     try {
       this.context ??= new AudioContext(); const context = this.context;
       await context.resume();
+      if (this.epoch !== epoch) return;
       if (context.state !== 'running') throw new Error('Audio output is blocked. Click a playback control in SfxChat first.');
-      const response = await fetch(window.sfx.mediaUrl(`asset/${command.assetId}`));
+      const response = await fetch(window.sfx.mediaUrl(`asset/${command.assetId}`), { signal: loading.signal });
       if (!response.ok) throw new Error('The selected audio is unavailable.');
-      const buffer = await context.decodeAudioData(await response.arrayBuffer());
-      if (this.epoch !== epoch) throw new Error('Playback was cancelled before decoding completed.');
+      const bytes = await response.arrayBuffer();
+      if (this.epoch !== epoch) return;
+      const buffer = await context.decodeAudioData(bytes);
+      if (this.epoch !== epoch) return;
       this.start(command, buffer, 0);
     } catch (e) {
-      if (this.epoch === epoch) { this.stop(); this.report({ status: 'error', error: e instanceof Error ? e.message : 'Playback failed.' }); }
+      if (this.epoch !== epoch) return;
+      this.stop(); this.report({ status: 'error', error: e instanceof Error ? e.message : 'Playback failed.' });
       throw e;
-    }
+    } finally { if (this.loading === loading) this.loading = null; }
   }
   dispose() { this.stop(); void this.context?.close(); this.context = null; }
 }

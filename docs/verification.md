@@ -1076,3 +1076,32 @@ automatically by an older snapshot.
   project without session fields and opened an archived review with stopped playback.
   Codex/Claude user skills updated with backups; all 28 skill/config entries are current.
   No MCP registration changes. Reconnect existing MCP clients for the new operation schemas.
+
+
+## 2026-10-12 — Large review Play responsiveness
+
+- Typecheck and production build passed; verification used the real browser host and
+  the existing active Barnaby stage-2 review (58 cues, 116 reference/candidate cards,
+  1,387 project assets). No provider calls or saved review edits were made.
+- Source inspection found ~30Hz clock updates flowing through App into the entire
+  review, plus two full-library selects per cue (~161,000 option nodes for this review).
+  The revised DOM had 182 options at rest. Focusing Add candidate populated 1,387 options;
+  blurring returned that control to one option. Two nearby waveforms had loaded while
+  off-screen cards remained deferred. All 58 cues remained present; no review pagination.
+- User-driven browser clicks reached visible playing state in 359 ms (first reference),
+  318 ms (first candidate), and 308 ms (last-cue candidate). These are tool-observed
+  click-to-UI timings, not audio-output latency or a controlled before/after benchmark.
+  Position advanced; seeking Home returned to zero. Done remained enabled during playback.
+- Immediate Play/Stop left no playing or loading buttons. A temporary unsaved note
+  survived playback, and Discard / reload restored the original text. Loop stayed off;
+  audio was stopped after each check. Browser console reported no errors.
+- Progress is now subscribed per active card; the app/board no longer receive clock
+  ticks. Loading uses a cancellable fetch and keeps review persistence submission separate.
+  Source review covered cancellation after resume/fetch/decode and stale-load suppression.
+- Gaps: no native audio latency measurement, acoustic evaluation, paid generation,
+  MIDI playback, slow-network failure injection, or exhaustive keyboard-picker coverage.
+  The development host and temporary browser were closed after checks.
+
+- NSIS packaging and silent installation completed with exit 0. Installed executable,
+  app.asar and CLI hashes matched release/review-playback-final. The installed app reopened
+  the same 58-cue review with playback stopped. Skills needed no changes for this renderer fix.

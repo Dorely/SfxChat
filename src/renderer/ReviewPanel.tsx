@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps } from 'react';
 import type { Asset, Snapshot } from '../shared/types';
 import type { ReviewBoard, ReviewContent, ReviewCue } from '../shared/workbench';
 import { AudioCardFrame, AudioSeekBar } from './AudioCard';
 import Icon from './Icon';
-import type { AuditionRequest, AuditionState } from './audition';
+import type { AuditionRequest, AuditionPlayer } from './audition';
 
 export async function workbench<T = unknown>(name: string, args: unknown): Promise<T> {
   const response = await window.sfx.operation(name, args);
@@ -48,8 +48,32 @@ function CardControls({ name, loop, onLoop, gainDb, onGain, locked }: { locked: 
   </div>;
 }
 
-export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect, onSelectAsset, playback, onPlay, onStop, onSeek }: { snapshot: Snapshot; sessionId: string; selectedId: string; onSelect(id: string | null): void; onSelectAsset(id: string): void; playback: AuditionState; onPlay(input: AuditionRequest): Promise<void>; onStop(): void; onSeek(position: number): void }) {
+/** Only cards using the active sound subscribe to its clock; the board and app stay still. */
+function ReviewAudioCard({ player, reviewId, ...props }: Omit<ComponentProps<typeof AudioCardFrame>, 'isPlaying' | 'position' | 'duration' | 'seek'> & { player: AuditionPlayer; reviewId: string }) {
+  const playback = useSyncExternalStore(player.subscribe, () => {
+    const current = player.getSnapshot();
+    return current.reviewId === reviewId && current.assetId === props.asset.id ? current : null;
+  });
+  const active = playback?.status === 'playing';
+  const position = active ? playback.position ?? 0 : 0;
+  const duration = active ? playback.duration ?? 0 : props.asset.duration ?? 0;
+  return <AudioCardFrame {...props} isPlaying={active} loading={playback?.loading} position={position} duration={duration} seek={
+    <AudioSeekBar name={props.title || props.asset.name} position={position} duration={duration} disabled={!active} onSeek={value => player.seek(value)} />
+  } />;
+}
+
+/** Native pickers only need the full library while focused, not once per cue at rest. */
+function ReviewAssetSelect({ assets, value, excluded, disabled, placeholder, onChange }: { assets: Asset[]; value: string; excluded?: ReviewCue['candidates']; disabled: boolean; placeholder: string; onChange(id: string): void }) {
+  const [focused, setFocused] = useState(false);
+  const choices = focused && !disabled ? assets.filter(asset => !excluded?.some(candidate => candidate.assetId === asset.id)) : assets.filter(asset => asset.id === value);
+  return <select disabled={disabled} value={value} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onChange={event => onChange(event.target.value)}>
+    <option value="">{placeholder}</option>{choices.map(asset => <option key={asset.id} value={asset.id}>{asset.name}</option>)}
+  </select>;
+}
+
+export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect, onSelectAsset, player, onPlay, onStop }: { snapshot: Snapshot; sessionId: string; selectedId: string; onSelect(id: string | null): void; onSelectAsset(id: string): void; player: AuditionPlayer; onPlay(input: AuditionRequest): Promise<void>; onStop(): void; }) {
   const boards = snapshot.reviews;
+  const assetsById = useMemo(() => new Map(snapshot.assets.map(asset => [asset.id, asset])), [snapshot.assets]);
   const board = boards.find(r => r.id === selectedId);
   const [error, setError] = useState(''), [draft, setDraft] = useState<ReviewBoard | null>(board ?? null), [dirty, setDirty] = useState(false);
   const [format, setFormat] = useState<'original' | 'wav' | 'ogg'>('original'), [destination, setDestination] = useState('');
@@ -105,21 +129,18 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
     if (next) void save(next);
   };
   const stop = () => { setError(''); onStop(); };
-  const play = (cue: ReviewCue, assetId: string) => attempt(async () => {
-    if (!board) return;
-    const candidate = cue.candidates.find(c => c.assetId === assetId);
-    const gainDb = candidate?.gainDb ?? cue.referenceGainDb;
-    if (!Number.isFinite(gainDb) || gainDb < -60 || gainDb > 12) throw new Error('Preview gain must be between -60 and 12 dB.');
-    await onPlay({ sessionId, reviewId: board.id, assetId, gainDb, loop: !!loops[assetId] });
-  });
-  const loopToggle = (assetId: string, checked: boolean) => { if (isPlaying(assetId)) stop(); setLoops(current => ({ ...current, [assetId]: checked })); };
-  const isPlaying = (id: string) => playback.status === 'playing' && playback.reviewId === selectedId && playback.assetId === id;
-  const transport = (asset: Asset, label = asset.name) => {
-    const active = isPlaying(asset.id);
-    const position = active ? playback.position ?? 0 : 0;
-    const duration = active ? playback.duration ?? 0 : asset.duration ?? 0;
-    return { position, duration, seek: <AudioSeekBar name={label} position={position} duration={duration} disabled={!active} onSeek={onSeek} /> };
+  const play = async (cue: ReviewCue, assetId: string) => {
+    if (!board || busyRef.current) return;
+    if (error) setError('');
+    try {
+      const candidate = cue.candidates.find(c => c.assetId === assetId);
+      const gainDb = candidate?.gainDb ?? cue.referenceGainDb;
+      if (!Number.isFinite(gainDb) || gainDb < -60 || gainDb > 12) throw new Error('Preview gain must be between -60 and 12 dB.');
+      await onPlay({ sessionId, reviewId: board.id, assetId, gainDb, loop: !!loops[assetId] });
+    } catch (error) { setError(error instanceof Error ? error.message : 'Playback failed.'); }
   };
+  const isPlaying = (id: string) => { const state = player.getSnapshot(); return (state.status === 'playing' || state.loading) && state.reviewId === selectedId && state.assetId === id; };
+  const loopToggle = (assetId: string, checked: boolean) => { if (isPlaying(assetId)) stop(); setLoops(current => ({ ...current, [assetId]: checked })); };
   const toggle = (cue: ReviewCue, id: string) => isPlaying(id) ? void stop() : void play(cue, id);
   const move = (index: number, offset: number) => { if (!draft) return; const cues = [...draft.cues]; [cues[index], cues[index + offset]] = [cues[index + offset], cues[index]]; change({ ...draft, cues }); };
   if (!draft) return null;
@@ -136,27 +157,27 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
     {board && board.revision > draft.revision && <p role="alert" className="settings-error">New feedback was saved elsewhere. Reload and reconcile before saving.</p>}
     <details className="review-details"><summary>Review details</summary><label>Review title<input disabled={locked} value={draft.title} onChange={e => change({ ...draft, title: e.target.value })} /></label></details>
     {draft.cues.map((cue, index) => {
-      const reference = snapshot.assets.find(a => a.id === cue.referenceId);
+      const reference = assetsById.get(cue.referenceId ?? '');
       return <section className="review-cue" key={index} aria-label={`Cue: ${cue.label}`}>
         <div className="review-cue-heading"><div><p className="eyebrow">Cue {String(index + 1).padStart(2, '0')}</p><h2>{cue.label}</h2>{cue.brief && <p className="review-brief">{cue.brief}</p>}</div><span className={`review-decision decision-${cue.decision}`}>{cue.decision === 'selected' ? 'Selected' : cue.decision === 'rejected' ? 'All rejected' : 'Unreviewed'}</span></div>
         <div className="review-cue-layout">
           <div className="review-card-grid">
             {reference && <div className="playground-slot review-reference"><div className="slot-label"><span>Current reference</span></div>
-              <AudioCardFrame onSelect={() => onSelectAsset(reference.id)} asset={reference} isPlaying={isPlaying(reference.id)} {...transport(reference)} onToggle={() => toggle(cue, reference.id)} disabled={busy} compact>
+              <ReviewAudioCard player={player} reviewId={selectedId} onSelect={() => onSelectAsset(reference.id)} asset={reference} onToggle={() => toggle(cue, reference.id)} disabled={busy} compact>
                 <CardControls locked={locked} name={reference.name} loop={!!loops[reference.id]} onLoop={checked => loopToggle(reference.id, checked)} gainDb={cue.referenceGainDb} onGain={gainDb => cueChange(index, { referenceGainDb: gainDb })} />
                 <p className="field-hint">Compare candidates against this sound.</p>
-              </AudioCardFrame>
+              </ReviewAudioCard>
             </div>}
             {cue.candidates.map((candidate, ci) => {
-              const asset = snapshot.assets.find(a => a.id === candidate.assetId), picked = cue.decision === 'selected' && cue.selectedAssetId === candidate.assetId;
+              const asset = assetsById.get(candidate.assetId), picked = cue.decision === 'selected' && cue.selectedAssetId === candidate.assetId;
               const remove = () => cueChange(index, { candidates: cue.candidates.filter((_, i) => i !== ci), ...(picked ? { decision: 'unreviewed' as const, selectedAssetId: null } : {}) });
               return <div className="playground-slot" key={candidate.assetId}>
                 <div className="slot-label"><span>Candidate {String(ci + 1).padStart(2, '0')}</span><button className="mini-button" aria-label={`Remove candidate ${ci + 1}`} disabled={locked} onClick={remove}><Icon name="close" /></button></div>
-                {asset ? <AudioCardFrame onSelect={() => onSelectAsset(asset.id)} asset={asset} title={candidate.label} selected={picked} review={picked ? 'accepted' : cue.decision === 'rejected' ? 'rejected' : 'unreviewed'} isPlaying={isPlaying(asset.id)} {...transport(asset, candidate.label || asset.name)} onToggle={() => toggle(cue, asset.id)} disabled={busy} compact>
+                {asset ? <ReviewAudioCard player={player} reviewId={selectedId} onSelect={() => onSelectAsset(asset.id)} asset={asset} title={candidate.label} selected={picked} review={picked ? 'accepted' : cue.decision === 'rejected' ? 'rejected' : 'unreviewed'} onToggle={() => toggle(cue, asset.id)} disabled={busy} compact>
                   <CardControls locked={locked} name={asset.name} loop={!!loops[asset.id]} onLoop={checked => loopToggle(asset.id, checked)} gainDb={candidate.gainDb} onGain={gainDb => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, gainDb } : c) })} />
                   <button className={`secondary-button review-pick ${picked ? 'review-pick-active' : ''}`} aria-pressed={picked} disabled={locked} onClick={() => decide(index, 'selected', asset.id)}><Icon name="check" /> {picked ? 'Selected for this cue' : 'Select this candidate'}</button>
                   <label className="review-candidate-notes">Candidate notes<textarea disabled={locked} value={candidate.notes} placeholder="What works? What needs changing?" onChange={e => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, notes: e.target.value } : c) })} /></label>
-                </AudioCardFrame> : <p role="alert">Candidate is unavailable. Remove it or reload the review.</p>}
+                </ReviewAudioCard> : <p role="alert">Candidate is unavailable. Remove it or reload the review.</p>}
               </div>;
             })}
             {!reference && !cue.candidates.length && <p className="review-empty">Add sounds from the library to begin comparing this cue.</p>}
@@ -166,8 +187,8 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
             <div className="review-buttons"><button className={cue.decision === 'unreviewed' ? 'review-active unreviewed' : ''} aria-pressed={cue.decision === 'unreviewed'} disabled={locked} onClick={() => decide(index, 'unreviewed')}>Unreviewed</button><button className={cue.decision === 'rejected' ? 'review-active rejected' : ''} aria-pressed={cue.decision === 'rejected'} disabled={locked} onClick={() => decide(index, 'rejected')}><Icon name="x" /> Reject all</button></div>
             <label>Cue feedback<textarea disabled={locked} value={cue.notes} placeholder="Direction for the next revision…" onChange={e => cueChange(index, { notes: e.target.value })} /></label>
             {draft.cueAudit?.[cue.key] && <p className="field-hint">Decision saved by {draft.cueAudit[cue.key].decision.origin} · {new Date(draft.cueAudit[cue.key].decision.at).toLocaleString()}</p>}
-            <label>Add candidate<select disabled={locked} value="" onChange={e => { if (e.target.value) cueChange(index, { candidates: [...cue.candidates, { assetId: e.target.value, label: '', notes: '', gainDb: 0 }] }); }}><option value="">Choose a sound…</option>{snapshot.assets.filter(a => !cue.candidates.some(c => c.assetId === a.id)).map(a => <option value={a.id} key={a.id}>{a.name}</option>)}</select></label>
-            <label>Current reference<select disabled={locked} value={cue.referenceId ?? ''} onChange={e => cueChange(index, { referenceId: e.target.value || null })}><option value="">None</option>{snapshot.assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select></label>
+            <label>Add candidate<ReviewAssetSelect assets={snapshot.assets} excluded={cue.candidates} disabled={locked} value="" placeholder="Choose a sound…" onChange={id => { if (id) cueChange(index, { candidates: [...cue.candidates, { assetId: id, label: '', notes: '', gainDb: 0 }] }); }} /></label>
+            <label>Current reference<ReviewAssetSelect assets={snapshot.assets} disabled={locked} value={cue.referenceId ?? ''} placeholder="None" onChange={id => cueChange(index, { referenceId: id || null })} /></label>
             <details className="review-details"><summary>Edit cue details</summary>
               <label>Label<input disabled={locked} value={cue.label} onChange={e => cueChange(index, { label: e.target.value })} /></label><label>Brief<textarea disabled={locked} value={cue.brief} onChange={e => cueChange(index, { brief: e.target.value })} /></label><label>Cue key<input disabled={locked} value={cue.key} onChange={e => cueChange(index, { key: e.target.value })} /></label>
               <div className="review-board-bar"><button className="secondary-button" disabled={locked || index === 0} onClick={() => move(index, -1)}>Move up</button><button className="secondary-button" disabled={locked || index === draft.cues.length - 1} onClick={() => move(index, 1)}>Move down</button><button className="secondary-button" disabled={locked} onClick={() => change({ ...draft, cues: draft.cues.filter((_, i) => i !== index) })}>Remove cue</button></div>

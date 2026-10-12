@@ -514,8 +514,15 @@ Review candidate and reference cards show elapsed/total time, a seek bar, and a 
 over the waveform or MIDI roll. The renderer tracks position from the WebAudio context
 clock and decoded buffer duration; seeking during playback replaces the source at the
 chosen offset while retaining preview gain and Loop. Stop and natural completion reset
-progress. Position updates stay local to the renderer; RendererPort receives lifecycle
-status only, rather than per-frame progress reports. Ordinary audio cards reuse the same
+progress. AuditionPlayer publishes a renderer-local external store; each review card
+subscribes only to its own active asset. Clock ticks do not update App or rebuild cue
+controls. RendererPort receives lifecycle status only, rather than per-frame reports.
+Loading feedback and cancellation are local to the requested sound, without locking
+review edits or other Play buttons. Superseded loads abort their fetch and cannot start
+audio after Stop, navigation, or another Play. Asset pickers populate the full library
+only while focused; idle controls retain only their current option. Shared audio cards
+decode waveforms near the viewport and cache up to 256 small peak arrays; they abort
+unmounted fetches. Memoized waveforms/note rolls do not rebuild on clock ticks. Ordinary audio cards reuse the same
 transport presentation with their native media position.
 
 RendererPort acknowledges UI commands and reports actual player state. Open commands
