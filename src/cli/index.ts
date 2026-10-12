@@ -79,7 +79,7 @@ async function main() {
       const server = new McpServer({ name: 'sfxchat', version: '0.2.0' }, { capabilities: { resources: { subscribe: true } } });
       const watches = new Map<string, AbortController>(), subscribed = new Set<string>();
       let closed = false;
-      const uriFor = (r: ReviewBoard) => `sfxchat://projects/${r.projectId}/sessions/${r.sessionId}/reviews/${r.id}`;
+      const uriFor = (r: ReviewBoard) => `sfxchat://projects/${r.projectId}/reviews/${r.id}`;
       const watch = (initial: ReviewBoard) => {
         const uri = uriFor(initial);
         if (closed || watches.has(uri)) return;
@@ -91,8 +91,14 @@ async function main() {
           while (!controller.signal.aborted) {
             try {
               // Discovery only: background observation never launches the desktop.
-              const response = await exchange(await discovery(), 'review_wait', { projectId: initial.projectId, sessionId: initial.sessionId, reviewId: initial.id, afterRevision: revision, timeoutMs: 30000 }, controller.signal);
-              if (!response.ok) throw new Error(response.error?.message);
+              const response = await exchange(await discovery(), 'review_wait', { projectId: initial.projectId, reviewId: initial.id, afterRevision: revision, timeoutMs: 30000 }, controller.signal);
+              if (!response.ok) {
+                if (response.error?.code === 'NOT_FOUND') {
+                  if (era === 'modern' || subscribed.has(uri)) await server.server.sendResourceUpdated({ uri });
+                  watches.delete(uri); subscribed.delete(uri); break;
+                }
+                throw new Error(response.error?.message);
+              }
               const current = response.result as ReviewBoard;
               if (current.revision !== revision) {
                 if (era === 'modern' || subscribed.has(uri)) await server.server.sendResourceUpdated({ uri });
@@ -108,9 +114,9 @@ async function main() {
         })();
       };
       const readReview = async (uri: string) => {
-        const match = /^sfxchat:\/\/projects\/([^/]+)\/sessions\/([^/]+)\/reviews\/([^/]+)$/.exec(uri);
+        const match = /^sfxchat:\/\/projects\/([^/]+)\/reviews\/([^/]+)$/.exec(uri);
         if (!match) throw new Error('Invalid review resource URI.');
-        const response = await call('review_get', { projectId: match[1], sessionId: match[2], reviewId: match[3] });
+        const response = await call('review_get', { projectId: match[1], reviewId: match[2] });
         if (!response.ok) throw new Error(response.error?.message);
         const review = response.result as ReviewBoard; watch(review); return review;
       };
@@ -119,7 +125,7 @@ async function main() {
         server.server.setRequestHandler('resources/subscribe', async request => { await readReview(request.params.uri); subscribed.add(request.params.uri); return {}; });
         server.server.setRequestHandler('resources/unsubscribe', async request => { subscribed.delete(request.params.uri); return {}; });
       }
-      server.registerResource('review', new ResourceTemplate('sfxchat://projects/{projectId}/sessions/{sessionId}/reviews/{reviewId}', { list: undefined }), { mimeType: 'application/json', description: 'Review status, completion attribution, choices and feedback. Subscribe for saved changes; review_wait works without notifications.' }, async uri => ({ contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(await readReview(uri.href)) }] }));
+      server.registerResource('review', new ResourceTemplate('sfxchat://projects/{projectId}/reviews/{reviewId}', { list: undefined }), { mimeType: 'application/json', description: 'Review status, completion attribution, choices and feedback. Subscribe for saved changes; review_wait works without notifications.' }, async uri => ({ contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(await readReview(uri.href)) }] }));
       for (const item of catalog) server.registerTool(item.name, { description: item.description, inputSchema: z.fromJSONSchema(item.inputSchema) as z.ZodObject<any> }, async (args: unknown) => {
         const response = await call(item.name, args);
         if (!response.ok) return { isError: true, content: [{ type: 'text' as const, text: JSON.stringify(response.error) }] };
@@ -148,7 +154,7 @@ async function main() {
     output({ ok: true, result }); return;
   }
   if (!command || command === 'help' || flags.help) {
-    output({ ok: true, result: { commands: ['status', 'tools', 'guidance', 'call <operation> --input <file.json> | --json <JSON>', 'mcp', 'skill', 'skill install|uninstall|status --scope project|user --target codex|claude [--project <absolute-directory>] [--directory <skills-parent>] [--mcp] [--dry-run] [--force]'], note: 'Generation returns durable IDs. All scoped operations require project/session IDs. App starts on demand. No provider credentials are accepted by this CLI.' } }); return;
+    output({ ok: true, result: { commands: ['status', 'tools', 'guidance', 'call <operation> --input <file.json> | --json <JSON>', 'mcp', 'skill', 'skill install|uninstall|status --scope project|user --target codex|claude [--project <absolute-directory>] [--directory <skills-parent>] [--mcp] [--dry-run] [--force]'], note: 'Generation returns durable IDs. Reviews and Playground use project IDs; generation and chat also require session IDs. App starts on demand. No provider credentials are accepted by this CLI.' } }); return;
   }
   if (command === 'call' && !name) throw new WorkbenchError('INVALID_ARGUMENTS', 'Specify an operation; run sfxchat tools for schemas.');
   if (flags.input && flags.json) throw new WorkbenchError('INVALID_ARGUMENTS', 'Use either --input or --json.');

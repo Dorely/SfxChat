@@ -62,7 +62,7 @@ local Loop, inspection, and export remain available. Completion means the sessio
 ended, not that every candidate was accepted. Both users and agents can finish or
 reopen reviews, with attribution retained in immutable history.
 
-- `review_complete` takes projectId, sessionId, reviewId, expectedRevision, and
+- `review_complete` takes projectId, reviewId, expectedRevision, and
   optional final content. `review_reopen` takes the same scope and revision, without content.
 - `review_update` refuses completed boards with REVIEW_COMPLETED; stale writes
   return REVISION_CONFLICT. Reconcile before retrying; never silently reopen.
@@ -72,7 +72,7 @@ reopen reviews, with attribution retained in immutable history.
 - `review_wait` accepts condition: revision (default) or completed, afterRevision,
   and timeoutMs (0–30000). It returns the current board even on timeout. Inspect
   status/revision; an already-completed board satisfies completed immediately.
-- Resources use `sfxchat://projects/{projectId}/sessions/{sessionId}/reviews/{reviewId}`.
+- Resources use `sfxchat://projects/{projectId}/reviews/{reviewId}`.
   Read/open a review to observe it. Subscribe using the host's negotiated protocol:
   modern `subscriptions/listen` or legacy `resources/subscribe`. An update notification
   identifies the URI to read again. At most 128 reviews are watched per connection;
@@ -178,7 +178,7 @@ board with `set_playground` like any other sound.
 
 ## Audition and export
 
-`review_create` stores `{title,cues}` for a session. Each ordered cue has a stable
+`review_create` stores `{title,cues}` for a project. Each ordered cue has a stable
 filename-safe key, label, brief, candidates, optional current reference, notes,
 preview gains. A decision
 is `unreviewed`, `selected` with a candidate ID, or `rejected` with no selected ID.
@@ -227,3 +227,11 @@ load guidance for the provider actually used, including overrides.
 
 See [Chimera migration](chimera-integration.md), [encoder/runtime provenance](research/agent-runtime.md),
 [architecture](architecture.md), and [verification evidence](verification.md).
+
+Reviews and the regular Playground are project-scoped and shared across conversations.
+Do not supply sessionId to review operations, export_review, or set_playground.
+Conversation attribution remains required for generation and jobs.
+`session_delete` permanently removes a conversation's messages and job/tool history while
+retaining project audio, reviews and Playground. `project_delete` removes its workspace
+records, including reviews/history and library records. Original media files remain on
+disk. Use deletion only on explicit user intent; active work must finish first.

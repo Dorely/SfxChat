@@ -34,7 +34,9 @@ export class RendererPort implements UiPort {
   stopForVisibility() {
     const window = this.window();
     if (!window || window.isDestroyed() || !this.currentSession) return;
-    window.webContents.send('sfx:ui-command', { id: randomUUID(), action: 'stop', sessionId: this.currentSession, projectId: this.store.conversation(this.currentSession).projectId });
+    const conversation = this.store.conversations().find(item => item.id === this.currentSession);
+    if (!conversation) { this.currentSession = null; this.playback = { status: 'stopped', updatedAt: new Date().toISOString() }; return; }
+    window.webContents.send('sfx:ui-command', { id: randomUUID(), action: 'stop', sessionId: this.currentSession, projectId: conversation.projectId });
   }
   unavailable() {
     this.ready = false; this.playback = { status: 'stopped', updatedAt: new Date().toISOString() };

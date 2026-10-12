@@ -16,16 +16,18 @@ function ReviewFilter({ value, onChange, disabled }: { value: 'active' | 'comple
 const newCue = (key: string): ReviewCue => ({ key, label: 'New cue', brief: '', candidates: [], referenceId: null, referenceGainDb: 0, decision: 'unreviewed', selectedAssetId: null, notes: '' });
 
 /** Compact entry point; a selected review becomes the Playground results. */
-export function ReviewLauncher({ snapshot, sessionId, onSelect }: { snapshot: Snapshot; sessionId: string; onSelect(id: string): void }) {
+export function ReviewLauncher({ snapshot, onSelect }: { snapshot: Snapshot; onSelect(id: string): void }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [filter, setFilter] = useState<'active' | 'completed'>('active');
-  const boards = snapshot.reviews.filter(r => r.sessionId === sessionId && r.status === filter);
+  const boards = snapshot.reviews.filter(r => r.status === filter);
+  const playgroundIds = snapshot.playground[snapshot.activeProjectId] ?? [];
+  const startEmpty = playgroundIds.length > 128;
   const create = async () => {
     setBusy(true); setError('');
     try {
       const cue = newCue('cue_1'); cue.label = 'Candidates';
-      cue.candidates = (snapshot.playground[sessionId] ?? []).map(assetId => ({ assetId, label: '', notes: '', gainDb: 0 }));
-      const created = await workbench<ReviewBoard>('review_create', { projectId: snapshot.activeProjectId, sessionId, content: { title: 'Sound review', cues: [cue] } });
+      cue.candidates = (startEmpty ? [] : playgroundIds).map(assetId => ({ assetId, label: '', notes: '', gainDb: 0 }));
+      const created = await workbench<ReviewBoard>('review_create', { projectId: snapshot.activeProjectId, content: { title: 'Sound review', cues: [cue] } });
       onSelect(created.id);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not create review.'); }
     finally { setBusy(false); }
@@ -33,7 +35,7 @@ export function ReviewLauncher({ snapshot, sessionId, onSelect }: { snapshot: Sn
   return <div className="review-launcher">
     <ReviewFilter value={filter} onChange={setFilter} disabled={busy} />
     {boards.length > 0 && <select aria-label="Open audition review" value="" onChange={e => onSelect(e.target.value)} disabled={busy}><option value="" disabled>Open review…</option>{boards.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}</select>}
-    <button className="secondary-button" disabled={busy} onClick={() => void create()}><Icon name="plus" /> New review</button>
+    <button className="secondary-button" disabled={busy} onClick={() => void create()}><Icon name="plus" /> {startEmpty ? 'New empty review' : 'New review'}</button>
     {error && <span role="alert" className="settings-error">{error}</span>}
   </div>;
 }
@@ -47,7 +49,7 @@ function CardControls({ name, loop, onLoop, gainDb, onGain, locked }: { locked: 
 }
 
 export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect, onSelectAsset, playback, onPlay, onStop, onSeek }: { snapshot: Snapshot; sessionId: string; selectedId: string; onSelect(id: string | null): void; onSelectAsset(id: string): void; playback: AuditionState; onPlay(input: AuditionRequest): Promise<void>; onStop(): void; onSeek(position: number): void }) {
-  const boards = snapshot.reviews.filter(r => r.sessionId === sessionId);
+  const boards = snapshot.reviews;
   const board = boards.find(r => r.id === selectedId);
   const [error, setError] = useState(''), [draft, setDraft] = useState<ReviewBoard | null>(board ?? null), [dirty, setDirty] = useState(false);
   const [format, setFormat] = useState<'original' | 'wav' | 'ogg'>('original'), [destination, setDestination] = useState('');
@@ -59,7 +61,7 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
   const completed = latest?.status === 'completed';
   const locked = busy || completed;
   const visibleBoards = boards.filter(r => r.status === filter);
-  const scope = { projectId: snapshot.activeProjectId, sessionId };
+  const scope = { projectId: snapshot.activeProjectId };
   const replaceDraft = (next: ReviewBoard | null, unsaved: boolean) => { draftRef.current = next; setDraft(next); setDirty(unsaved); };
   useEffect(() => {
     // A change notification can arrive before the save response (or vice versa).

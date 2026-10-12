@@ -83,7 +83,7 @@ is recorded in [verification](docs/verification.md).
 | [src/main/providers/generic/anthropic.ts](src/main/providers/generic/anthropic.ts) | Anthropic Messages transport with tool_use/tool_result translation. |
 | [src/main/providers/generic/registry.ts](src/main/providers/generic/registry.ts) | Provider/model validation, base-URL normalization, and effort parsing. |
 | [src/main/providers/generic/capabilities.ts](src/main/providers/generic/capabilities.ts) | Capability probes, max-tokens discovery, vision/audio flags, and tool filtering. |
-| [src/main/store.ts](src/main/store.ts) | SQLite schema v4 migrations, review lifecycle locks/history and request replay, projects, per-project scoping, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
+| [src/main/store.ts](src/main/store.ts) | SQLite schema v5 migrations, project reviews/shared Playground, lifecycle locks/history, workspace deletion and request replay, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
 | [src/main/media.ts](src/main/media.ts) | Original/chat storage, import, integrity checks, PCM16 conversion, serialized editing/analysis, and bounded decoded cache. |
 | [src/main/audio.ts](src/main/audio.ts) | Bounded MP3/WAV decode, timestamped amplitude windows, energy event detection, loop-seam probing, exact sample-frame trims, loop crossfades, fades, mono WAV clip rendering, and float32 WAV rendering. |
 | [src/main/png.ts](src/main/png.ts) | Minimal 8-bit RGB PNG encoder over Node zlib (filter 0 scanlines, hand-rolled CRC32 and chunks). |
@@ -107,7 +107,7 @@ is recorded in [verification](docs/verification.md).
 | [src/main/providers/secrets.ts](src/main/providers/secrets.ts) | Atomic encrypted credential storage using injected OS protection and store-safe secret names. |
 | [src/renderer/index.html](src/renderer/index.html), [src/renderer/main.tsx](src/renderer/main.tsx) | Renderer entrypoint and content security policy; applies the stored theme before first render. |
 | [src/renderer/themes.css](src/renderer/themes.css), [src/renderer/theme.ts](src/renderer/theme.ts) | Theme color tokens (Studio, Midnight, Ember, Daylight) and the per-device theme preference. |
-| [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Project switcher, theme picker, session renaming, chat with the composer model picker, effects, music, and voice libraries, Playground generation, audition, inspector, two-pane settings, and token-based styling. |
+| [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Project switcher, project/conversation deletion confirmations, theme picker, session renaming, chat with the composer model picker, effects, music, and voice libraries, Playground generation, audition, inspector, two-pane settings, and token-based styling. |
 | [src/renderer/Icon.tsx](src/renderer/Icon.tsx) | Shared inline SVG icon set drawn for this project, replacing font glyph icons. |
 | [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Waveform trim selection, fine-window zoom, fades, spectrogram panel, exact rendered preview, and derived-asset saving. |
 | [src/renderer/MidiStudio.tsx](src/renderer/MidiStudio.tsx) | MIDI workspace: clip rail, track lanes with sticky headers and key gutters on a shared ruler, note editing and keyboard nudging, transport with playhead audition, and derivative saving. |
@@ -122,7 +122,7 @@ is recorded in [verification](docs/verification.md).
 | [docs/chimera-integration.md](docs/chimera-integration.md) | Migration recipe for Chimera's raw API and HTML audition workflow; no sibling edits. |
 | [docs/research/agent-runtime.md](docs/research/agent-runtime.md) | Pinned runtime/encoder rebuild, official sources and guidance extraction provenance. |
 | [src/cli/index.ts](src/cli/index.ts) | JSON CLI, on-demand desktop startup, authenticated client, stdio MCP tools/media/resources and bounded review notification watches. |
-| [src/main/operations.ts](src/main/operations.ts) | Shared operation schemas, descriptions, context validation and owning-operation dispatch. |
+| [src/main/operations.ts](src/main/operations.ts) | Shared operation schemas, descriptions, project review/Playground scopes, deletion, context validation and owning-operation dispatch. |
 | [src/main/bridge.ts](src/main/bridge.ts) | Private named-pipe endpoint, authenticated framing and protected discovery. |
 | [src/main/ui-port.ts](src/main/ui-port.ts) | Explicit renderer commands, acknowledgment, visibility stop and actual playback status. |
 | [src/main/exporter.ts](src/main/exporter.ts) | Integrity-checked original/WAV/Vorbis exports, cue packs, provenance and incomplete manifests. |
@@ -131,7 +131,7 @@ is recorded in [verification](docs/verification.md).
 | [src/shared/install.ts](src/shared/install.ts) | Project/user/custom skills and Codex/Claude MCP config installation with conflict/backups. |
 | [src/shared/native.ts](src/shared/native.ts) | Narrow bounded helper transport for DPAPI and directory ACL operations. |
 | [src/renderer/AudioCard.tsx](src/renderer/AudioCard.tsx) | Shared sound-card frame, waveform/MIDI roll playhead, seek/time transport, and native preview controls for libraries, Playground, inspector and cue reviews. |
-| [src/renderer/ReviewPanel.tsx](src/renderer/ReviewPanel.tsx) | Cue-grouped cards, active/archive launcher, Done/reopen, references, preview settings, immediate decision saves, notes/drafts, stale revisions and pack export. |
+| [src/renderer/ReviewPanel.tsx](src/renderer/ReviewPanel.tsx) | Cue-grouped cards, project-wide active/archive launcher, Done/reopen, references, preview settings, immediate decision saves, notes/drafts, stale revisions and pack export. |
 | [src/renderer/audition.ts](src/renderer/audition.ts) | User-controlled single-source WebAudio playback/Loop, clock-based renderer progress, seeking, cancellation and lifecycle reports. |
 | [src/renderer/AgentSettings.tsx](src/renderer/AgentSettings.tsx) | Scoped integration installation, explicit MCP registration, status and previews. |
 | [resources/skill/SKILL.md](resources/skill/SKILL.md) | Installable workflow and required reference/version discovery instructions. |

@@ -439,3 +439,5 @@ body.midi-resizing, body.midi-resizing * { cursor: ew-resize !important; user-se
 .workspace-panel.midi-panel:focus:not(:focus-visible) { outline: none; }
 .midi-key-unmapped { color: color-mix(in srgb, var(--quiet) 55%, transparent); background: var(--sunken); font-style: italic; }
 .midi-note-unmapped { background: repeating-linear-gradient(135deg, var(--track-color) 0 4px, color-mix(in srgb, var(--track-color) 45%, transparent) 4px 8px); }
+
+.playground-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 16px; color: var(--muted); font-size: 12px; }

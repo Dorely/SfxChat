@@ -9,7 +9,7 @@ import type { Exporter } from './exporter';
 
 const project = { projectId: idSchema };
 const session = { ...project, sessionId: idSchema };
-const board = { ...session, reviewId: idSchema };
+const board = { ...project, reviewId: idSchema };
 const wait = { timeoutMs: z.number().int().min(0).max(30000).default(10000) };
 const generation = { ...session, requestId: z.string().uuid().describe('Keep this ID to recover the same request without purchasing another batch.') };
 const obj = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
@@ -19,6 +19,8 @@ export const operationDefinitions = {
   guidance: { schema: obj({}), description: 'Complete current sound-design guidance, version/hash, configured providers and generation controls.' },
   projects_list: { schema: obj({}), description: 'List workbench projects.' },
   project_create: { schema: obj({ name: projectNameSchema }), description: 'Create a project without changing the visible project.' },
+  project_delete: { schema: obj(project), description: 'Permanently delete a project and its conversations, reviews and library records. Original media files remain on disk. Requires explicit user intent.' },
+  session_delete: { schema: obj(session), description: 'Permanently delete a conversation and its messages/job history. Project audio, reviews and Playground remain. Requires explicit user intent.' },
   project_get: { schema: obj(project), description: 'Inspect a project.' },
   project_rename: { schema: obj({ ...project, name: projectNameSchema }), description: 'Rename a project.' },
   sessions_list: { schema: obj(project), description: 'List sessions in an explicit project.' },
@@ -38,13 +40,13 @@ export const operationDefinitions = {
   inspect_asset: { schema: obj({ ...project, id: idSchema }), description: 'Read immutable provenance and current asset metadata.' },
   update_asset: { schema: obj({ ...session, id: idSchema, patch: patchSchema }), description: 'Name, tag, organize, and review an asset without changing its bytes.' },
   import_audio: { schema: obj({ ...session, paths: z.array(z.string().min(1)).min(1).max(128), kind: assetKindSchema.default('effect') }), description: 'Import WAV/MP3 files using absolute paths into this project/session.' },
-  set_playground: { schema: obj({ ...session, assetIds: z.array(idSchema) }), description: 'Arrange the session’s existing comparison board.' },
+  set_playground: { schema: obj({ ...project, assetIds: z.array(idSchema) }), description: 'Arrange the project’s shared comparison board.' },
   analyze_audio: { schema: obj({ ...project, id: idSchema, input: analysisSchema.default({}) }), description: 'Measure exact sample-frame amplitude, events and seam data; not semantic listening.' },
   trim_asset: { schema: obj({ ...session, id: idSchema, input: trimSchema }), description: 'Save a trim or loop derivative with exact lineage; original unchanged.' },
   spectrogram_view: { schema: obj({ ...project, id: idSchema, input: spectrogramSchema.default({}) }), description: 'Return a PNG spectrogram and exact mapping. Cut points must come from sample measurements.' },
   audio_listen: { schema: obj({ ...project, id: idSchema, input: clipSchema.default({}) }), description: 'Return a bounded WAV clip. Hearing requires a capable calling model/harness; playback is not hearing.' },
-  review_list: { schema: obj({ ...session, status: z.enum(['active', 'completed', 'all']).default('active') }), description: 'List review boards. Defaults to active; completed finds archived reviews, all includes both.' },
-  review_create: { schema: obj({ ...session, content: boardInputSchema }), description: 'Prepare named cues, candidates, references and preview settings without autoplay.' },
+  review_list: { schema: obj({ ...project, status: z.enum(['active', 'completed', 'all']).default('active') }), description: 'List review boards. Defaults to active; completed finds archived reviews, all includes both.' },
+  review_create: { schema: obj({ ...project, content: boardInputSchema }), description: 'Prepare named cues, candidates, references and preview settings without autoplay.' },
   review_get: { schema: obj(board), description: 'Read a review revision, selections, rejected cues and notes.' },
   review_history: { schema: obj(board), description: 'Inspect saved review revisions and decision/feedback attribution.' },
   review_update: { schema: obj({ ...board, expectedRevision: z.number().int().positive(), content: boardInputSchema }), description: 'Save review content only if its revision still matches. Reconcile conflicts with current feedback.' },
@@ -81,19 +83,21 @@ export class Operations {
     const s = this.service, store = s.store;
     if (a.projectId) store.project(a.projectId);
     if (a.sessionId && store.conversation(a.sessionId).projectId !== a.projectId) throw new WorkbenchError('NOT_FOUND', 'Session not found in project.');
-    const review = () => { const r = store.review(a.reviewId, a.projectId); if (r.sessionId !== a.sessionId) throw new WorkbenchError('NOT_FOUND', 'Review not found in session.'); return r; };
+    const review = () => store.review(a.reviewId, a.projectId);
     const sessionJobs = () => store.jobs(a.projectId).filter(j => j.conversationId === a.sessionId);
     const getJobs = () => a.jobIds.map((id: string) => { const job = sessionJobs().find(j => j.id === id); if (!job) throw new WorkbenchError('NOT_FOUND', 'Job not found in session.'); return job; });
     switch (name) {
       case 'status': { const settings = await s.settings(); return { version: 1, ready: true, elevenLabsReady: settings.elevenLabsReady, musicProviders: settings.musicProviders, activeMusicId: settings.activeMusicId, voiceProviders: settings.voiceProviders, activeVoiceId: settings.activeVoiceId, providerKeys: settings.providerKeys }; }
       case 'guidance': { const settings = await s.settings(); return { version: 1, hash: createHash('sha256').update(JSON.stringify(guidanceDocuments)).digest('hex'), documents: guidanceDocuments, providers: { effects: { kind: 'elevenlabs', model: 'eleven_text_to_sound_v2', ready: settings.elevenLabsReady }, music: settings.musicProviders, activeMusicId: settings.activeMusicId, voiceProviders: settings.voiceProviders, activeVoiceId: settings.activeVoiceId, providerKeys: settings.providerKeys }, controls: { effects: z.toJSONSchema(generationSchema), music: z.toJSONSchema(musicToolSchema), voice: z.toJSONSchema(voiceToolSchema), midi: z.toJSONSchema(midiToolSchema) } }; }
       case 'projects_list': return store.projects();
+      case 'project_delete': s.deleteWorkspace(a.projectId); return { deleted: true };
+      case 'session_delete': s.deleteWorkspace(a.projectId, a.sessionId); return { deleted: true };
       case 'project_get': return store.project(a.projectId);
       case 'project_create': return store.createProject(a.name);
       case 'project_rename': return store.renameProject(a.projectId, a.name);
       case 'sessions_list': return store.conversations(a.projectId);
       case 'session_create': return store.renameConversation(store.createConversation(a.projectId), a.title, origin === 'user' ? 'user' : 'assistant');
-      case 'session_get': return { session: store.conversation(a.sessionId), playground: store.playground(a.projectId)[a.sessionId] ?? [], jobs: sessionJobs() };
+      case 'session_get': return { session: store.conversation(a.sessionId), playground: store.playground(a.projectId)[a.projectId] ?? [], jobs: sessionJobs() };
       case 'rename_session': return store.renameConversation(a.sessionId, a.title, origin === 'user' ? 'user' : 'assistant');
       case 'list_voices': return s.listVoices(a as unknown as import('../shared/types').VoiceListInput);
       case 'list_voice_models': return s.listVoiceModels(a as unknown as import('../shared/types').VoiceModelListInput);
@@ -118,20 +122,20 @@ export class Operations {
       case 'inspect_asset': return store.asset(a.id, a.projectId);
       case 'update_asset': s.updateAsset(a.id, a.patch, a.sessionId); return store.asset(a.id, a.projectId);
       case 'import_audio': { if (a.paths.some((path: string) => !isAbsolute(path))) throw new WorkbenchError('INVALID_PATH', 'Import paths must be absolute.'); return s.importFiles(a.sessionId, a.paths, a.kind); }
-      case 'set_playground': store.setPlayground(a.sessionId, a.assetIds); return { assetIds: store.playground(a.projectId)[a.sessionId] };
+      case 'set_playground': store.setProjectPlayground(a.projectId, a.assetIds); return { assetIds: store.playground(a.projectId)[a.projectId] };
       case 'analyze_audio': return s.analyzeAudio(a.id, a.input, a.projectId);
       case 'trim_asset': return s.trimAsset(a.sessionId, a.id, a.input);
       case 'spectrogram_view': { const { png, mapping } = await s.media.spectrogram(store.asset(a.id, a.projectId), a.input); return { mapping, media: { type: 'image', mimeType: 'image/png', data: png.toString('base64') } }; }
       case 'audio_listen': { const asset = store.asset(a.id, a.projectId); const { bytes, ...clip } = asset.format === 'mid' ? await s.midiClip(a.id, a.input, a.projectId) : await s.media.clip(asset, a.input); return { clip, media: { type: 'audio', mimeType: 'audio/wav', data: bytes.toString('base64') } }; }
-      case 'review_list': return store.reviews(a.projectId, a.sessionId, a.status);
+      case 'review_list': return store.reviews(a.projectId, a.status);
       case 'review_get': return review();
       case 'review_history': review(); return store.reviewHistory(a.reviewId, a.projectId);
-      case 'review_create': return store.saveReview(a.projectId, a.sessionId, a.content, origin);
-      case 'review_update': review(); return store.saveReview(a.projectId, a.sessionId, a.content, origin, a.reviewId, a.expectedRevision);
-      case 'review_complete': review(); return store.saveReview(a.projectId, a.sessionId, a.content, origin, a.reviewId, a.expectedRevision, 'completed');
-      case 'review_reopen': review(); return store.saveReview(a.projectId, a.sessionId, undefined, origin, a.reviewId, a.expectedRevision, 'active');
+      case 'review_create': return store.saveReview(a.projectId, a.content, origin);
+      case 'review_update': review(); return store.saveReview(a.projectId, a.content, origin, a.reviewId, a.expectedRevision);
+      case 'review_complete': review(); return store.saveReview(a.projectId, a.content, origin, a.reviewId, a.expectedRevision, 'completed');
+      case 'review_reopen': review(); return store.saveReview(a.projectId, undefined, origin, a.reviewId, a.expectedRevision, 'active');
       case 'review_wait': { await this.waitUntil(() => a.condition === 'completed' ? review().status === 'completed' : review().revision > a.afterRevision, a.timeoutMs); return review(); }
-      case 'review_open': review(); return this.ui.send({ action: 'open', projectId: a.projectId, sessionId: a.sessionId, reviewId: a.reviewId });
+      case 'review_open': review(); return this.ui.send({ action: 'open', projectId: a.projectId, sessionId: store.ensureConversation(a.projectId), reviewId: a.reviewId });
       case 'playback_status': return this.ui.state(a.sessionId);
       case 'export_asset': return this.exporter.asset(store.asset(a.id, a.projectId), a.destination, a.format);
       case 'export_review': { const r = review(); if (r.revision !== a.expectedRevision) throw new WorkbenchError('REVISION_CONFLICT', 'Read the current review before exporting.'); return this.exporter.review(r, a.destination, a.format); }

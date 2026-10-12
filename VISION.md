@@ -43,7 +43,9 @@ Users should be able to search by traits, tags, descriptions, initial generation
 
 Work is organized into projects. A project holds its own conversations and its own effects,
 music, and voice libraries, so unrelated briefs, assets, and comparisons stay separate, and the top
-bar switches between them. Provider configuration and credentials stay app-level because
+bar switches between them. Reviews and the Playground are shared by every conversation
+in the project. Users can delete conversations without losing project audio or reviews,
+and delete a project through an explicit confirmation. Provider configuration and credentials stay app-level because
 they belong to the account rather than to the work. Sessions stay labeled: the assistant
 names a session as soon as the goal is clear and renames it when the subject materially
 changes, and the user can rename any session or project in place.

@@ -56,7 +56,7 @@ reasoning omitted and flagged. See [evidence and limits](research/chat-context.m
 
 ## Persistence and originals
 
-SQLite uses WAL, foreign keys, transactional migrations, and FTS5 search. Schema v4
+SQLite uses WAL, foreign keys, transactional migrations, and FTS5 search. Schema v5
 stores conversations, messages, assets, jobs, Playground ordering, settings/wire
 history, turn state, and a tool-call ledger. Newer schema versions are rejected.
 
@@ -64,7 +64,7 @@ Schema v2 adds projects: every conversation and asset carries a project_id colum
 setting (project-active) names the active project. A library written before projects is
 migrated in one transaction into a single Default project. project_id deliberately carries no
 REFERENCES clause, because SQLite cannot add a NOT NULL foreign key to an existing table when
-foreign keys are enabled, and project rows are never deleted. The snapshot the renderer
+foreign keys are enabled. Project deletion explicitly removes dependent records transactionally. The snapshot the renderer
 receives is the active project's slice, and every asset lookup carries an explicit project
 scope - the conversation's project when the call has one, otherwise the active project - so
 an id from another project fails exactly like a missing one, including on the empty-query
@@ -426,8 +426,8 @@ generation.
 `src/main/operations.ts` defines validated operations with discoverable JSON schemas,
 descriptions, and handlers. CLI and MCP call the same registry over one authenticated
 Windows named pipe. The desktop remains the only database/provider-credential owner.
-External requests provide explicit project/session IDs; review open/play additionally
-selects that context in the UI. Ordinary external operations never consult the visible
+External requests provide the project/session IDs their schemas require; project-scoped
+review open selects its project and an available conversation in the UI without playback. Ordinary external operations never consult the visible
 project. The original fixed IPC remains an adapter for dialogs and UI actions, while
 `operation` accepts only registry names and validates their argument schema in main.
 Internal assistant adapters retain durable tool ledgers and modality attachments.
@@ -484,7 +484,7 @@ and timers when stdio closes. Notifications identify the changed URI; reads and
 waits remain authoritative across disconnects and hosts that do not surface
 notifications. Explicit reads restart evicted watches.
 
-Reviews belong to one project/session and store ordered cue briefs, candidate/reference
+Reviews belong to one project and store ordered cue briefs, candidate/reference
 IDs, preview gain, decisions and notes. Legacy repeat settings are ignored when
 reading a current board and retained in immutable history. Candidate membership is checked
 against that project. Updates compare expected revisions in the write transaction;
@@ -569,3 +569,26 @@ a development launch always uses the real `%APPDATA%/SfxChat` profile. Provider 
 established this way is limited to what was actually exercised; compilation, packaging,
 and mock runs never establish provider, login, secure-storage, or platform integration.
 Signing, updates, and other-platform packaging are deferred.
+
+## Project workspace and deletion
+
+Schema v5 removes conversation ownership from reviews and merges each project's old
+Playground lists in insertion order, deduplicating asset IDs. Review content, revisions,
+completion state and immutable history remain intact; history reads omit obsolete
+session ownership. Reviews and Playground membership are shared across conversations.
+Review operations and MCP resource URIs require only project/review IDs; set_playground
+requires projectId and assetIds. Generation and chat still retain session attribution.
+
+project_delete and session_delete use the same service/store owners for UI, CLI and
+MCP. The UI requires a confirmation that names the target. Conversation deletion removes
+messages, persisted model history, tool/turn records, job history and external request records, retaining project
+assets, reviews and Playground membership. Project deletion also removes reviews/history,
+asset/search records and Playground membership in one transaction. Original and attachment
+files remain on disk; this is not a storage-reclamation operation. Active responses, jobs,
+edits or external admissions block deletion. Async imports and MIDI saves revalidate
+conversation existence before committing. Deleting the selected or last project chooses
+an existing project or creates Default; an empty active project gets a new conversation.
+Provider configuration and credentials remain app-level.
+
+The regular Playground renders 24 candidates per page. New review seeds up to 128
+Playground candidates; larger lists offer New empty review for deliberate cue membership.

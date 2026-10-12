@@ -22,7 +22,7 @@ export interface CueAudit { decision: ReviewStamp; notes: ReviewStamp; candidate
 export interface ReviewBoard extends ReviewContent {
   status: 'active' | 'completed'; completedAt: string | null; completedBy: 'user' | 'agent' | null;
   cueAudit: Record<string, CueAudit>;
-  id: string; projectId: string; sessionId: string; revision: number; createdAt: string; updatedAt: string; origin: 'user' | 'agent';
+  id: string; projectId: string; revision: number; createdAt: string; updatedAt: string; origin: 'user' | 'agent';
 }
 export interface PlaybackState { status: 'stopped' | 'playing' | 'error'; assetId?: string; reviewId?: string; error?: string; updatedAt: string }
 export interface UiCommand { id: string; action: 'open' | 'stop'; projectId: string; sessionId: string; reviewId?: string }

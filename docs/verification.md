@@ -1036,3 +1036,43 @@ automatically by an older snapshot.
   and `review_get` read revision 7 with both verification cues unreviewed and the
   retained feedback. The installed app was left running for the user. Native UI
   behavior was not separately exercised.
+
+
+## 2026-10-12 — Project-wide reviews/Playground and workspace deletion
+
+- Typecheck and production build passed. Real `npm run dev:browser` used the existing
+  profile. Schema v4→v5 preserved all 22 existing reviews except obsolete session scope;
+  SHA-256 of ordered immutable history rows was unchanged. All five project Playground
+  unions matched their old conversation lists, including 1,029 unique candidates in the
+  largest project. SQLite foreign_key_check returned no rows.
+- Browser: the same archived review list and 1,029 candidates remained available after
+  conversation switches; paging showed pages 1 and 2 of 43. Existing archived review
+  stayed selected across a switch and remained readable after reload.
+- A disposable project imported one existing WAV, with no provider calls. Creating a
+  review from conversation B included audio imported in A. Unsaved candidate feedback
+  survived a switch to A/B and Done saved it at revision 2 with user attribution.
+  Reopening through the CLI advanced revision 3 and restored editing in the UI.
+- Project and conversation confirmation dialogs named the target, described deletion,
+  and Cancel preserved the record. Actual deletion was exercised through the same owning
+  operations via CLI: deleting B retained review, notes, asset and shared Playground;
+  deleting the last conversation created an empty replacement. Deleting the disposable
+  project removed conversation/review/history/asset/search/Playground records and selected
+  an existing project. Wrong-project review lookup and deleted-project lookup failed.
+  All original reviews, history, and merged Playground lists remained unchanged afterward.
+- Legacy MCP stdio initialized/subscribed/read a project-only review URI. Reopen emitted
+  notifications/resources/updated with that URI; reading returned active status. Closing
+  stdin exited with code 0. No claim is made that a host automatically wakes an agent.
+- One-shot Play and Stop controls were invoked with Loop off; playback quality was not
+  assessed. No paid generation or auth changes. Browser host and temporary helpers were
+  stopped after validation. Temporary verification records and imported copy were removed.
+- Gaps: native-window deletion confirmation, the confirmation dialog's final submit click,
+  last-project fallback in a one-project library, deletion during real paid jobs/imports,
+  modern MCP notification routing, and fresh/pre-v4 schema migration were not exercised
+  in this change. Busy guards and persisted model-history cleanup were inspected in code.
+
+- Packaged NSIS using the installed Electron distribution (the existing extraction-lock
+  workaround), installed silently with exit 0, and matched installed executable, app.asar,
+  CLI and skill files to the release hashes. Installed CLI listed 19 reviews in the main
+  project without session fields and opened an archived review with stopped playback.
+  Codex/Claude user skills updated with backups; all 28 skill/config entries are current.
+  No MCP registration changes. Reconnect existing MCP clients for the new operation schemas.

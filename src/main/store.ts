@@ -31,10 +31,10 @@ export class Store {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 4) { this.db.close(); throw new Error('This library was created by a newer SfxChat version.'); }
+    if (version > 5) { this.db.close(); throw new Error('This library was created by a newer SfxChat version.'); }
     if (version === 0) this.db.transaction(() => {
       // Fresh library gets the complete v2 shape. project_id carries no REFERENCES clause so a
-      // fresh and an upgraded database stay structurally identical; projects are never deleted.
+      // fresh and an upgraded database stay structurally identical.
       this.db.exec(`
         CREATE TABLE projects (id TEXT PRIMARY KEY, json TEXT NOT NULL);
         CREATE TABLE conversations (id TEXT PRIMARY KEY, json TEXT NOT NULL, project_id TEXT NOT NULL DEFAULT '');
@@ -77,21 +77,31 @@ export class Store {
     if (version < 4) this.db.transaction(() => {
       this.db.exec(`UPDATE reviews SET json=json_set(json, '$.status', 'active', '$.completedAt', NULL, '$.completedBy', NULL); PRAGMA user_version = 4;`);
     })();
+    if (version < 5) this.db.transaction(() => {
+      this.db.exec(`ALTER TABLE reviews DROP COLUMN session_id;
+        UPDATE reviews SET json=json_remove(json, '$.sessionId');
+        CREATE TABLE project_playground (project_id TEXT PRIMARY KEY, json TEXT NOT NULL);`);
+      for (const project of this.projects()) {
+        const rows = this.db.prepare(`SELECT p.json FROM playground p JOIN conversations c ON c.id=p.conversation_id WHERE c.project_id=? ORDER BY p.rowid`).all(project.id) as { json: string }[];
+        const ids = [...new Set(rows.flatMap(row => JSON.parse(row.json) as string[]))];
+        this.db.prepare('INSERT INTO project_playground VALUES (?,?)').run(project.id, JSON.stringify(ids));
+      }
+      this.db.exec('DROP TABLE playground; PRAGMA user_version = 5;');
+    })();
   }
-  reviews(projectId: string, sessionId?: string, status: 'active' | 'completed' | 'all' = 'all'): ReviewBoard[] {
-    return (sessionId ? this.db.prepare('SELECT json FROM reviews WHERE project_id=? AND session_id=? ORDER BY rowid DESC').all(projectId, sessionId)
-      : this.db.prepare('SELECT json FROM reviews WHERE project_id=? ORDER BY rowid DESC').all(projectId)).map(readReview).filter(board => status === 'all' || board.status === status);
+  reviews(projectId: string, status: 'active' | 'completed' | 'all' = 'all'): ReviewBoard[] {
+    return this.db.prepare('SELECT json FROM reviews WHERE project_id=? ORDER BY rowid DESC').all(projectId).map(readReview).filter(board => status === 'all' || board.status === status);
   }
   review(id: string, projectId: string): ReviewBoard {
     const row = this.db.prepare('SELECT json FROM reviews WHERE id=? AND project_id=?').get(id, projectId);
     if (!row) throw new WorkbenchError('NOT_FOUND', 'Review not found.');
     return readReview(row);
   }
-  saveReview(projectId: string, sessionId: string, content: ReviewContent | undefined, origin: 'user' | 'agent', id?: string, expectedRevision?: number, transition?: 'completed' | 'active'): ReviewBoard {
-    if (this.conversation(sessionId).projectId !== projectId) throw new WorkbenchError('NOT_FOUND', 'Session not found in project.');
+  saveReview(projectId: string, content: ReviewContent | undefined, origin: 'user' | 'agent', id?: string, expectedRevision?: number, transition?: 'completed' | 'active'): ReviewBoard {
+    this.project(projectId);
     const result = this.db.transaction(() => {
       const old = id ? this.review(id, projectId) : undefined;
-      if (old && (old.sessionId !== sessionId || old.revision !== expectedRevision)) throw new WorkbenchError('REVISION_CONFLICT', 'Review changed; read it again and reconcile your edit.', { revision: old.revision });
+      if (old && old.revision !== expectedRevision) throw new WorkbenchError('REVISION_CONFLICT', 'Review changed; read it again and reconcile your edit.', { revision: old.revision });
       if (old?.status === 'completed' && transition !== 'active') throw new WorkbenchError('REVIEW_COMPLETED', 'Review is completed. Explicitly reopen it before editing.');
       if (transition === 'active' && old?.status !== 'completed') throw new WorkbenchError('REVIEW_ACTIVE', 'Review is already active.');
       const finalContent = content ?? old;
@@ -110,8 +120,8 @@ export class Store {
           candidates: Object.fromEntries(cue.candidates.map(c => [c.assetId, previous?.candidates.find(p => p.assetId === c.assetId)?.notes === c.notes ? audit?.candidates[c.assetId] ?? fallback : stamp]))
         }];
       }));
-      const board: ReviewBoard = { title: finalContent.title, cues: finalContent.cues, status: transition ?? 'active', completedAt: transition === 'completed' ? stamp.at : null, completedBy: transition === 'completed' ? origin : null, cueAudit, id: old?.id ?? randomUUID(), projectId, sessionId, revision: stamp.revision, createdAt: old?.createdAt ?? stamp.at, updatedAt: stamp.at, origin };
-      this.db.prepare('INSERT INTO reviews VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,json=excluded.json').run(board.id, projectId, sessionId, board.revision, JSON.stringify(board));
+      const board: ReviewBoard = { title: finalContent.title, cues: finalContent.cues, status: transition ?? 'active', completedAt: transition === 'completed' ? stamp.at : null, completedBy: transition === 'completed' ? origin : null, cueAudit, id: old?.id ?? randomUUID(), projectId, revision: stamp.revision, createdAt: old?.createdAt ?? stamp.at, updatedAt: stamp.at, origin };
+      this.db.prepare('INSERT INTO reviews VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,json=excluded.json').run(board.id, projectId, board.revision, JSON.stringify(board));
       this.db.prepare('INSERT INTO review_history VALUES (?,?,?)').run(board.id, board.revision, JSON.stringify(board));
       return board;
     })();
@@ -143,7 +153,7 @@ export class Store {
   projects(): Project[] { return this.db.prepare('SELECT json FROM projects ORDER BY rowid').all().map(decode<Project>); }
   project(id: string): Project {
     const row = this.db.prepare('SELECT json FROM projects WHERE id=?').get(id);
-    if (!row) throw new Error('Project not found.'); return decode<Project>(row);
+    if (!row) throw new WorkbenchError('NOT_FOUND', 'Project not found.'); return decode<Project>(row);
   }
   createProject(name: string): Project {
     const trimmed = name.trim().slice(0, PROJECT_NAME_MAX);
@@ -265,18 +275,45 @@ export class Store {
     return this.db.prepare('SELECT a.json, a.project_id FROM asset_search s JOIN assets a ON a.id=s.id WHERE asset_search MATCH ? AND a.project_id=? ORDER BY rank').all(match, projectId).map(decodeAsset);
   }
   playground(projectId?: string): Record<string, string[]> {
-    const rows = (projectId
-      ? this.db.prepare(`SELECT conversation_id, json FROM playground WHERE ${IN_PROJECT}`).all(projectId)
-      : this.db.prepare('SELECT conversation_id, json FROM playground').all()) as { conversation_id: string; json: string }[];
-    return Object.fromEntries(rows.map(r => [r.conversation_id, JSON.parse(r.json)]));
+    const rows = (projectId ? this.db.prepare('SELECT * FROM project_playground WHERE project_id=?').all(projectId)
+      : this.db.prepare('SELECT * FROM project_playground').all()) as { project_id: string; json: string }[];
+    return Object.fromEntries(rows.map(row => [row.project_id, JSON.parse(row.json)]));
   }
-  setPlayground(conversationId: string, ids: string[]) {
-    const projectId = this.conversation(conversationId).projectId;
+  setProjectPlayground(projectId: string, ids: string[]) {
+    this.project(projectId);
     for (const id of ids) this.asset(id, projectId);
-    this.db.prepare('INSERT INTO playground VALUES (?,?) ON CONFLICT(conversation_id) DO UPDATE SET json=excluded.json').run(conversationId, JSON.stringify([...new Set(ids)]));
+    this.db.prepare('INSERT INTO project_playground VALUES (?,?) ON CONFLICT(project_id) DO UPDATE SET json=excluded.json').run(projectId, JSON.stringify([...new Set(ids)]));
     this.changed();
   }
-  addToPlayground(conversationId: string, ids: string[]) { this.setPlayground(conversationId, [...(this.playground()[conversationId] ?? []), ...ids]); }
+  setPlayground(conversationId: string, ids: string[]) { this.setProjectPlayground(this.conversation(conversationId).projectId, ids); }
+  addToPlayground(conversationId: string, ids: string[]) {
+    const projectId = this.conversation(conversationId).projectId;
+    this.setProjectPlayground(projectId, [...(this.playground(projectId)[projectId] ?? []), ...ids]);
+  }
+  deleteConversation(id: string) {
+    this.conversation(id);
+    this.db.transaction(() => {
+      for (const table of ['messages', 'tool_calls', 'turns', 'jobs']) this.db.prepare(`DELETE FROM ${table} WHERE conversation_id=?`).run(id);
+      this.db.prepare('DELETE FROM external_requests WHERE session_id=?').run(id);
+      this.db.prepare('DELETE FROM settings WHERE key=?').run(`history/${id}`);
+      this.db.prepare('DELETE FROM conversations WHERE id=?').run(id);
+    })();
+    this.changed();
+  }
+  deleteProject(id: string) {
+    this.project(id);
+    this.db.transaction(() => {
+      this.db.prepare('DELETE FROM review_history WHERE review_id IN (SELECT id FROM reviews WHERE project_id=?)').run(id);
+      this.db.prepare('DELETE FROM reviews WHERE project_id=?').run(id);
+      for (const conversation of this.conversations(id)) this.deleteConversation(conversation.id);
+      this.db.prepare('DELETE FROM asset_search WHERE id IN (SELECT id FROM assets WHERE project_id=?)').run(id);
+      this.db.prepare('DELETE FROM assets WHERE project_id=?').run(id);
+      this.db.prepare('DELETE FROM project_playground WHERE project_id=?').run(id);
+      this.db.prepare('DELETE FROM projects WHERE id=?').run(id);
+      this.activeProjectId();
+    })();
+    this.changed();
+  }
   jobs(projectId?: string): Job[] {
     return (projectId
       ? this.db.prepare(`SELECT json FROM jobs WHERE ${IN_PROJECT} ORDER BY rowid`).all(projectId)
@@ -384,7 +421,7 @@ export class Store {
 }
 
 function normalizeReview(row: unknown): ReviewBoard {
-  const board = decode<ReviewBoard>(row);
+  const { sessionId: _session, ...board } = decode<ReviewBoard & { sessionId?: string }>(row);
   return { ...board, status: board.status ?? 'active', completedAt: board.completedAt ?? null, completedBy: board.completedBy ?? null };
 }
 /** Obsolete repeat scheduling remains in immutable history, never active controls. */

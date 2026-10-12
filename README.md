@@ -7,7 +7,7 @@ single-speaker voice with a chat assistant. [Public source](https://github.com/D
 ## v0.2
 
 Chat occupies a resizable left sidebar. Effects Library, Music Library, Voice Library, and
-conversation-specific Playground views share the right workspace. Generate sound
+project-wide Playground views share the right workspace. Generate sound
 effects through ElevenLabs, music through a configured music target, and voice
 through ElevenLabs or Gemini,
 audition candidates, record feedback, regenerate linked alternatives, and organize
@@ -16,7 +16,7 @@ preserve original bytes. Search includes original prompts, voice transcripts, an
 use needs no provider login.
 
 Work is organized into projects. The project dropdown in the top bar switches between them,
-and each project holds its own conversations plus its own effects, music, and voice libraries,
+and each project holds its own conversations, shared reviews and Playground, plus its own effects, music, and voice libraries,
 while provider configuration and credentials stay app-level. Session titles are editable in
 place, and the assistant names each session as the scope of the work becomes clear. The chat
 composer holds the model and reasoning-effort picker; the palette button in the top bar switches
@@ -71,7 +71,7 @@ Candidate and reference cards show a moving playhead and elapsed/total time, wit
 seek bar available during playback.
 Candidate notes and selection controls sit under each card, with cue feedback and
 manual Loop toggles alongside or below. The Playground header and generation form stay
-in place; **All Playground sounds** returns to the session’s regular results.
+in place; **All Playground sounds** returns to the project’s shared results.
 Selecting a candidate, rejecting all candidates, or marking a cue unreviewed saves
 immediately, including any pending review edits. Notes and other edits can also be
 saved with **Save review**. Save remaining edits before switching reviews or exporting
@@ -245,4 +245,9 @@ Reviews support **Done**, an **Archived** list, and explicit **Reopen**. Done sa
 and locks the review while preserving playback and export. CLI/MCP expose attributed
 completion status, completion-aware waits, and review resource notifications; see
 [agent workflow](docs/agent-workbench.md#completing-and-archiving-reviews).
-Libraries upgrade to schema v4 and cannot be opened by older builds.
+Libraries upgrade to schema v5 and cannot be opened by older builds.
+
+Project and conversation trash buttons open a confirmation before deletion. Deleting a
+conversation preserves project audio, reviews and the shared Playground. Deleting a
+project removes its workspace records; original media files remain on disk. Active work
+must finish first. Existing conversation Playground lists migrate into one shared list.

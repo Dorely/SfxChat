@@ -58,5 +58,12 @@ also returns the current board. MCP review resources support subscription update
 notifications, but host support varies and durable reads/waits are authoritative.
 review_complete can optionally save final content atomically with completion;
 review_reopen explicitly restores editing. Both require expectedRevision and full
-project/session/review scope. Never automatically reopen to bypass REVIEW_COMPLETED;
+project/review scope. Never automatically reopen to bypass REVIEW_COMPLETED;
 follow the user's intent, or start a new review. Reconcile REVISION_CONFLICT first.
+
+Reviews and Playground membership belong to the project, independent of the selected
+conversation. Pass projectId (and reviewId for existing reviews) without sessionId to
+review operations, export_review and set_playground. Generation retains session attribution.
+Delete only on explicit user intent: session_delete removes conversation messages and job
+history but keeps project audio/reviews/Playground; project_delete removes all project
+workspace records. Original media files remain on disk. Wait for active work to finish.

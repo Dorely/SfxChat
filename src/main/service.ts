@@ -60,6 +60,14 @@ export class WorkbenchService {
   private stopped = false;
   constructor(readonly store: Store, readonly media: MediaLibrary, private ports: ServicePorts, private changed: () => void, private diagnostics?: Pick<DiagnosticLog, 'record'>) {}
   private requireOpen() { if (this.stopped) throw new Error('SfxChat is closing.'); }
+  deleteWorkspace(projectId: string, sessionId?: string) {
+    this.requireOpen();
+    // In-flight edits can still publish records after asynchronous media work.
+    if (this.store.db.prepare("SELECT 1 FROM external_requests WHERE status='admitting' LIMIT 1").get() || this.editPromises.size || this.turns.size || this.store.jobs().some(job => ['queued', 'running'].includes(job.status)))
+      throw new Error('Wait for active responses, generation jobs and audio edits to finish before deleting.');
+    if (sessionId) this.store.deleteConversation(sessionId); else this.store.deleteProject(projectId);
+    this.store.ensureConversation(this.store.activeProjectId());
+  }
   settings() { return this.ports.settings(); }
   async snapshot(): Promise<Snapshot> {
     const projectId = this.store.activeProjectId();
@@ -82,7 +90,7 @@ export class WorkbenchService {
       + `\n${voiceInstructions(settings.voiceProviders, settings.activeVoiceId)}`
       + `\n${midiInstructions()}`
       + `\nCurrent project: "${project.name}". Session title: "${conversation.title}" (${titledBy}). This project's sessions and library are the only work visible to you; other projects are separate.`
-      + `\nCurrent comparison board: ${JSON.stringify(this.store.playground()[conversationId] ?? [])}\nCurrent generation jobs: ${JSON.stringify(this.store.jobs().filter(j => j.conversationId === conversationId).map(j => ({ id: j.id, kind: j.kind, status: j.status, assetId: j.assetId })))}`;
+      + `\nCurrent comparison board: ${JSON.stringify(this.store.playground(conversation.projectId)[conversation.projectId] ?? [])}\nCurrent generation jobs: ${JSON.stringify(this.store.jobs().filter(j => j.conversationId === conversationId).map(j => ({ id: j.id, kind: j.kind, status: j.status, assetId: j.assetId })))}`;
   }
   async chatContext(conversationId: string, draft = '') {
     this.requireOpen();
@@ -195,6 +203,7 @@ export class WorkbenchService {
         midiEdit: { kind: 'midi-edit' as const, version: 1 as const, sourceHash: parent.hash, ticksPerQuarter: MIDI_TICKS_PER_QUARTER, requested: composition, outputEncoding: 'smf-1' as const }
       } : {})
     });
+    this.store.requireConversation(conversationId);
     this.store.insertAsset(asset);
     this.store.addToPlayground(conversationId, [asset.id]);
     this.store.addMessage(conversationId, 'tool', parent ? `Saved note edits as “${asset.name}”. The original clip is preserved.` : `Created “${asset.name}” in the MIDI studio.`);
@@ -283,7 +292,7 @@ export class WorkbenchService {
     const projectId = this.store.conversation(conversationId).projectId;
     const imported: Asset[] = [];
     for (const path of paths) {
-      const asset = await this.media.import(path, projectId, kind); this.requireOpen(); this.store.insertAsset(asset); this.store.addToPlayground(conversationId, [asset.id]);
+      const asset = await this.media.import(path, projectId, kind); this.requireOpen(); this.store.requireConversation(conversationId); this.store.insertAsset(asset); this.store.addToPlayground(conversationId, [asset.id]);
       this.store.addMessage(conversationId, 'tool', `Imported “${asset.name}”.`);
       imported.push(asset);
     }
