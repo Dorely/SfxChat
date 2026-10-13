@@ -23,8 +23,11 @@ export async function createFonts(
         initialGain: 0.5,
         polyphony: 64,
       });
-      fonts[track.id] = { synth, font: -1 };
+      fonts[track.id] = { synth, font: -1, presets: new Set() };
       fonts[track.id].font = await synth.loadSFont(bytes);
+      const bank = synth.getSFontObject(fonts[track.id].font);
+      if (!bank) throw new Error('SoundFont could not be loaded.');
+      fonts[track.id].presets = new Set(Array.from(bank.getPresetIterable(), p => `${p.bankNum}:${p.num}`));
     }
     return fonts;
   } catch (error) {

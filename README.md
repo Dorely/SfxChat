@@ -62,6 +62,8 @@ Production WAVs use 48 kHz float32 or PCM24, with aligned stems and an explicit
 tail/loop policy. Long WAV analysis uses bounded reads. See
 [local DSP limitations](docs/research/local-dsp.md) and [verification](docs/verification.md)
 for what has actually been exercised; successful rendering is not listening acceptance.
+The [local creative trials](docs/workstation-trials.md) cover orchestral, house,
+trance and layered game-effect candidates, their revisions and review locations.
 
 Remote services, Gemini analysis,
 cloud sync, automatic updates, signed installers, and other platform packages are

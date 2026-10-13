@@ -1,5 +1,54 @@
 # Local workstation foundation (2026-10-13)
 
+## Subsequent creative trials and UI polish
+
+See [trial inventory](workstation-trials.md) for actual MCP-created projects, renders,
+revisions, package reopening, component alignment and pending listening decisions.
+The final UI pass added descriptive parameter labels/units, integer MIDI controls,
+automatic save after editing pauses, pointer-drag revision grouping, visible conflict
+and export success feedback, named render progress, contextual technique help,
+bounded exact-note pages and a playback sample-peak meter. Project drafts survive
+panel navigation; project-keyed editors isolate asynchronous responses.
+
+Manual browser evidence: Studio instrument and note panels were inspected at normal
+width and 1100×800, with Studio and Daylight themes; original theme/viewport restored.
+Live expression edits saved revisions 7/8 in the foundation arrangement. Nine-track
+orchestral section playback advanced to beat 39.39 with sample peak 0.06012; Rewind
+stopped it. Technique guide loaded the exact shared music-craft reference. MCP
+review_open displayed initial/revised cards without playback; browser error/warning
+logs were empty at those checks. Playback observations are not listening evidence.
+
+Final rebuild/typecheck passed after the polish pass. The final browser host reopened
+the saved orchestral revision with playback stopped; exact-note pagination displayed
+its bounded page controls. The final MCP MIDI export produced nine format-1 files
+and the explicit limitations manifest. All 206 relative links in changed Markdown
+resolved. Final running/build/installed guidance SHA-256:
+`f6b853bcf15fdb9d8459b69a5a2af192808c809e43e95de5cbac8c6ea6ccc1b1`.
+Validation audio/hosts were stopped and task-owned temporary clients/exports removed.
+User deliverables remain in the Music folder identified in the trial inventory.
+
+Additional actual MCP checks:
+
+- Local catalog enumerated 287 presets from the selected GeneralUser bank.
+  An unavailable bank/program failed visibly with no published audio.
+- Repeated PCM24 foundation render had identical SHA-256
+  `4145d669197da2d590018007afb2c273c41aee4228859cff233e0cc356be8d72`.
+  Replaying the exact request ID recovered the same completed job.
+- Legacy MIDI creation and arrangement derivation preserved the original hash and
+  four notes, including a 1/3-beat onset. No original MIDI was rewritten.
+- Installed skill was refreshed through the supported installer, retaining backups.
+  Running MCP, build and installed guidance hashes matched; topic-selective reads
+  returned only requested references. General musical guidance was retrieved during
+  every creative workflow. No hardcoded genre profiles were added.
+
+Gaps: no recorded device-output comparison against offline WAV, no native packaged
+desktop run of the new WASM path, no 32-SoundFont-track stress run, and no exhaustive
+manual permutation of every editor/routing/automation control. The verified capacity
+case was 32 subtractive tracks over ten minutes; live SoundFont evidence was nine
+tracks. Human listening acceptance is pending. No automated test suites were run.
+
+## Foundation evidence
+
 Ran typecheck, production build, diff whitespace checks and the real browser host
 against the existing library. No automated suites or test-only scaffolding added.
 A temporary external stdio client initialized the newly built MCP server, discovered

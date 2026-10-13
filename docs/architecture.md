@@ -563,8 +563,6 @@ and a diagnostic reference only after a successful log write. Logging failures n
 replace the original error. The fixed `openLogs` IPC operation opens only the
 profile's logs directory. There is no arbitrary-path or log-reading renderer API.
 
-## Verification boundaries
-
 ## Local arrangement workstation
 
 Schema v6 transactionally adds project-owned arrangement documents, immutable
@@ -583,7 +581,10 @@ source audio and bank hashes are verified without silent substitution. Existing
 MIDI playback retains its native helper. Sources are decoded through the same
 canonical main-process decoder for browser playback and export.
 
-The renderer owns draft editing and user-started playback only. Studio panels expose
+The renderer owns draft editing and user-started playback only. Edits save after a
+short idle interval; a pointer drag previews continuously and saves after release.
+In-flight responses preserve newer drafts, conflicts remain visible, and per-project
+drafts survive panel navigation within the renderer session. Studio panels expose
 arrangement/section editing, notes/drums, instruments/sample regions, mixing/effects,
 automation, jobs/export and history. Parameter drafts update the shared live core.
 Rendered assets retain exact recipe, engine identity, source hashes, parameters,

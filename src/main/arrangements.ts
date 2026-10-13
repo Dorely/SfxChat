@@ -197,8 +197,10 @@ export class Arrangements {
   ): Promise<unknown> {
     const { projectId, arrangementId } = a;
     switch (name) {
-      case "local_catalog":
-        return localCatalog;
+      case "local_catalog": {
+        try { const {name, hash, presets} = await this.font(); return {...localCatalog, soundfont: {name, hash, presets}}; }
+        catch (error) { return {...localCatalog, soundfont: {unavailable: error instanceof Error ? error.message : String(error)}}; }
+      }
       case "arrangement_create":
         return this.save(projectId, a.document, origin);
       case "arrangement_list":
@@ -711,7 +713,7 @@ export class Arrangements {
     }
     const limitations = [
       'One Standard MIDI File per track, all starting at beat zero, with tempo/meter changes and section markers. Notes round to 480 ticks per quarter note.',
-      'SoundFont expression, pedal, pan, volume, and pitch bend are exported; linear controller automation is sampled at 24 points per beat. Gains above 1 are clamped in MIDI.',
+      'Expression, pedal, pan, volume, pitch bend, program and bank automation are exported; linear controllers are sampled at 24 points per beat. Gains above 1 are clamped. The initial drum bank selects channel 10; changing between melodic and percussion channel routing requires audio export.',
       'Synth patches, audio clips, effects, sends, mute/solo, and non-MIDI automation require arrangement/audio export. MIDI does not preserve the rendered timbre.'
     ];
     for (const [i, track] of record.document.tracks.entries()) {
@@ -739,6 +741,7 @@ export class Arrangements {
       );
     if (manifest.version !== 1 || !Array.isArray(manifest.sources))
       throw new Error("Unsupported arrangement package.");
+    if (manifest.engine !== ENGINE_VERSION) throw new Error(`Package requires engine ${manifest.engine}; this app provides ${ENGINE_VERSION}. No automatic sound substitution was made.`);
     let doc = validateArrangement(manifest.record?.document);
     if (doc.soundfontHash) {
       if (manifest.soundfont?.hash !== doc.soundfontHash || manifest.soundfont?.file !== 'soundfont.sf2') throw new Error('Package SoundFont dependency is missing.');

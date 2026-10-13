@@ -14,6 +14,7 @@ class ArrangementOutput extends AudioWorkletProcessor {
   private ended = false;
   private consumed = 0;
   private waiting = false;
+  private peak = 0;
   constructor() {
     super();
     this.port.onmessage = (event) => {
@@ -32,6 +33,7 @@ class ArrangementOutput extends AudioWorkletProcessor {
       const block = this.queue[0];
       if (!block) break;
       output[0][i] = block.left[this.offset];
+      this.peak = Math.max(this.peak, Math.abs(block.left[this.offset]), Math.abs(block.right[this.offset]));
       if (output[1]) output[1][i] = block.right[this.offset];
       this.consumed = block.start + this.offset;
       this.offset++;
@@ -44,11 +46,14 @@ class ArrangementOutput extends AudioWorkletProcessor {
       this.waiting = true;
       this.input.postMessage("more");
     }
-    if (this.consumed % 2048 < 128 || (this.ended && !this.queue.length))
+    if (this.consumed % 2048 < 128 || (this.ended && !this.queue.length)) {
       this.port.postMessage({
         frame: this.consumed,
+        peak: this.peak,
         ended: this.ended && !this.queue.length,
       });
+      this.peak = 0;
+    }
     return !(this.ended && !this.queue.length);
   }
 }

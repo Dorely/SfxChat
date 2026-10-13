@@ -1,4 +1,5 @@
 .arr-studio {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -20,7 +21,11 @@
 }
 .arr-studio button {
   cursor: pointer;
+  transition: background .12s, border-color .12s;
 }
+.arr-studio :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.arr-studio button.primary-button { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.arr-studio input[type="checkbox"], .arr-studio input[type="range"] { accent-color: var(--accent); }
 .arr-studio button:disabled {
   opacity: 0.45;
   cursor: default;
@@ -62,6 +67,9 @@
 .arr-toolbar select {
   max-width: 240px;
 }
+.arr-toolbar > select:first-child { flex: 1; min-width: 180px; max-width: 340px; }
+.arr-toolbar > span { font-size: 11px; color: var(--muted); }
+.arr-toolbar { background: var(--surface-2); }
 .arr-transport {
   font-size: 12px;
 }
@@ -71,19 +79,24 @@
 }
 .arr-tabs {
   gap: 4px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  flex-shrink: 0;
 }
+.arr-tabs button { white-space: nowrap; border-color: transparent; background: transparent; font-size: 12px; }
 .arr-tabs .active,
 .arr-tracks .active {
   background: var(--accent);
-  color: var(--bg);
+  color: var(--accent-ink);
 }
+.arr-studio .arr-tabs button.active:hover, .arr-studio .arr-tracks button.active:hover { background: var(--accent); color: var(--accent-ink); }
 .arr-body {
   display: flex;
   flex: 1;
   min-height: 0;
 }
 .arr-tracks {
-  width: 155px;
+  width: 165px;
   flex-shrink: 0;
   padding: 12px;
   overflow: auto;
@@ -95,6 +108,8 @@
   width: 100%;
   margin: 5px 0;
   text-align: left;
+  overflow-wrap: anywhere;
+  padding: 10px;
 }
 .arr-tracks small {
   opacity: 0.7;
@@ -105,7 +120,14 @@
   min-width: 0;
   overflow: auto;
   padding: 18px;
+  scrollbar-gutter: stable;
 }
+.arr-panel-help { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 18px; }
+.arr-panel-help p { margin: 0; flex: 1; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.arr-panel-help button { flex-shrink: 0; font-size: 11px; }
+.arr-notice { padding: 10px 14px; border-bottom: 1px solid var(--accent-line); color: var(--text-2); background: var(--accent-soft); font-size: 12px; overflow-wrap: anywhere; }
+.arr-meter meter { width: 75px; height: 12px; }
+.arr-meter span { font-variant-numeric: tabular-nums; min-width: 66px; }
 .arr-row {
   display: flex;
   gap: 10px;
@@ -136,6 +158,8 @@
   border-bottom: 1px solid var(--line);
   padding: 10px 0;
 }
+.arr-effects details { padding: 12px; margin: 10px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.arr-panel summary { font-weight: 600; }
 .arr-panel summary {
   cursor: pointer;
 }
@@ -204,6 +228,7 @@
   padding: 0;
   background: var(--accent);
 }
+.arr-roll-scale { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 11px; margin-top: -10px; margin-bottom: 12px; }
 .arr-note-table {
   max-height: 350px;
   overflow: auto;
@@ -235,6 +260,8 @@
   min-width: 180px;
   border: 1px solid var(--line);
   padding: 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
 }
 .arr-automation {
   width: 100%;
@@ -259,10 +286,28 @@
 }
 .arr-guide {
   line-height: 1.65;
+  font-family: inherit;
+  max-width: 80ch;
 }
 .arr-section {
   padding: 6px 0;
 }
 .arr-section > input {
   width: 100%;
+}
+@container (max-width: 700px) {
+  .arr-tracks { width: 130px; padding: 8px; }
+  .arr-panel { padding: 12px; }
+  .arr-panel-help { align-items: start; flex-direction: column; }
+  .arr-parameters { grid-template-columns: 1fr; }
+  .arr-toolbar, .arr-transport { padding: 8px; gap: 6px; }
+  .arr-lane > span { width: 85px; }
+}
+@container (max-width: 460px) {
+  .arr-body { flex-direction: column; }
+  .arr-tracks { width: 100%; max-height: 110px; display: flex; gap: 6px; overflow: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .arr-tracks h3 { display: none; }
+  .arr-tracks button { min-width: 115px; width: 115px; flex-shrink: 0; font-size: 11px; }
+  .arr-toolbar > select:first-child { max-width: none; }
+  .arr-meter { display: none !important; }
 }

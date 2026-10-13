@@ -17,6 +17,7 @@ export class ArrangementPlayer {
       playing: boolean;
       beat?: number;
       error?: string;
+      peak?: number;
     }) => void,
   ) {}
   stop() {
@@ -84,6 +85,7 @@ export class ArrangementPlayer {
         else
           this.report({
             playing: true,
+            peak: e.data.peak,
             beat: Math.min(endBeat ?? document.length, secondsBeat(document, e.data.frame / context.sampleRate)),
           });
       };

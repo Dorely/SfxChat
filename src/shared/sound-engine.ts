@@ -26,6 +26,7 @@ export interface SoundfontVoice {
 export interface FontState {
   synth: SoundfontVoice;
   font: number;
+  presets: Set<string>;
 }
 interface Event {
   frame: number;
@@ -133,6 +134,8 @@ class Processor {
       Math.round(valueOf(p, "time") * this.rate),
     );
     for (let i = 0; i < buffer[0].length; i++) {
+      let compression = 1;
+      if (effect.type === 'compressor') {
       const level = Math.max(
         Math.abs((sidechain ?? buffer)[0][i]),
         Math.abs((sidechain ?? buffer)[1][i]),
@@ -150,7 +153,8 @@ class Processor {
         20 * Math.log10(Math.max(1e-9, this.envelope)) -
           valueOf(p, "threshold"),
       );
-      const compression = db(-over * (1 - 1 / valueOf(p, "ratio")));
+      compression = db(-over * (1 - 1 / valueOf(p, "ratio")));
+      }
       for (let ch = 0; ch < 2; ch++) {
         const x = buffer[ch][i];
         let y = x;
@@ -518,6 +522,7 @@ export class SoundEngine {
       let cursor = this.cursors.get(id)!;
       if (font) {
         const p = track.instrument.params;
+        if (!font.presets.has(`${Math.round(valueOf(p, 'bank'))}:${Math.round(valueOf(p, 'program'))}`)) throw new Error(`SoundFont preset is unavailable on track ${track.name}. Choose a preset from the local catalog.`);
         font.synth.midiProgramSelect(
           0,
           font.font,

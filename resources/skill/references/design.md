@@ -28,12 +28,12 @@ generate_sounds for isolated sounds and textures even when they are musical: a s
 bell, riser, chord, or impact is an effect. Choose by the requested deliverable -
 length, structure, vocals - not by whether the word "music" appears.
 
-Decide the musical brief before prompting. Genre, mood, instrumentation, tempo in
-BPM, key, production era, vocal or instrumental intent, and structure are answered by
-the provider whether or not anyone specifies them, and an unspecified one is answered
-with the most statistically average choice. Lead with genre and era; name specific
-instruments when they matter; state tempo and key when the track may be layered with
-other material. Use production vocabulary because it moves real levers: sidechained,
+Decide which musical choices matter before prompting: focal idea, instrumentation,
+tempo, harmonic context, vocal or instrumental intent, development and space.
+Derive style choices from the user's brief. There is no built-in genre profile or
+required order of composition. Name instruments when they matter; state tempo and
+key when the track may be layered with other material. Production vocabulary can
+make an intention more concrete, though provider adherence is not guaranteed: sidechained,
 close-mic'd, bone-dry, tape saturation, plate reverb. Without that vocabulary,
 describe the space or the reference ("sounds like it was recorded in a stairwell")
 instead of stacking adjectives. Narrate arrangements in order the way a band would be
@@ -41,10 +41,10 @@ briefed: "start with just a shuffled drum loop, add a warm sub bassline after fo
 bars, then bring in chopped vocal stabs for the drop". Words such as start with, just,
 then, and bring in carry the timing, and an unmarked silence gets filled.
 
-A loop is a request for exclusion, not just length. State the bars, tempo, and key and
-state what must not appear: "boom bap drum break, 90 BPM, dusty and swung, four bars,
-no melody - just drums". Set the instrumental flag whenever vocals are unwanted,
-because most music prompts produce them by default. Write lyrics out when the user
+A loop requires a deliberate boundary as well as a length. State relevant timing,
+texture and exclusions, for example "four-bar repeating percussion phrase, 90 BPM,
+soft accents, no melody". Use the provider's supported instrumental control when
+vocals are unwanted; do not assume a universal vocal default. Write lyrics out when the user
 has them, tagging sections and using parentheses for backing vocals, or ask the
 provider to write them by describing the narrative, emotion, and key phrases. Put
 timing that matters inside the prompt ("lyrics begin at 15 seconds", instrumental

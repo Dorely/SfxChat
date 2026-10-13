@@ -115,7 +115,8 @@ async function run() {
       sum = 0,
       clipped = 0,
       silent = 0,
-      count = 0;
+      count = 0,
+      lastProgressFrame = 0;
     try {
       await file.write(header(frames, float));
       const head: number[][] = [[], []],
@@ -156,7 +157,8 @@ async function run() {
             }
           await file.write(encode(block, float));
         }
-        if (engine.frame % (128 * 256) === 0) {
+        if (engine.frame - lastProgressFrame >= 128 * 256) {
+          lastProgressFrame = engine.frame;
           parentPort!.postMessage({
             progress:
               (outputIndex + engine.frame / (startFrame + frames)) /

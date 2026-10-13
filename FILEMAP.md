@@ -16,6 +16,7 @@ is recorded in [verification](docs/verification.md).
 | [src/renderer/ArrangementStudio.tsx](src/renderer/ArrangementStudio.tsx), [arrangement.css](src/renderer/arrangement.css) | Manual arrangement, note/drum, instrument, mixer, automation, revision and export editors. |
 | [src/renderer/arrangement-player.ts](src/renderer/arrangement-player.ts), [arrangement-worker.ts](src/renderer/arrangement-worker.ts), [arrangement-worklet.ts](src/renderer/arrangement-worklet.ts) | User-controlled worker/worklet transport and shared-core live rendering. |
 | [docs/research/local-dsp.md](docs/research/local-dsp.md) | DSP sources, algorithm limits and licensing boundaries. |
+| [docs/workstation-trials.md](docs/workstation-trials.md) | Actual MCP creative trials, preservation evidence, exported candidate inventory and pending listening decisions. |
 | [third-party/wasm-synthesis](third-party/wasm-synthesis/README.md) | Pinned WASM engine sources, hashes, licenses and rebuild directions. |
 | [resources/skill/references/arranging.md](resources/skill/references/arranging.md), [synthesis.md](resources/skill/references/synthesis.md), [mixing.md](resources/skill/references/mixing.md), [sound-design.md](resources/skill/references/sound-design.md), [local-workflow.md](resources/skill/references/local-workflow.md) | General musical/sound-design guidance and local operation workflow, routed by the canonical guidance manifest. |
 
@@ -99,7 +100,7 @@ is recorded in [verification](docs/verification.md).
 | [src/main/providers/generic/anthropic.ts](src/main/providers/generic/anthropic.ts) | Anthropic Messages transport with tool_use/tool_result translation. |
 | [src/main/providers/generic/registry.ts](src/main/providers/generic/registry.ts) | Provider/model validation, base-URL normalization, and effort parsing. |
 | [src/main/providers/generic/capabilities.ts](src/main/providers/generic/capabilities.ts) | Capability probes, max-tokens discovery, vision/audio flags, and tool filtering. |
-| [src/main/store.ts](src/main/store.ts) | SQLite schema v5 migrations, project reviews/shared Playground, lifecycle locks/history, workspace deletion and request replay, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
+| [src/main/store.ts](src/main/store.ts) | SQLite schema v6 migrations, project reviews/shared Playground, lifecycle locks/history, workspace deletion and request replay, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
 | [src/main/media.ts](src/main/media.ts) | Original/chat storage, import, integrity checks, PCM16 conversion, serialized editing/analysis, and bounded decoded cache. |
 | [src/main/audio.ts](src/main/audio.ts) | Bounded MP3/WAV decode, timestamped amplitude windows, energy event detection, loop-seam probing, exact sample-frame trims, loop crossfades, fades, mono WAV clip rendering, and float32 WAV rendering. |
 | [src/main/png.ts](src/main/png.ts) | Minimal 8-bit RGB PNG encoder over Node zlib (filter 0 scanlines, hand-rolled CRC32 and chunks). |

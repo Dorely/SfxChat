@@ -75,23 +75,42 @@ export function writeArrangementMidi(doc: Arrangement, track: Track): Buffer {
   const events: Event[] = [{ tick: 0, order: 0, bytes: textEvent(0x03, track.name) }];
   const cc = (at: number, controller: number, value: number) => events.push({ tick: tick(at), order: 1, bytes: [0xb0 | channel, controller, Math.max(0, Math.min(127, Math.round(value)))] });
   const bend = (at: number, value: number) => { const n = Math.max(0, Math.min(16383, Math.round(8192 + value * 4096))); events.push({ tick: tick(at), order: 1, bytes: [0xe0 | channel, n & 127, n >> 7] }); };
+  const programAt = (beat: number) => {
+    let value = valueOf(p, 'program');
+    for (const lane of track.automation.filter(l => l.target === 'instrument.program')) {
+      let i = lane.points.length - 1;
+      while (i >= 0 && lane.points[i].beat > beat) i--;
+      if (i < 0) continue;
+      const a = lane.points[i], b = lane.points[i + 1];
+      value = b && lane.interpolation === 'linear' ? a.value + (b.value - a.value) * (beat - a.beat) / (b.beat - a.beat) : a.value;
+    }
+    return Math.round(value);
+  };
   cc(0, 7, track.gain * 127); cc(0, 10, (track.pan + 1) * 63.5);
   if (track.instrument.type === 'soundfont') {
     if (channel !== 9) { cc(0, 0, 0); cc(0, 32, valueOf(p, 'bank')); }
     events.push({ tick: 0, order: 2, bytes: [0xc0 | channel, Math.round(valueOf(p, 'program'))] });
     cc(0, 11, valueOf(p, 'expression')); cc(0, 64, valueOf(p, 'pedal')); bend(0, valueOf(p, 'pitchBend'));
+  }
     for (const lane of track.automation) {
       const control = lane.target === 'instrument.expression' ? 11 : lane.target === 'instrument.pedal' ? 64 : lane.target === 'gain' ? 7 : lane.target === 'pan' ? 10 : -1;
-      if (control < 0 && lane.target !== 'instrument.pitchBend') continue;
+      if (control < 0 && !['instrument.pitchBend', 'instrument.program', 'instrument.bank'].includes(lane.target)) continue;
       for (let i = 0; i < lane.points.length; i++) {
         const a = lane.points[i], b = lane.points[i + 1];
         const steps = b && lane.interpolation === 'linear' ? Math.max(1, Math.ceil((b.beat - a.beat) * 24)) : 1;
         for (let step = 0; step < steps; step++) { const at = b && lane.interpolation === 'linear' ? a.beat + (b.beat - a.beat) * step / steps : a.beat, v = b && lane.interpolation === 'linear' ? a.value + (b.value - a.value) * step / steps : a.value;
-          if (control >= 0) cc(at, control, lane.target === 'gain' ? v * 127 : lane.target === 'pan' ? (v + 1) * 63.5 : v); else bend(at, v);
+          if (events.length > 500000) throw new Error('MIDI automation exceeds export event limit.');
+          if (control >= 0) cc(at, control, lane.target === 'gain' ? v * 127 : lane.target === 'pan' ? (v + 1) * 63.5 : v);
+          else if (lane.target === 'instrument.program') events.push({tick: tick(at), order: 2, bytes: [0xc0 | channel, Math.round(v)]});
+          else if (lane.target === 'instrument.bank') {
+            cc(at, 0, Math.floor(Math.round(v) / 128)); cc(at, 32, Math.round(v) % 128);
+            // Bank select takes effect only with a following program change.
+            events.push({tick: tick(at), order: 2, bytes: [0xc0 | channel, programAt(at)]});
+          }
+          else bend(at, v);
         }
       }
     }
-  }
   for (const clip of track.clips) {
     const pattern = doc.patterns.find(p => p.id === clip.patternId); if (!pattern) continue;
     for (let at = 0; at < clip.length; at += pattern.length) {

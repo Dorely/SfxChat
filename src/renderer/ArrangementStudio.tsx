@@ -15,6 +15,7 @@ import {
   automationSchema,
   clipSchema,
   validateArrangement,
+  sourceIds,
   beatSeconds,
   type Arrangement,
   type ArrangementRecord,
@@ -34,6 +35,18 @@ import { workbench } from "./ReviewPanel";
 import "./arrangement.css";
 
 const uid = () => crypto.randomUUID();
+const draftCache = new Map<string, {record: ArrangementRecord; draft: Arrangement}>();
+const parameterLabel = (key: string) => ({ gain: 'Level', attack: 'Attack (s)', decay: 'Decay (s)', release: 'Release (s)', cutoff: 'Cutoff (Hz)', detune: 'Detune (cents)', lfoRate: 'Modulation rate (Hz)', lfoDepth: 'Modulation depth', fmRatio: 'FM ratio', fmIndex: 'FM amount', rootPitch: 'Root MIDI note', sampleStart: 'Region start (s)', sampleEnd: 'Region end (s; 0 = full)', grainSize: 'Grain length (s)', grainDensity: 'Grains per second', grainSpread: 'Grain spread', pitchFall: 'Pitch fall (semitones)', program: 'GM program (0–127)', bank: 'Bank (128 = drums)', expression: 'Expression', pedal: 'Sustain pedal', pitchBend: 'Pitch bend (semitones)', threshold: 'Threshold (dB)', time: 'Delay time (s)', eqDb: 'Low-band gain (dB)' } as Record<string, string>)[key] ?? key[0].toUpperCase() + key.slice(1);
+const integerParameter = (key: string) => ['program', 'bank', 'expression', 'pedal', 'rootPitch', 'loop', 'reverse'].includes(key);
+const panelHelp: Record<string, [string, string]> = {
+  Arrange: ['local-workflow', 'Build sections and give each track a clear role. Positions use quarter-note beats.'],
+  Notes: ['music-craft', 'Patterns are reusable. Edit a shared pattern to change every placement; duplicate it for a variation.'],
+  Instrument: ['synthesis', 'Shape the source sound. Changes preview during playback; source changes require a fresh Play.'],
+  Mix: ['mixing', 'Balance tracks, shape tone, and send several parts into a shared space.'],
+  Automation: ['mixing', 'Draw change over time. Automation overrides the corresponding manual control during playback.'],
+  'Render & export': ['local-workflow', 'Render the saved revision in the background, then compare candidates in the Playground.'],
+  History: ['local-workflow', 'Compare and restore saved revisions. Restoring creates a new revision and preserves history.'],
+};
 function NumberField({
   label,
   value,
@@ -83,14 +96,14 @@ function Parameters({
           value = values[key] ?? fallback;
         return (
           <label key={key}>
-            {key}
+            {parameterLabel(key)}
             <span className="arr-parameter-value">
               <input
                 aria-label={`${key} slider`}
                 type="range"
                 min={min}
                 max={max}
-                step={(max - min) / 1000}
+                step={integerParameter(key) ? 1 : (max - min) / 1000}
                 value={value}
                 onChange={(e) => change({ ...values, [key]: +e.target.value })}
               />
@@ -99,7 +112,7 @@ function Parameters({
                 type="number"
                 min={min}
                 max={max}
-                step={(max - min) / 1000}
+                step={integerParameter(key) ? 1 : (max - min) / 1000}
                 value={Number(value.toFixed(4))}
                 onChange={(e) => {
                   if (Number.isFinite(e.target.valueAsNumber))
@@ -234,8 +247,12 @@ export default function ArrangementStudio({
     [draft, setDraft] = useState<Arrangement | null>(null);
   const [selectedTrack, selectTrack] = useState(""),
     [selectedPattern, selectPattern] = useState(""),
+    [notePage, setNotePage] = useState(0),
     [panel, setPanel] = useState("Arrange");
   const [error, setError] = useState(""),
+    [notice, setNotice] = useState(''),
+    [dragging, setDragging] = useState(false),
+    [peak, setPeak] = useState(0),
     [busy, setBusy] = useState(false),
     [playing, setPlaying] = useState(false),
     [position, setPosition] = useState(0),
@@ -256,16 +273,21 @@ export default function ArrangementStudio({
     undo = useRef<number[]>([]),
     redo = useRef<number[]>([]),
     current = useRef(record);
+  const draftRef = useRef(draft), failedSave = useRef('');
+  draftRef.current = draft;
   current.current = record;
   if (!player.current)
     player.current = new ArrangementPlayer((state) => {
       setPlaying(state.playing);
       if (state.beat !== undefined) setPosition(state.beat);
       if (state.error) setError(state.error);
+      if (state.peak !== undefined) setPeak(state.peak);
+      if (!state.playing) setPeak(0);
     });
   const run = async <T,>(action: () => Promise<T>): Promise<T | undefined> => {
     setBusy(true);
     setError("");
+    setNotice('');
     try {
       return await action();
     } catch (e) {
@@ -297,8 +319,12 @@ export default function ArrangementStudio({
         : (next.document.patterns[0]?.id ?? ""),
     );
   };
+  useEffect(() => {
+    if (record && draft) draftCache.set(record.projectId, {record, draft});
+  }, [record, draft]);
   const load = (id: string) =>
     run(async () => {
+      if (draft && record && JSON.stringify(draft) !== JSON.stringify(record.document)) throw new Error('Save or discard your draft before opening another revision.');
       player.current!.stop();
       const next = await workbench<ArrangementRecord>("arrangement_get", {
           projectId,
@@ -309,8 +335,14 @@ export default function ArrangementStudio({
       redo.current = [];
     });
   useEffect(() => {
-    setRecord(null);
-    setDraft(null);
+    const cached = draftCache.get(projectId);
+    setRecord(cached?.record ?? null);
+    setDraft(cached?.draft ?? null);
+    if (cached) {
+      selectTrack(cached.draft.tracks[0]?.id ?? '');
+      selectPattern(cached.draft.patterns[0]?.id ?? '');
+      undo.current = Array.from({length: cached.record.revision - 1}, (_, i) => i + 1);
+    }
     player.current!.stop();
     void run(refresh);
     const unsub = window.sfx.onChanged(() => {
@@ -353,15 +385,20 @@ export default function ArrangementStudio({
         .then(setHistory)
         .catch((e) => setError(String(e)));
   }, [record]);
-  const edit = (change: (doc: Arrangement) => void) =>
-    setDraft((old) => {
-      if (!old) return old;
+  const edit = (change: (doc: Arrangement) => void) => {
+      const old = draftRef.current;
+      if (!old) return;
       const next = structuredClone(old);
       change(next);
-      return next;
-    });
+      if (JSON.stringify(sourceIds(old)) !== JSON.stringify(sourceIds(next)) || JSON.stringify(old.tracks.map(t => [t.id, t.instrument.type])) !== JSON.stringify(next.tracks.map(t => [t.id, t.instrument.type]))) player.current!.stop();
+      draftRef.current = next;
+      setDraft(next);
+    };
   const track = draft?.tracks.find((t) => t.id === selectedTrack),
     pattern = draft?.patterns.find((p) => p.id === selectedPattern);
+  const rollLow = Math.min(36, ...(pattern?.notes.map(n => n.pitch) ?? [])), rollHigh = Math.max(84, ...(pattern?.notes.map(n => n.pitch) ?? [])), rollRows = rollHigh - rollLow + 1;
+  const page = Math.min(notePage, Math.max(0, Math.ceil((pattern?.notes.length ?? 0) / 128) - 1));
+  useEffect(() => setNotePage(0), [selectedPattern]);
   const save = async () => {
     if (!record || !draft) return;
     const parsed = validateArrangement(draft),
@@ -402,13 +439,31 @@ export default function ArrangementStudio({
       expectedRevision: record.revision,
       edits,
     });
-    accept(next);
+    setRecord(next);
+    // A response must never overwrite edits made while it was in flight.
+    if (JSON.stringify(draftRef.current) === JSON.stringify(draft)) setDraft(structuredClone(next.document));
     undo.current.push(record.revision);
     redo.current = [];
     return next;
   };
   const dirty =
     !!record && JSON.stringify(draft) !== JSON.stringify(record.document);
+  useEffect(() => {
+    if (!dirty || busy || dragging || !draft) return;
+    const fingerprint = JSON.stringify(draft);
+    if (failedSave.current === fingerprint) return;
+    const timer = window.setTimeout(() => {
+      failedSave.current = fingerprint;
+      void run(save).then(result => { if (result) failedSave.current = ''; });
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [draft, record, busy, dragging]);
+  useEffect(() => {
+    const release = () => setDragging(false);
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
+    return () => { window.removeEventListener('pointerup', release); window.removeEventListener('pointercancel', release); };
+  }, []);
   const updateTrack = (change: (track: Track) => void) =>
     edit((d) => {
       const t = d.tracks.find((t) => t.id === selectedTrack);
@@ -416,11 +471,13 @@ export default function ArrangementStudio({
     });
   const create = () =>
     run(async () => {
+      if (dirty) throw new Error('Save or discard your draft before creating an arrangement.');
       const next = await workbench<ArrangementRecord>("arrangement_create", {
         projectId,
         document: { name: "Untitled arrangement" },
       });
       accept(next);
+      undo.current = []; redo.current = [];
     });
   const restore = (revision: number, mode: 'restore' | 'undo' | 'redo' = 'restore') =>
     run(async () => {
@@ -439,10 +496,11 @@ export default function ArrangementStudio({
       else { undo.current.push(record.revision); redo.current = []; }
     });
   return (
-    <section className="arr-studio">
+    <section className="arr-studio" onPointerDown={e => { if ((e.target as HTMLElement).matches('input[type="range"]')) setDragging(true); }}>
       <header className="arr-toolbar">
         <select
           aria-label="Arrangement"
+          disabled={busy || dirty}
           value={record?.id ?? ""}
           onChange={(e) => void load(e.target.value)}
         >
@@ -453,11 +511,12 @@ export default function ArrangementStudio({
             </option>
           ))}
         </select>
-        <button onClick={create} disabled={busy}>
+        <button onClick={create} disabled={busy || dirty}>
           New arrangement
         </button>
         <select
           aria-label="Open MIDI in workstation"
+          disabled={busy || dirty}
           defaultValue=""
           onChange={(e) => {
             if (e.target.value)
@@ -508,9 +567,10 @@ export default function ArrangementStudio({
               Redo
             </button>
             <span>
-              {dirty ? "Unsaved changes" : `Revision ${record.revision}`}
+              {busy ? 'Working…' : dirty ? 'Draft · saving after edit' : `Saved · revision ${record.revision}`}
             </span>
-            <button onClick={() => void load(record.id)}>Reload</button>
+            <button disabled={busy || dirty} onClick={() => void load(record.id)}>Reload</button>
+            {dirty && <button disabled={busy} onClick={() => { setDraft(structuredClone(record.document)); setError(''); }}>Discard draft</button>}
           </>
         )}
       </header>
@@ -519,6 +579,8 @@ export default function ArrangementStudio({
           {error}
         </div>
       )}
+      {notice && <div role="status" className="arr-notice">{notice}</div>}
+      {record && list.some(r => r.id === record.id && r.revision > record.revision) && <div className="arr-notice">A newer revision is available. Your draft is preserved; discard it or reconcile before reloading.</div>}
       {!draft ? (
         <div className="arr-empty">
           <h2>Local workstation</h2>
@@ -592,7 +654,8 @@ export default function ArrangementStudio({
               min={0}
               max={draft.length}
             />
-            <span>{beatSeconds(draft, draft.length).toFixed(1)} seconds</span>
+            <span>{beatSeconds(draft, draft.length).toFixed(1)} seconds · {draft.tracks.length} tracks</span>
+            <label className="arr-meter">Output <meter min={0} max={1} value={peak} aria-label="Playback sample peak" /> <span>{playing ? (20 * Math.log10(Math.max(1e-5, peak))).toFixed(1) + ' dBFS' : 'Stopped'}</span></label>
             <select
               aria-label="Playback section"
               value={sectionId}
@@ -623,6 +686,7 @@ export default function ArrangementStudio({
               <button
                 key={p}
                 className={panel === p ? "active" : ""}
+                aria-pressed={panel === p}
                 onClick={() => setPanel(p)}
               >
                 {p}
@@ -670,6 +734,7 @@ export default function ArrangementStudio({
               )}
             </aside>
             <main className="arr-panel">
+              {panelHelp[panel] && <div className="arr-panel-help"><p>{panelHelp[panel][1]}</p><button onClick={() => { setTopic(panelHelp[panel][0] + '.md'); setPanel('Guide'); void run(async () => { const g = await workbench<{documents: Record<string,string>}>('guidance', {topics: [panelHelp[panel][0]]}); setHelp(g.documents); }); }}>Technique guide</button></div>}
               {panel === "Arrange" && (
                 <>
                   <div className="arr-row">
@@ -1132,6 +1197,9 @@ export default function ArrangementStudio({
                       New pattern
                     </button>
                     {pattern && (
+                      <button onClick={() => { const copy = structuredClone(pattern); copy.id = uid(); copy.name += ' variation'; edit(d => d.patterns.push(copy)); selectPattern(copy.id); }}>Duplicate pattern</button>
+                    )}
+                    {pattern && (
                       <button
                         onClick={() =>
                           edit((d) => {
@@ -1188,6 +1256,7 @@ export default function ArrangementStudio({
                       </div>
                       <div
                         className="arr-roll"
+                        style={{height: Math.min(520, rollRows * 8)}}
                         aria-label="Piano roll; click to add a note"
                         onClick={(e) => {
                           if (e.target !== e.currentTarget) return;
@@ -1200,13 +1269,13 @@ export default function ArrangementStudio({
                                   4,
                               ) / 4,
                             pitch = Math.max(
-                              36,
+                              rollLow,
                               Math.min(
-                                84,
-                                84 -
+                                rollHigh,
+                                rollHigh -
                                   Math.floor(
                                     ((e.clientY - bounds.top) / bounds.height) *
-                                      49,
+                                      rollRows,
                                   ),
                               ),
                             );
@@ -1233,7 +1302,8 @@ export default function ArrangementStudio({
                             style={{
                               left: `${(n.start / pattern.length) * 100}%`,
                               width: `${(n.duration / pattern.length) * 100}%`,
-                              top: `${((84 - n.pitch) / 49) * 100}%`,
+                              top: `${((rollHigh - n.pitch) / rollRows) * 100}%`,
+                              height: `${100 / rollRows}%`,
                             }}
                             onClick={() =>
                               edit((d) => {
@@ -1246,6 +1316,7 @@ export default function ArrangementStudio({
                           />
                         ))}
                       </div>
+                      <div className="arr-roll-scale"><span>Beat 0 · MIDI {rollLow}–{rollHigh} (high notes at top)</span><span>Beat {pattern.length}</span></div>
                       <details>
                         <summary>Drum step editor · 16 steps</summary>
                         {[36, 38, 42, 46].map((pitch) => (
@@ -1308,8 +1379,9 @@ export default function ArrangementStudio({
                         <summary>
                           Exact note editing ({pattern.notes.length} notes)
                         </summary>
+                        <div className="arr-row"><button disabled={page === 0} onClick={() => setNotePage(page - 1)}>Previous notes</button><span>Page {page + 1} / {Math.max(1, Math.ceil(pattern.notes.length / 128))}</span><button disabled={(page + 1) * 128 >= pattern.notes.length} onClick={() => setNotePage(page + 1)}>Next notes</button></div>
                         <div className="arr-note-table">
-                          {pattern.notes.map((n, i) => (
+                          {pattern.notes.map((n, i) => ({n, i})).slice(page * 128, (page + 1) * 128).map(({n, i}) => (
                             <div className="arr-row" key={n.id}>
                               {(
                                 [
@@ -1414,9 +1486,8 @@ export default function ArrangementStudio({
                         <button
                           disabled={dirty || busy}
                           onClick={() =>
-                            void run(async () =>
-                              accept(
-                                await workbench<ArrangementRecord>(
+                            void run(async () => {
+                              const transformed = await workbench<ArrangementRecord>(
                                   "arrangement_transform",
                                   {
                                     projectId,
@@ -1427,9 +1498,10 @@ export default function ArrangementStudio({
                                       patternId: pattern.id,
                                     },
                                   },
-                                ),
-                              ),
-                            )
+                                );
+                              undo.current.push(record!.revision); redo.current = [];
+                              accept(transformed);
+                            })
                           }
                         >
                           Apply to saved pattern
@@ -2038,9 +2110,10 @@ export default function ArrangementStudio({
                   {jobs.map((job) => (
                     <div className="arr-row" key={job.id}>
                       <span>
-                        {job.status} · {Math.round(job.progress * 100)}% ·{" "}
+                        {(job as ArrangementJob & {name?:string}).name} · {job.status} · {Math.round(job.progress * 100)}% ·{" "}
                         {job.assetIds.length} outputs
                       </span>
+                      {job.status === 'running' && <progress max={1} value={job.progress} aria-label="Render progress" />}
                       <button
                         onClick={() =>
                           void run(async () =>
@@ -2117,7 +2190,7 @@ export default function ArrangementStudio({
                             destination: path,
                             format,
                           });
-                          setError(JSON.stringify(result));
+                          setNotice(`Export complete: ${path}. ${(result as {note?:string}).note ?? 'See manifest.json for MIDI limitations.'}`);
                         })
                       }
                     >
