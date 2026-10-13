@@ -1,5 +1,31 @@
 # Local workstation foundation (2026-10-13)
 
+## Mozart benchmark and development-path repairs
+
+Actual MCP reconstruction exposed two defects, fixed in this change:
+
+- `npm run dev` cleaned away the offline worker written by the CLI prebuild.
+  Worker generation now belongs to Electron Vite's main/renderer build lifecycles;
+  the renderer dev server also serves its worker, worklet and FluidSynth URLs.
+- A master-only settings edit populated omitted creation defaults and reset length
+  to 32 beats, causing validation to reject the 108-beat score. Settings mutation
+  fields now remove creation defaults. The failed edit left the stored revision intact.
+
+Typecheck and production build passed. Actual `npm run dev` with browser mode
+regenerated the offline worker after cleanup; both Mozart jobs completed through
+MCP. Each of the three renderer dev audio URLs returned HTTP 200 JavaScript.
+Two master-only edits preserved every unrelated document field byte-for-byte after
+JSON serialization. Final production browser verification used `npm run dev:browser`.
+The shared review opened both 51-second candidates. No paid operations or automated
+test scaffolding were used. See [trial details](workstation-trials.md) for sources,
+score/performance distinctions, measurements and listening limits.
+User-requested one-shot playback of the shaped candidate reached the playing UI
+and returned to stopped; Stop audio was then explicitly invoked, with Loop off.
+Browser warning/error logs were empty. MIDI export/reparse matched all 788 pitches;
+maximum onset/duration tick-rounding difference was 0.001041667 quarter-note beats.
+Validation hosts/audio and temporary authoring clients were stopped/removed afterward.
+The source/recipe scripts and user deliverables remain in the Music export folder.
+
 ## Subsequent creative trials and UI polish
 
 See [trial inventory](workstation-trials.md) for actual MCP-created projects, renders,

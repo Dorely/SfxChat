@@ -64,6 +64,8 @@ tail/loop policy. Long WAV analysis uses bounded reads. See
 for what has actually been exercised; successful rendering is not listening acceptance.
 The [local creative trials](docs/workstation-trials.md) cover orchestral, house,
 trance and layered game-effect candidates, their revisions and review locations.
+They also include a public-domain Mozart score reconstruction, with a plain baseline
+and a performance pass for comparing MIDI execution and SoundFont expression.
 
 Remote services, Gemini analysis,
 cloud sync, automatic updates, signed installers, and other platform packages are

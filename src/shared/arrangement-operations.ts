@@ -23,17 +23,16 @@ const mutation = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("settings"),
-      values: arrangementSchema
-        .pick({
-          name: true,
-          intent: true,
-          kind: true,
-          seed: true,
-          length: true,
-          tempos: true,
-          master: true,
-        })
-        .partial(),
+      // Creation defaults must never populate omitted fields in a targeted edit.
+      values: z.object({
+        name: arrangementSchema.shape.name.optional(),
+        intent: arrangementSchema.shape.intent.removeDefault().optional(),
+        kind: arrangementSchema.shape.kind.removeDefault().optional(),
+        seed: arrangementSchema.shape.seed.removeDefault().optional(),
+        length: arrangementSchema.shape.length.removeDefault().optional(),
+        tempos: arrangementSchema.shape.tempos.removeDefault().optional(),
+        master: arrangementSchema.shape.master.removeDefault().optional(),
+      }).strict(),
     })
     .strict(),
   z.object({ type: z.literal("track"), value: trackSchema }).strict(),

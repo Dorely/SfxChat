@@ -9,6 +9,14 @@ material read and limits: [composition/instructions](research/music-composition.
 and [DSP](research/local-dsp.md). Provider-specific references remain applicable
 only when those routes are intentionally chosen.
 
+The subsequent Mozart K.525 benchmark uses Mutopia-2018/08/04-2230, typeset by
+Mike Blackstock from Breitkopf & Härtel (1883), marked Public Domain by the
+[source catalog](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=2230)
+and LilyPond header. Downloaded 2026-10-13; movement I, measures 1–27 only.
+Source archives, hashes, raw event extraction, ornament realization and performance
+recipes remain beside the user exports under `Music/SfxChat-Mozart-K525`.
+No commercial recording was copied or used as a reference performance.
+
 ## ElevenLabs TTS model discovery and guidance (2026-10-08)
 
 Official endpoint/models, v4, TTS best practices/product guide, voice settings,

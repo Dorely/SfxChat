@@ -572,6 +572,8 @@ owns the catalog, edit and render schemas and bounded transformations. The exist
 operation registry dispatches UI, assistant, CLI and MCP to `main/arrangements.ts`.
 Writes compare expected revisions inside the transaction. Track/section reads avoid
 returning the whole score. Render jobs snapshot the exact recipe/revision and seed.
+Settings edits remove creation defaults before making fields optional: omitted
+length, tempo, intent, seed and master fields must not reset during targeted writes.
 
 `shared/sound-engine.ts` is the block-processing core. Browser worker output feeds
 an AudioWorklet; a main-owned Node worker uses the same scheduler/DSP and streams
@@ -580,6 +582,11 @@ FluidSynth 2.4.6. Banks are pinned into content-addressed library storage on sav
 source audio and bank hashes are verified without silent substitution. Existing
 MIDI playback retains its native helper. Sources are decoded through the same
 canonical main-process decoder for browser playback and export.
+Electron Vite owns audio worker outputs. Main build/watch writes the offline worker
+after output-directory cleanup; renderer builds emit the classic worker, worklet
+and FluidSynth runtime as assets. The renderer dev server serves those fixed URLs
+and compiles worker code on request. CLI prebuilds no longer write files that the
+subsequent Vite launch removes.
 
 The renderer owns draft editing and user-started playback only. Edits save after a
 short idle interval; a pointer drag previews continuously and saves after release.

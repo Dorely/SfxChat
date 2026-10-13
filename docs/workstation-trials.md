@@ -67,3 +67,30 @@ No model audio understanding was available or claimed. The remaining taste quest
 are theme recognition/development, groove and return impact, material character,
 repetition fatigue, and whether the loop feels continuous in use. The skills do not
 encode these demonstrations as genre profiles.
+
+## Mozart score reconstruction — subsequent benchmark
+
+User feedback on the original examples was that they were recognizable music/effects
+but not impressive. The next benchmark fixes the composition: Mozart, K.525,
+movement I, measures 1–27, using the four printed parts in Mutopia-2018/08/04-2230.
+This is a string-serenade excerpt, not a complete symphony or a matched recording.
+
+Project `92084779-b95e-4d6b-af6b-fe8093bf5cd9`, review
+`097485b7-a1b8-4dad-ae1a-5c9dc0520a0f`. Exports are in
+`%USERPROFILE%/Music/SfxChat-Mozart-K525`, including `expressive.wav`, `baseline.wav`,
+standard MIDI, per-track performance MIDI, source PDFs/LilyPond/MIDI and the portable
+editable performance. Source/license details and SHA-256 values are in its manifest.
+
+The typesetter MIDI was read as note data; printed sixteenth-note tremolos omitted
+by that MIDI were expanded, and short printed trills were given explicit realizations.
+The source's grace timing was retained. Both final arrangements contain the same
+788 pitches/onsets (190/300/157/141 by part), 132 quarter notes/minute and 108 beats.
+Baseline has uniform velocity/full durations/dry quartet programs 40/40/41/42.
+Performance adds score-informed dynamics, note separation/slurs/dots, phrase expression
+and a restrained shared room. These are approximations, not recorded bow articulations.
+
+Final renders have 2,452,364 frames at 48 kHz (51.091 s including two-second tail),
+RMS 0.065 after linear level matching, zero clips, peaks 0.712861/0.827662. The limiter
+was inactive. RMS matching is not perceptual loudness matching or musical approval.
+Both source projects/exports and initial quieter renders remain available. Decisions
+remain unreviewed; no model hearing or acoustic-quality assessment is claimed.

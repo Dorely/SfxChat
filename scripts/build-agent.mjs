@@ -11,10 +11,6 @@ for (const item of [{ path: wasmManifest.runtime.path, sha256: wasmManifest.runt
   if (createHash('sha256').update(await readFile(item.path)).digest('hex') !== item.sha256) throw new Error(`SoundFont engine hash mismatch: ${item.path}`);
 }
 await mkdir(output, { recursive: true });
-await build({ entryPoints: ['src/main/arrangement-render-worker.ts'], outfile: join(root, 'out/main/arrangement-render-worker.cjs'), bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['js-synthesizer', 'js-synthesizer/*'] });
-await build({ entryPoints: ['src/renderer/arrangement-worker.ts'], outfile: join(root, 'out/renderer/arrangement-worker.js'), bundle: true, platform: 'browser', format: 'iife', target: 'es2022' });
-await build({ entryPoints: ['src/renderer/arrangement-worklet.ts'], outfile: join(root, 'out/renderer/arrangement-worklet.js'), bundle: true, platform: 'browser', format: 'iife', target: 'es2022' });
-await copyFile('node_modules/js-synthesizer/externals/libfluidsynth-2.4.6.js', join(root, 'out/renderer/libfluidsynth-2.4.6.js'));
 await build({ entryPoints: ['src/cli/index.ts'], outfile: join(output, 'cli.cjs'), bundle: true, platform: 'node', format: 'cjs', target: 'node22', plugins: [{ name: 'guidance-raw', setup(build) { build.onResolve({ filter: /\?raw$/ }, args => ({ path: resolve(args.resolveDir, args.path.slice(0, -4)), namespace: 'raw' })); build.onLoad({ filter: /.*/, namespace: 'raw' }, async args => ({ contents: await readFile(args.path, 'utf8'), loader: 'text' })); } }] });
 // Pin the redistributed runtime independently of the developer's Node installation.
 const nodeVersion = 'v24.21.0';

@@ -76,7 +76,7 @@ is recorded in [verification](docs/verification.md).
 | --- | --- |
 | [package.json](package.json), [package-lock.json](package-lock.json) | Pinned runtime/development dependencies and build/package commands. |
 | [tsconfig.json](tsconfig.json) | Strict TypeScript configuration. |
-| [electron.vite.config.ts](electron.vite.config.ts), [electron-builder.yml](electron-builder.yml) | Desktop builds and unsigned Windows NSIS packaging. |
+| [electron.vite.config.ts](electron.vite.config.ts), [electron-builder.yml](electron-builder.yml) | Desktop builds, live/offline audio worker build ownership and dev serving, and unsigned Windows NSIS packaging. |
 | [scripts/dev-browser.mjs](scripts/dev-browser.mjs) | Launches the real Electron owner without a window and requests graceful browser-host shutdown. |
 | [src/main/browser-host.ts](src/main/browser-host.ts) | Loopback-only development renderer/RPC/SSE/media transport with origin validation. |
 | [src/shared/api.ts](src/shared/api.ts) | Fixed capability factory shared by isolated preload and browser transport. |
