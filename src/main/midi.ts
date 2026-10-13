@@ -11,6 +11,7 @@ import {
   MidiComposition, MidiNote, MidiTimeSignature, MidiTrack, clampProgram, midiCompositionProblem,
   midiDurationSeconds, midiTimeSignature, midiTrackLabel, midiVelocity
 } from '../shared/midi';
+import { valueOf, type Arrangement, type Track } from '../shared/arrangement';
 
 const META = 0xff;
 const END_OF_TRACK = 0x2f;
@@ -62,6 +63,50 @@ const timeSignatureEvent = (timeSig: MidiTimeSignature): number[] => {
 };
 
 const endOfTrack = (tick: number): Event => ({ tick, order: 9, bytes: [META, END_OF_TRACK, 0] });
+
+/** One independent track per file avoids channel collisions for large arrangements. */
+export function writeArrangementMidi(doc: Arrangement, track: Track): Buffer {
+  const tick = (beat: number) => Math.round(beat * MIDI_TICKS_PER_QUARTER);
+  const conductor: Event[] = [{ tick: 0, order: 0, bytes: textEvent(0x03, doc.name) }];
+  for (const tempo of doc.tempos) conductor.push({ tick: tick(tempo.beat), order: 1, bytes: tempoEvent(tempo.bpm) }, { tick: tick(tempo.beat), order: 2, bytes: timeSignatureEvent(tempo) });
+  for (const section of doc.sections) conductor.push({ tick: tick(section.start), order: 3, bytes: textEvent(0x06, section.name) });
+  conductor.sort((a, b) => a.tick - b.tick || a.order - b.order); conductor.push(endOfTrack(tick(doc.length)));
+  const p = track.instrument.params, channel = p.bank === 128 ? 9 : 0;
+  const events: Event[] = [{ tick: 0, order: 0, bytes: textEvent(0x03, track.name) }];
+  const cc = (at: number, controller: number, value: number) => events.push({ tick: tick(at), order: 1, bytes: [0xb0 | channel, controller, Math.max(0, Math.min(127, Math.round(value)))] });
+  const bend = (at: number, value: number) => { const n = Math.max(0, Math.min(16383, Math.round(8192 + value * 4096))); events.push({ tick: tick(at), order: 1, bytes: [0xe0 | channel, n & 127, n >> 7] }); };
+  cc(0, 7, track.gain * 127); cc(0, 10, (track.pan + 1) * 63.5);
+  if (track.instrument.type === 'soundfont') {
+    if (channel !== 9) { cc(0, 0, 0); cc(0, 32, valueOf(p, 'bank')); }
+    events.push({ tick: 0, order: 2, bytes: [0xc0 | channel, Math.round(valueOf(p, 'program'))] });
+    cc(0, 11, valueOf(p, 'expression')); cc(0, 64, valueOf(p, 'pedal')); bend(0, valueOf(p, 'pitchBend'));
+    for (const lane of track.automation) {
+      const control = lane.target === 'instrument.expression' ? 11 : lane.target === 'instrument.pedal' ? 64 : lane.target === 'gain' ? 7 : lane.target === 'pan' ? 10 : -1;
+      if (control < 0 && lane.target !== 'instrument.pitchBend') continue;
+      for (let i = 0; i < lane.points.length; i++) {
+        const a = lane.points[i], b = lane.points[i + 1];
+        const steps = b && lane.interpolation === 'linear' ? Math.max(1, Math.ceil((b.beat - a.beat) * 24)) : 1;
+        for (let step = 0; step < steps; step++) { const at = b && lane.interpolation === 'linear' ? a.beat + (b.beat - a.beat) * step / steps : a.beat, v = b && lane.interpolation === 'linear' ? a.value + (b.value - a.value) * step / steps : a.value;
+          if (control >= 0) cc(at, control, lane.target === 'gain' ? v * 127 : lane.target === 'pan' ? (v + 1) * 63.5 : v); else bend(at, v);
+        }
+      }
+    }
+  }
+  for (const clip of track.clips) {
+    const pattern = doc.patterns.find(p => p.id === clip.patternId); if (!pattern) continue;
+    for (let at = 0; at < clip.length; at += pattern.length) {
+      for (const note of pattern.notes) { const start = at + note.start - clip.offset; if (start < 0 || start >= clip.length) continue;
+        const from = tick(clip.start + start), to = Math.max(from + 1, tick(clip.start + Math.min(clip.length, start + note.duration))), pitch = Math.max(0, Math.min(127, note.pitch + clip.transpose));
+        events.push({ tick: from, order: 4, bytes: [0x90 | channel, pitch, Math.max(1, Math.min(127, Math.round(note.velocity * clip.gain * 127)))] }, { tick: to, order: 3, bytes: [0x80 | channel, pitch, 0] });
+      }
+      if (events.length > 500000) throw new Error('Expanded MIDI track exceeds export event limit.');
+      if (!clip.repeat) break;
+    }
+  }
+  events.sort((a, b) => a.tick - b.tick || a.order - b.order); events.push(endOfTrack(Math.max(tick(doc.length), events.at(-1)?.tick ?? 0)));
+  const header = Buffer.alloc(14); header.write('MThd'); header.writeUInt32BE(6, 4); header.writeUInt16BE(1, 8); header.writeUInt16BE(2, 10); header.writeUInt16BE(MIDI_TICKS_PER_QUARTER, 12);
+  return Buffer.concat([header, trackChunk(conductor), trackChunk(events)]);
+}
 
 /** Serializes a composition as a format-1 Standard MIDI File. */
 export const writeMidi = (composition: MidiComposition): Buffer => {

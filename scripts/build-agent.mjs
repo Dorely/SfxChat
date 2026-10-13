@@ -3,9 +3,18 @@ import { readFile, mkdir, writeFile, copyFile, access, readdir, rename } from 'n
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { resolve, join } from 'node:path';
+const rawPlugin = { name: 'guidance-raw', setup(build) { build.onResolve({ filter: /\?raw$/ }, args => ({ path: resolve(args.resolveDir, args.path.slice(0, -4)), namespace: 'raw' })); build.onLoad({ filter: /.*/, namespace: 'raw' }, async args => ({ contents: await readFile(args.path, 'utf8'), loader: 'text' })); } };
 
 const root = resolve('.'), output = join(root, 'out/agent');
+const wasmManifest = JSON.parse(await readFile('third-party/wasm-synthesis/sources.json', 'utf8'));
+for (const item of [{ path: wasmManifest.runtime.path, sha256: wasmManifest.runtime.sha256 }, ...wasmManifest.sources.map(s => ({ path: join('third-party/wasm-synthesis', s.name), sha256: s.sha256 }))]) {
+  if (createHash('sha256').update(await readFile(item.path)).digest('hex') !== item.sha256) throw new Error(`SoundFont engine hash mismatch: ${item.path}`);
+}
 await mkdir(output, { recursive: true });
+await build({ entryPoints: ['src/main/arrangement-render-worker.ts'], outfile: join(root, 'out/main/arrangement-render-worker.cjs'), bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['js-synthesizer', 'js-synthesizer/*'] });
+await build({ entryPoints: ['src/renderer/arrangement-worker.ts'], outfile: join(root, 'out/renderer/arrangement-worker.js'), bundle: true, platform: 'browser', format: 'iife', target: 'es2022' });
+await build({ entryPoints: ['src/renderer/arrangement-worklet.ts'], outfile: join(root, 'out/renderer/arrangement-worklet.js'), bundle: true, platform: 'browser', format: 'iife', target: 'es2022' });
+await copyFile('node_modules/js-synthesizer/externals/libfluidsynth-2.4.6.js', join(root, 'out/renderer/libfluidsynth-2.4.6.js'));
 await build({ entryPoints: ['src/cli/index.ts'], outfile: join(output, 'cli.cjs'), bundle: true, platform: 'node', format: 'cjs', target: 'node22', plugins: [{ name: 'guidance-raw', setup(build) { build.onResolve({ filter: /\?raw$/ }, args => ({ path: resolve(args.resolveDir, args.path.slice(0, -4)), namespace: 'raw' })); build.onLoad({ filter: /.*/, namespace: 'raw' }, async args => ({ contents: await readFile(args.path, 'utf8'), loader: 'text' })); } }] });
 // Pin the redistributed runtime independently of the developer's Node installation.
 const nodeVersion = 'v24.21.0';
@@ -22,9 +31,10 @@ if (!runtime || createHash('sha256').update(runtime).digest('hex') !== nodeHash)
 }
 const skillOutput = join(root, 'out/skill');
 await mkdir(join(skillOutput, 'references'), { recursive: true });
-const documents = {};
-for (const name of ['design.md', 'elevenlabs-sfx.md', 'editing.md', 'workflow.md', 'elevenlabs-music.md', 'gemini-lyria.md', 'elevenlabs-voice.md', 'gemini-voice.md', 'music-craft.md', 'midi-instruments.md', 'midi-workflow.md']) {
-  documents[name] = await readFile(join(root, 'resources/skill/references', name), 'utf8');
+// The runtime manifest is also the packaging/install/hash manifest; no second file list.
+const guidanceBundle = await build({ entryPoints: ['src/shared/guidance.ts'], bundle: true, platform: 'node', format: 'esm', write: false, plugins: [rawPlugin] });
+const { guidanceDocuments: documents } = await import(`data:text/javascript;base64,${Buffer.from(guidanceBundle.outputFiles[0].text).toString('base64')}`);
+for (const name of Object.keys(documents)) {
   await writeFile(join(skillOutput, 'references', name), documents[name]);
 }
 await copyFile('resources/skill/SKILL.md', join(skillOutput, 'SKILL.md'));

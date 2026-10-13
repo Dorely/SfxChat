@@ -1,46 +1,31 @@
-# Music composition guidance
+# Composition, sound design, and instruction research
 
-Provenance for the composing knowledge shipped with the MIDI creator. Research performed
-**2026-10-06 UTC**. The knowledge lives in what the model actually receives at runtime — the
-`midi-composition` assistant block and the three packaged skill references — not in this note;
-this note records where it came from and what is not claimed.
+Read/reviewed **2026-10-13**. This replaces the 2026-10-06 MIDI-only review.
+The earlier review read a textbook landing page, not substantive chapters; it did
+not establish its broad composing claims. References now teach general principles,
+with no built-in genre profiles. Styles belong to user briefs.
 
-## Sources consulted
-
-| Source | Location | What was read |
+| Exact material read | Supported guidance | Limits and treatment |
 | --- | --- | --- |
-| Open Music Theory | <https://openmusictheory.github.io/> and `about.html` | An openly licensed, college-level music theory textbook (Kris Shaffer, Bryn Hughes, Brian Moseley; Hybrid Pedagogy Publishing). Read for scope and license; used as the open reference for standard concepts (diatonic function, voice leading, phrase structure). |
-| MIDI.org — General MIDI | <https://midi.org/general-midi> | The MIDI Association's GM overview: GM 1, GM 2, and GM Lite; GM 1 first published 1991, superseded by GM 2 in 1999, still the common format for Standard MIDI File distribution. |
-| Wikipedia — General MIDI | <https://en.wikipedia.org/wiki/General_MIDI> | Secondary confirmation of the 1991 MMA/JMSC publication and the GM 1 program/drum layout. |
-| General MIDI 1 specification | Member-gated download via MIDI.org | **Not read directly.** The program and drum lists used by the app are the widely published GM 1 standard values, encoded in [`src/shared/midi.ts`](../../src/shared/midi.ts) and repeated in the instrument reference. |
+| Andrea Stolpe, Berklee, [Simple Tools for Better Melodies](https://online.berklee.edu/takenote/simple-tools-for-better-melodies/) | Rhythmic identity, repetition/contrast, rests and placement | Songwriting perspective; no guarantee of memorability. Original instrumental example in music-craft. |
+| Ableton, [Creating Melodies 1: Contour](https://makingmusic.ableton.com/creating-melodies-1-contour) | Direction, range, steps/leaps as deliberate choices | Contour is one dimension; no universal emotion mapping. |
+| Open Music Theory, [The Sentence](https://openmusictheory.github.io/sentence.html), presentation/continuation/fragmentation/cadence | Developing an idea and accelerating toward an ending | A form convention, not universal phrase length. Textbook is CC BY-SA 4.0; chapter text/examples are not reproduced. |
+| Ableton, [Creating Variation 2: Mutation Over Generations](https://makingmusic.ableton.com/creating-variation-2-mutation-over-generations) | Preserve identity while changing one meaningful feature | Can become directionless without phrase/form decisions. |
+| Vienna Symphonic Library, [Violin](https://www.vsl.co.at/academy/strings/violin/) and [Concert Flute](https://www.vsl.co.at/academy/woodwinds/concert-flute), sound production, register, techniques and combinations | Register, bow/breath, role and balance | Real instrumental behavior does not imply recorded articulations in GeneralUser; no orchestral style profile. |
+| Native Instruments, [House Music 101](https://blog.native-instruments.com/house-music-101/), worked drum/bass/swing/arrangement example; [Trance music](https://blog.native-instruments.com/trance-music/), composition, layers, build/breakdown | Background for requested demonstration briefs only | Vendor examples. Claims about minor keys causing emotion, universal speaker pitch limits, and genre absolutes were not adopted. No house/trance skill modules. |
+| FMOD Studio 2.04, [Authoring Events](https://www.fmod.com/docs/2.04/studio/authoring-events.html), layered instruments and random/envelope/sidechain/seek modulators | Layer roles, temporal structure, bounded variation per trigger | No FMOD/game-engine integration or full modulator parity. |
+| OpenAI, [Build skills](https://learn.chatgpt.com/docs/build-skills), fetched with official documentation connector | Focused workflow, explicit evidence, progressive disclosure into references | Manual task trials evaluate usefulness; no automated suites per repository policy. Local skill-creator instructions also read. |
 
-## What was produced
+Focused references include use/limits, original examples, ordinary-language intent,
+failure symptoms and revision choices. `music-craft` teaches compact rhythmic/contour
+identity, clear repetition, deliberate variation, phrasing and theme-alone comparison
+for “memorable melody”; no checklist promises memorability. Groove-first, root-position
+bass, parallel-fifth avoidance, phrase lengths and genre/emotion associations are
+contextual choices. Fractional beats support fine timing; the old contrary claim was
+inaccurate.
 
-Three references under `resources/skill/references/`, registered in
-[`guidanceDocuments`](../../src/shared/guidance.ts) so the app assistant, the installed skill, and
-CLI/MCP agents all receive identical text:
-
-- `music-craft.md` — composing craft: groove first, harmony and voicing, motif-based melody,
-  phrase structure, dynamics, idiom starting points, revision discipline.
-- `midi-instruments.md` — arranging for the GM bank: program families, instrument choices per
-  role, register and spacing, the drum map, and what the bank rewards or struggles with.
-- `midi-workflow.md` — using the tool: call shape and bounds, revision through `parentId`,
-  hearing results through `audio_listen` when available, finishing by arranging the playground,
-  and the evidence limits.
-
-All three are original SfxChat prose written for this feature. No text was copied from any source,
-so the share-alike terms of the Open Music Theory license do not attach to this material; the
-source is recorded so a reader can go deeper, and its license permits exactly that kind of reuse
-with attribution, which this note provides.
-
-## Evidence limits
-
-- **No listening evaluation.** Nothing here is a claim about how any clip sounds, and the render a
-  model may hear is the bundled bank's approximation of the written notes, not a performance.
-- **Conventions, not laws.** Progressions, drum patterns, and structure advice are widely used
-  defaults that reliably produce usable clips. Deliberate departures are expected when the brief
-  calls for them.
-- **Genre recipes are starting points.** The tempo and instrumentation table in `music-craft.md`
-  describes common practice in each style, not a requirement, and not a quality judgement.
-- **The GM 1 specification was not read directly** (it is member-gated); the program and drum
-  values are the standard published lists, and a replacement bank may voice them differently.
+`src/shared/guidance.ts` is the sole document manifest for runtime retrieval,
+packaging, installation and hashing. The assistant receives a concise router and
+loads relevant topics; the complete response remains available. UI help uses the
+same operation. Provider technical references remain separate. Sources and successful
+renders do not establish listener acceptance.

@@ -24,6 +24,8 @@ extraResources:
 asarUnpack:
   - node_modules/better-sqlite3/**/*
   - node_modules/mpg123-decoder/**/*
+  - node_modules/js-synthesizer/**/*
+  - out/renderer/libfluidsynth-2.4.6.js
   - third-party/**/*
 win:
   target: nsis

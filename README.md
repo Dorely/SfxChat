@@ -54,7 +54,16 @@ The assistant uses direct Codex OAuth and Responses streaming adapted from the
 Lorekeeper and PixelChat references. There is no CLI prerequisite. Source and builds alone do not establish that a particular account can log in or use a model;
 see [verification](docs/verification.md) for actual evidence and live acceptance.
 
-Remote services, Gemini analysis, mixing and edits beyond trimming/loop processing,
+The **Studio** adds editable local arrangements: sections, tempo/meter, note and
+sample clips, reusable patterns, synth/SoundFont instruments, inserts, sends and
+automation. The legacy **MIDI Studio** remains available. UI and MCP share revision-
+checked operations, background rendering, history/restore, and package export/import.
+Production WAVs use 48 kHz float32 or PCM24, with aligned stems and an explicit
+tail/loop policy. Long WAV analysis uses bounded reads. See
+[local DSP limitations](docs/research/local-dsp.md) and [verification](docs/verification.md)
+for what has actually been exercised; successful rendering is not listening acceptance.
+
+Remote services, Gemini analysis,
 cloud sync, automatic updates, signed installers, and other platform packages are
 deferred. Composition plans, audio reference, inpainting, streaming, and stem separation
 are available from the providers but not exposed by this app.

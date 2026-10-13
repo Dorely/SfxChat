@@ -28,6 +28,7 @@ export interface Asset {
   midi?: MidiSummary;
   /** Set on a MIDI clip derived from another clip by editing its notes. */
   midiEdit?: MidiEdit;
+  arrangementRender?: { record: import('./arrangement').ArrangementRecord; input: import('./arrangement-operations').RenderInput; sourceHashes: Record<string, string>; seed: number; stem?: string; diagnostics: unknown };
 }
 export interface TrimInput {
   startSeconds: number; endSeconds: number; fadeInMs?: number; fadeOutMs?: number; name?: string;
@@ -53,6 +54,7 @@ export interface SeamProbe {
   note: string;
 }
 export interface AudioAnalysis {
+  summary?: { peak: number; rms: number; clippedSamples: number; nearSilentFrames: number; silenceThreshold: number };
   version: 1; assetId: string; sourceHash: string; sampleRate: number; channels: number;
   totalFrames: number; duration: number; startFrame: number; endFrame: number;
   startSeconds: number; endSeconds: number; decoder: string;

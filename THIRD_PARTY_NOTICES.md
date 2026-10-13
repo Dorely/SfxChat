@@ -52,3 +52,10 @@ permits unrestricted use in music creation and in software projects. That licens
 that some contained samples originate from third-party banks of imperfectly documented
 provenance. The bank and engine are runtime resources, not SfxChat-authored material, and this
 bookkeeping does not license generated audio.
+
+The local arrangement engine uses BSD-3-Clause `js-synthesizer` 1.13.0 and its
+LGPL-2.1 FluidSynth 2.4.6 Emscripten build. The plain engine excludes libsndfile.
+Licenses, corresponding source archives, hashes and replacement/rebuild directions
+are in [third-party/wasm-synthesis](third-party/wasm-synthesis/README.md) and ship
+with the app. The browser engine and Node dependency remain separate replaceable
+files. GeneralUser's license and sample-provenance caveat above apply to this path.

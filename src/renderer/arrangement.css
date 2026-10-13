@@ -1,0 +1,268 @@
+.arr-studio {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--text);
+  background: var(--bg);
+}
+.arr-studio button,
+.arr-studio input,
+.arr-studio select,
+.arr-studio textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 6px 9px;
+}
+.arr-studio button {
+  cursor: pointer;
+}
+.arr-studio button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.arr-studio button:hover {
+  background: var(--surface-3);
+}
+.arr-studio label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+}
+.arr-studio label:has(input[type="checkbox"]) {
+  flex-direction: row;
+  align-items: center;
+}
+.arr-studio input[type="number"] {
+  width: 100px;
+}
+.arr-studio textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+.arr-studio h3 {
+  margin: 18px 0 10px;
+  font-size: 14px;
+}
+.arr-toolbar,
+.arr-transport,
+.arr-tabs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.arr-toolbar select {
+  max-width: 240px;
+}
+.arr-transport {
+  font-size: 12px;
+}
+.arr-transport label {
+  flex-direction: row;
+  align-items: center;
+}
+.arr-tabs {
+  gap: 4px;
+}
+.arr-tabs .active,
+.arr-tracks .active {
+  background: var(--accent);
+  color: var(--bg);
+}
+.arr-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.arr-tracks {
+  width: 155px;
+  flex-shrink: 0;
+  padding: 12px;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+}
+.arr-tracks button {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 5px 0;
+  text-align: left;
+}
+.arr-tracks small {
+  opacity: 0.7;
+  font-size: 11px;
+}
+.arr-panel {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 18px;
+}
+.arr-row {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+  flex-wrap: wrap;
+  margin: 9px 0;
+}
+.arr-parameters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.arr-parameter-value {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.arr-parameter-value input[type="range"] {
+  width: 100%;
+  min-width: 70px;
+  padding: 0;
+}
+.arr-parameter-value input[type="number"] {
+  width: 82px;
+}
+.arr-panel details {
+  border-bottom: 1px solid var(--line);
+  padding: 10px 0;
+}
+.arr-panel summary {
+  cursor: pointer;
+}
+.arr-timeline {
+  margin: 20px 0;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.arr-lane {
+  display: flex;
+  min-height: 36px;
+  border-bottom: 1px solid var(--line);
+}
+.arr-lane > span {
+  width: 120px;
+  flex-shrink: 0;
+  padding: 8px;
+  font-size: 12px;
+}
+.arr-lane-clips {
+  position: relative;
+  flex: 1;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent calc(12.5% - 1px),
+    var(--line) 12.5%
+  );
+}
+.arr-lane-clips button {
+  position: absolute;
+  height: 28px;
+  top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  background: var(--accent-soft);
+  text-align: left;
+  padding: 3px;
+}
+.arr-lane-clips i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 2px solid var(--accent);
+  pointer-events: none;
+}
+.arr-roll {
+  position: relative;
+  height: 294px;
+  margin: 16px 0;
+  background: repeating-linear-gradient(
+    0deg,
+    var(--surface),
+    var(--surface) 5px,
+    var(--line) 6px
+  );
+  border: 1px solid var(--line);
+  overflow: hidden;
+  cursor: crosshair;
+}
+.arr-roll button {
+  position: absolute;
+  height: 6px;
+  border: 0;
+  border-radius: 1px;
+  padding: 0;
+  background: var(--accent);
+}
+.arr-note-table {
+  max-height: 350px;
+  overflow: auto;
+}
+.arr-drum {
+  display: flex;
+  gap: 3px;
+  margin: 8px 0;
+  align-items: center;
+}
+.arr-drum span {
+  width: 80px;
+  font-size: 12px;
+}
+.arr-drum button {
+  padding: 4px;
+  flex: 1;
+}
+.arr-drum button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--bg);
+}
+.arr-mixer {
+  display: flex;
+  gap: 12px;
+  overflow: auto;
+}
+.arr-mixer > div {
+  min-width: 180px;
+  border: 1px solid var(--line);
+  padding: 10px;
+}
+.arr-automation {
+  width: 100%;
+  height: 100px;
+  color: var(--accent);
+  background: var(--surface);
+}
+.arr-error {
+  padding: 10px 15px;
+  background: var(--surface);
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+.arr-empty {
+  padding: 35px;
+  max-width: 650px;
+}
+.arr-panel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.arr-guide {
+  line-height: 1.65;
+}
+.arr-section {
+  padding: 6px 0;
+}
+.arr-section > input {
+  width: 100%;
+}

@@ -565,6 +565,42 @@ profile's logs directory. There is no arbitrary-path or log-reading renderer API
 
 ## Verification boundaries
 
+## Local arrangement workstation
+
+Schema v6 transactionally adds project-owned arrangement documents, immutable
+revision history and recoverable render jobs. `shared/arrangement.ts` validates
+stable IDs, bounds, references and acyclic sidechains. `arrangement-operations`
+owns the catalog, edit and render schemas and bounded transformations. The existing
+operation registry dispatches UI, assistant, CLI and MCP to `main/arrangements.ts`.
+Writes compare expected revisions inside the transaction. Track/section reads avoid
+returning the whole score. Render jobs snapshot the exact recipe/revision and seed.
+
+`shared/sound-engine.ts` is the block-processing core. Browser worker output feeds
+an AudioWorklet; a main-owned Node worker uses the same scheduler/DSP and streams
+WAV files independently of editor lifetime. Both use js-synthesizer 1.13.0 with
+FluidSynth 2.4.6. Banks are pinned into content-addressed library storage on save;
+source audio and bank hashes are verified without silent substitution. Existing
+MIDI playback retains its native helper. Sources are decoded through the same
+canonical main-process decoder for browser playback and export.
+
+The renderer owns draft editing and user-started playback only. Studio panels expose
+arrangement/section editing, notes/drums, instruments/sample regions, mixing/effects,
+automation, jobs/export and history. Parameter drafts update the shared live core.
+Rendered assets retain exact recipe, engine identity, source hashes, parameters,
+seed and diagnostics. Float32/PCM24 output is 48 kHz; exact loops omit tails.
+Sequential time-aligned stems omit master processing and include separate bus returns.
+Packages carry the recipe, source originals, bank and provenance; MIDI export identifies
+audio-only features explicitly. Missing dependencies fail visibly.
+
+`wav-reader.ts` streams full-length amplitude summaries and reads bounded ranges for
+events/listening. Loop probes compare head/tail windows without whole-file decode.
+`shared/guidance.ts` is the canonical reference manifest consumed by the build,
+installer and topic-selective/full guidance operation. Runtime instructions route
+to those same general-principle references. See [DSP](research/local-dsp.md) and
+[composition research](research/music-composition.md) for limitations and sources.
+
+## Verification policy
+
 This project carries no automated tests: no unit, integration, or end-to-end suites, no
 test runners or test dependencies, and no test-only fixtures, mock providers, or
 deterministic test modes. Verification is `npm run typecheck`, the production build, and

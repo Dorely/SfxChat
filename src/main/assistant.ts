@@ -7,7 +7,10 @@ import { analysisSchema, clipSchema, generationSchema, idSchema, midiToolSchema,
 import { MIDI_MAX_DURATION_SECONDS, MIDI_MAX_NOTES, MIDI_MAX_TRACKS } from '../shared/midi';
 
 import { guidanceDocuments } from '../shared/guidance';
-export const instructions = ['design.md', 'elevenlabs-sfx.md', 'workflow.md', 'editing.md'].map(name => guidanceDocuments[name]).join('\n\n') + '\nThe internal assistant cannot read arbitrary files or execute shell commands.';
+import { arrangementOperationDefinitions } from '../shared/arrangement-operations';
+export const instructions = `You are SfxChat, an assistant-led sound workstation. Translate ordinary creative intent into editable, inspectable choices. Choose deliberately between local arrangement synthesis, legacy MIDI, and paid provider generation. Local creation needs no provider or key; prefer it for editable/no-spend work. Never silently fall back to a paid provider.
+Before creative work call guidance with relevant topic names: music-craft for melody/rhythm/harmony/form, arranging for instrumental roles, synthesis for sound sources, mixing for balance, local-workflow for arrangement revision, editing for analysis/loops, and the matching provider reference before provider use. These are general principles, not genre profiles; stylistic decisions follow the user's brief. Discover schemas and limits with local_catalog. Keep the brief, roles, thematic identity, and section purposes visible in the saved document.
+Use expected revisions for writes and reconcile conflicts. Preserve immutable originals, exact prompts, source hashes, seeds, and edit lineage. Recover jobs with the same request ID and arguments; don't repeat uncertain paid work. Respect the authorized scope/count. For revisions change the requested dimension while preserving unrelated material. Technical diagnostics aren't creative scores. Never claim to have heard audio without a supported audio-understanding path. Prepare reviews without autoplay; human acceptance requires the user's listening decision. The internal assistant cannot read arbitrary files or execute shell commands.`;
 const elevenlabsMusicInstructions = guidanceDocuments['elevenlabs-music.md'];
 const lyriaMusicInstructions = guidanceDocuments['gemini-lyria.md'];
 
@@ -19,7 +22,7 @@ const lyriaMusicInstructions = guidanceDocuments['gemini-lyria.md'];
  * from a deleted provider until the IDs are listed.
  */
 export function musicInstructions(providers: MusicProviderEntry[], activeMusicId: string | null): string {
-  if (!providers.length) return 'No music target is configured, so generate_music cannot run. Tell the user to select a music model in Settings. It uses the shared vendor key.';
+  if (!providers.length) return 'No paid music target is configured. Local arrangement synthesis and MIDI composition remain available without a provider. Configure Settings only if the user wants provider generation.';
   const active = providers.find(entry => entry.id === activeMusicId) ?? providers.find(entry => entry.ready) ?? providers[0]!;
   const name = (entry: MusicProviderEntry) => entry.label === musicProviderLabel(entry.kind) ? entry.label : `${entry.label} — ${musicProviderLabel(entry.kind)}`;
   const roster = providers.map(entry => `${name(entry)}, model ${entry.model}, ${entry.ready ? 'key saved' : 'no key yet'}, ${entry.id === active.id ? 'active, ' : ''}providerId "${entry.id}"`).join('; ');
@@ -33,7 +36,7 @@ export function musicInstructions(providers: MusicProviderEntry[], activeMusicId
  */
 export function midiInstructions(): string {
   const header = `MIDI composition: compose_midi writes note data into a Standard MIDI File that plays through the app's bundled General MIDI bank, so it needs no provider, API key, or spend. Positions and lengths are in quarter-note beats (a quarter note is 1, an eighth 0.5). Put percussion on a track with drums true and give each melodic track a General MIDI program number (0-127). Limits: ${MIDI_MAX_TRACKS} tracks, ${MIDI_MAX_NOTES} notes, ${MIDI_MAX_DURATION_SECONDS / 60} minutes. To revise, send a complete new composition with parentId; existing clips are never modified. You cannot hear a composition unless the audio_listen tool is available to your model, and a render is the bank's approximation, not a performance. Finish by placing the chosen clip in the comparison playground like any other sound.`;
-  return [header, guidanceDocuments['music-craft.md'], guidanceDocuments['midi-instruments.md'], guidanceDocuments['midi-workflow.md']]
+  return [header, 'Before composing load guidance topics music-craft, arranging, midi-instruments, and midi-workflow. For editable local synthesis use local-workflow and local_catalog.']
     .filter(entry => typeof entry === 'string' && entry.length > 0).join('\n\n');
 }
 
@@ -46,7 +49,9 @@ ${providers.map(p => guidanceDocuments[p.id === 'elevenlabs' ? 'elevenlabs-voice
 
 const additionalTools = ['list_voices', 'list_voice_models', 'guidance', 'review_list', 'review_create', 'review_get', 'review_history', 'review_update', 'review_wait', 'review_open', 'playback_status', 'export_asset', 'export_review', 'import_audio', 'cancel_job'] as const;
 const additionalSchemas = Object.fromEntries(additionalTools.map(name => [name, z.object(Object.fromEntries(Object.entries(operationDefinitions[name].schema.shape).filter(([key]) => key !== 'projectId' && key !== 'sessionId'))).strict()]));
+const arrangementSchemas = Object.fromEntries(Object.entries(arrangementOperationDefinitions).map(([name, definition]) => [name, z.object(Object.fromEntries(Object.entries(definition.schema.shape).filter(([key]) => key !== 'projectId' && key !== 'sessionId'))).strict()]));
 export const toolSchemas = {
+  ...arrangementSchemas,
   ...additionalSchemas,
   generate_sounds: generationSchema,
   generate_music: musicToolSchema,
@@ -66,7 +71,7 @@ export const toolSchemas = {
 const descriptions: Record<keyof typeof toolSchemas, string> = {
   generate_voice: 'Generate single-speaker voice clips from an exact script. Query list_voice_models and pass a selectable ID in model, following its model-specific note, controls and guidanceStatus. Discover voice IDs with list_voices. Keep original wording in text and any deliberate tags or requested pronunciation changes in providerText. Waits for results and returns jobs and assets in the voice library and playground. Each candidate is separately billed; follow requested scope.',
   generate_sounds: 'Generate ElevenLabs sound effects from a complete audible description. Each candidate receives the same prompt with no chat history or reference audio. Use the fields for duration, looping and adherence; inspect field descriptions. Waits for results and returns jobs and assets to organize; results appear automatically in the effects library and playground.',
-  generate_music: 'Generate music on the configured music provider. Use it for songs, tracks, background beds, loops, jingles, scores, themes, and anything with musical structure or lyrics; isolated musical sounds stay with generate_sounds. The prompt is the complete musical direction, including arrangement and lyrics, and the same wording behaves differently on different providers, so follow the active provider block in your instructions. Each candidate is a separate billed generation and tracks are slower than sound effects, so respect the requested count. durationMs sets whole-track length, instrumental leaves vocals out, and providerId targets another configured provider for one request instead of the active one. Waits for results and returns jobs and assets to organize; results appear automatically in the music library and playground.',
+  generate_music: 'Generate paid music on the configured provider when provider generation is intended. Editable/no-spend instrumental work uses arrangement operations; musical structure alone does not select a paid provider. The prompt is the complete musical direction, including arrangement and lyrics, and the same wording behaves differently on different providers, so follow the active provider block in your instructions. Each candidate is a separate billed generation and tracks are slower than sound effects, so respect the requested count. durationMs sets whole-track length, instrumental leaves vocals out, and providerId targets another configured provider for one request instead of the active one. Waits for results and returns jobs and assets to organize; results appear automatically in the music library and playground.',
   compose_midi: 'Compose a MIDI clip from note data. This is how you write music as notes rather than requesting audio from a provider: it costs nothing and needs no key. Give a short prompt describing the clip and a composition of up to 8 tracks in quarter-note beats, each with an optional General MIDI program (0-127) or drums true for the GM percussion kit. Follow the composing guidance in your instructions. You cannot hear the result unless the audio_listen tool is available to your model. To revise, resend the whole composition with parentId pointing at the clip you are changing. Waits for the result and returns the asset in the MIDI library and playground.',
   search_assets: 'Search names, descriptions, tags, collections, original prompts, and feedback across the effects, music and voice libraries. An empty query lists everything.',
   inspect_asset: 'Get immutable generation provenance and editable metadata for one asset, whether an effect, music track or voice clip.',

@@ -28,6 +28,8 @@
 /third-party/synthesis/*-LICENSE.txt -text whitespace=-blank-at-eol
 /third-party/synthesis/*.tar.gz -text
 /third-party/synthesis/*.zip -text
+/third-party/wasm-synthesis/*-LICENSE.txt -text whitespace=-blank-at-eol
+/third-party/wasm-synthesis/*.tar.gz -text
 /resources/soundfonts/*-LICENSE.txt -text whitespace=-blank-at-eol
 /resources/soundfonts/*.sf2 -text
 *.svg text eol=lf

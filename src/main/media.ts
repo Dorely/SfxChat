@@ -6,6 +6,7 @@ import type { Asset, AssetKind, AudioAnalysisInput, AnyGenerationInput, Spectrog
 import { analyzeAudio, decodeAudio, interval, renderClip, renderTrim, MAX_AUDIO_BYTES, type ClipRender, type DecodedAudio } from './audio';
 import { renderSpectrogram, type SpectrogramRender } from './spectrogram';
 import { midiFileDurationSeconds } from './midi';
+import { analyzeWav, WavReader } from './wav-reader';
 
 export class MediaLibrary {
   private audioQueue: Promise<unknown> = Promise.resolve();
@@ -27,7 +28,20 @@ export class MediaLibrary {
     this.audioQueue = pending.catch(() => undefined);
     return pending;
   }
-  analyze(asset: Asset, input: AudioAnalysisInput) { return this.withAudio(asset, audio => analyzeAudio(audio, asset, input)); }
+  analyze(asset: Asset, input: AudioAnalysisInput) {
+    if (asset.format !== 'wav') return this.withAudio(asset, audio => analyzeAudio(audio, asset, input));
+    const pending = this.audioQueue.then(() => analyzeWav(this.path(asset), asset, input));
+    this.audioQueue = pending.catch(() => undefined);
+    return pending;
+  }
+  samplePcm(asset: Asset) {
+    return this.withAudio(asset, async audio => {
+      const frames = audio.channels[0].length, bytes = Buffer.alloc(12 + frames * audio.channels.length * 4);
+      bytes.writeUInt32LE(audio.sampleRate, 0); bytes.writeUInt32LE(audio.channels.length, 4); bytes.writeUInt32LE(frames, 8);
+      for (let ch = 0; ch < audio.channels.length; ch++) for (let i = 0; i < frames; i++) bytes.writeFloatLE(audio.channels[ch][i], 12 + (ch * frames + i) * 4);
+      return bytes;
+    });
+  }
   pcmWav(asset: Asset) {
     return this.withAudio(asset, async audio => {
       const channels = audio.channels.length, frames = audio.channels[0].length;
@@ -48,6 +62,19 @@ export class MediaLibrary {
   }
   renderTrim(asset: Asset, input: TrimInput) { return this.withAudio(asset, audio => renderTrim(audio, asset, input)); }
   clip(asset: Asset, input: { startSeconds?: number; endSeconds?: number }): Promise<ClipRender> {
+    if (asset.format === 'wav') {
+      const pending = this.audioQueue.then(async () => {
+        const reader = await WavReader.open(this.path(asset), asset.hash);
+        try {
+          const startFrame = Math.round((input.startSeconds ?? 0) * reader.sampleRate), endFrame = Math.round((input.endSeconds ?? reader.frames / reader.sampleRate) * reader.sampleRate);
+          if (endFrame - startFrame > reader.sampleRate * 60) throw new Error('Listening clips are limited to 60 seconds. Choose a narrower range.');
+          const clip = await renderClip(await reader.read(startFrame, endFrame), {});
+          return { ...clip, startFrame, endFrame };
+        } finally { await reader.close(); }
+      });
+      this.audioQueue = pending.catch(() => undefined);
+      return pending;
+    }
     return this.withAudio(asset, audio => renderClip(audio, input));
   }
   spectrogram(asset: Asset, input: SpectrogramInput): Promise<SpectrogramRender> {

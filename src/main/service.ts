@@ -63,7 +63,7 @@ export class WorkbenchService {
   deleteWorkspace(projectId: string, sessionId?: string) {
     this.requireOpen();
     // In-flight edits can still publish records after asynchronous media work.
-    if (this.store.db.prepare("SELECT 1 FROM external_requests WHERE status='admitting' LIMIT 1").get() || this.editPromises.size || this.turns.size || this.store.jobs().some(job => ['queued', 'running'].includes(job.status)))
+    if (this.store.db.prepare("SELECT 1 FROM external_requests WHERE status='admitting' LIMIT 1").get() || this.store.db.prepare("SELECT 1 FROM arrangement_jobs WHERE json_extract(json,'$.status') IN ('queued','running') LIMIT 1").get() || this.editPromises.size || this.turns.size || this.store.jobs().some(job => ['queued', 'running'].includes(job.status)))
       throw new Error('Wait for active responses, generation jobs and audio edits to finish before deleting.');
     if (sessionId) this.store.deleteConversation(sessionId); else this.store.deleteProject(projectId);
     this.store.ensureConversation(this.store.activeProjectId());

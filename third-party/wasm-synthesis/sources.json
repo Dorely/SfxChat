@@ -1,0 +1,10 @@
+{
+  "runtime": {
+    "path": "node_modules/js-synthesizer/externals/libfluidsynth-2.4.6.js",
+    "sha256": "42ece3b53ef3289a3b30e0e1ebb4951e9da9987ae6ca975c57a0aabc91237f66"
+  },
+  "sources": [
+    { "name": "js-synthesizer-1.13.0.tar.gz", "revision": "37ca80b0840a353e5f381e53162f181828794f10", "url": "https://codeload.github.com/jet2jet/js-synthesizer/tar.gz/37ca80b0840a353e5f381e53162f181828794f10", "sha256": "ac51982c2044908ea75ec622f307f92a96f9831f3d7dc4ae056a267cbb6c7a8d" },
+    { "name": "fluidsynth-emscripten-2.4.6-em-2.tar.gz", "revision": "99bf7094cf517095b7a944ccf5f74072436bfa3f", "url": "https://codeload.github.com/jet2jet/fluidsynth-emscripten/tar.gz/99bf7094cf517095b7a944ccf5f74072436bfa3f", "sha256": "e1c6d8d159eb824473f68c4cb86c9d76ff9a80b5714595919bd25e3acf2d8500" }
+  ]
+}

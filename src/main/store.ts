@@ -31,7 +31,7 @@ export class Store {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     const version = this.db.pragma('user_version', { simple: true }) as number;
-    if (version > 5) { this.db.close(); throw new Error('This library was created by a newer SfxChat version.'); }
+    if (version > 6) { this.db.close(); throw new Error('This library was created by a newer SfxChat version.'); }
     if (version === 0) this.db.transaction(() => {
       // Fresh library gets the complete v2 shape. project_id carries no REFERENCES clause so a
       // fresh and an upgraded database stay structurally identical.
@@ -88,7 +88,14 @@ export class Store {
       }
       this.db.exec('DROP TABLE playground; PRAGMA user_version = 5;');
     })();
+    if (version < 6) this.db.transaction(() => {
+      this.db.exec(`CREATE TABLE arrangements (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), json TEXT NOT NULL);
+        CREATE TABLE arrangement_history (id TEXT NOT NULL REFERENCES arrangements(id), revision INTEGER NOT NULL, json TEXT NOT NULL, PRIMARY KEY(id,revision));
+        CREATE TABLE arrangement_jobs (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), request_id TEXT NOT NULL UNIQUE, json TEXT NOT NULL);
+        PRAGMA user_version = 6;`);
+    })();
   }
+  notify() { this.changed(); }
   reviews(projectId: string, status: 'active' | 'completed' | 'all' = 'all'): ReviewBoard[] {
     return this.db.prepare('SELECT json FROM reviews WHERE project_id=? ORDER BY rowid DESC').all(projectId).map(readReview).filter(board => status === 'all' || board.status === status);
   }
@@ -303,6 +310,9 @@ export class Store {
   deleteProject(id: string) {
     this.project(id);
     this.db.transaction(() => {
+      this.db.prepare('DELETE FROM arrangement_history WHERE id IN (SELECT id FROM arrangements WHERE project_id=?)').run(id);
+      this.db.prepare('DELETE FROM arrangements WHERE project_id=?').run(id);
+      this.db.prepare('DELETE FROM arrangement_jobs WHERE project_id=?').run(id);
       this.db.prepare('DELETE FROM review_history WHERE review_id IN (SELECT id FROM reviews WHERE project_id=?)').run(id);
       this.db.prepare('DELETE FROM reviews WHERE project_id=?').run(id);
       for (const conversation of this.conversations(id)) this.deleteConversation(conversation.id);

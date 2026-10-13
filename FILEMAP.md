@@ -3,6 +3,22 @@
 Current state: v0.2 Windows desktop and local agent workbench. Actual platform/provider evidence
 is recorded in [verification](docs/verification.md).
 
+## Local workstation additions
+
+| File | Responsibility |
+| --- | --- |
+| [src/shared/arrangement.ts](src/shared/arrangement.ts) | Arrangement, source, parameter and patch contracts; validation and tempo conversion. |
+| [src/shared/arrangement-operations.ts](src/shared/arrangement-operations.ts) | Shared discovery/edit/render schemas and musical transformations. |
+| [src/shared/sound-engine.ts](src/shared/sound-engine.ts), [soundfont-engine.ts](src/shared/soundfont-engine.ts) | Shared block scheduling, instruments/effects and WASM SoundFont lifecycle. |
+| [src/main/arrangements.ts](src/main/arrangements.ts) | Schema-v6 document/history/job ownership, pinned dependencies, packages and MIDI export. |
+| [src/main/arrangement-render-worker.ts](src/main/arrangement-render-worker.ts) | Offline streaming mix/stem/variation rendering and encoded-file diagnostics. |
+| [src/main/wav-reader.ts](src/main/wav-reader.ts) | Bounded WAV range decoding and streaming full-length analysis. |
+| [src/renderer/ArrangementStudio.tsx](src/renderer/ArrangementStudio.tsx), [arrangement.css](src/renderer/arrangement.css) | Manual arrangement, note/drum, instrument, mixer, automation, revision and export editors. |
+| [src/renderer/arrangement-player.ts](src/renderer/arrangement-player.ts), [arrangement-worker.ts](src/renderer/arrangement-worker.ts), [arrangement-worklet.ts](src/renderer/arrangement-worklet.ts) | User-controlled worker/worklet transport and shared-core live rendering. |
+| [docs/research/local-dsp.md](docs/research/local-dsp.md) | DSP sources, algorithm limits and licensing boundaries. |
+| [third-party/wasm-synthesis](third-party/wasm-synthesis/README.md) | Pinned WASM engine sources, hashes, licenses and rebuild directions. |
+| [resources/skill/references/arranging.md](resources/skill/references/arranging.md), [synthesis.md](resources/skill/references/synthesis.md), [mixing.md](resources/skill/references/mixing.md), [sound-design.md](resources/skill/references/sound-design.md), [local-workflow.md](resources/skill/references/local-workflow.md) | General musical/sound-design guidance and local operation workflow, routed by the canonical guidance manifest. |
+
 ## Root
 
 | File | Responsibility |

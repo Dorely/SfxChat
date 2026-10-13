@@ -105,7 +105,7 @@ export function interval(audio: DecodedAudio, start: number, end: number) {
   return { startFrame, endFrame };
 }
 
-export async function analyzeAudio(audio: DecodedAudio, asset: Asset, input: AudioAnalysisInput): Promise<AudioAnalysis> {
+export async function analyzeAudio(audio: DecodedAudio, asset: Pick<Asset, 'id' | 'hash'>, input: AudioAnalysisInput): Promise<AudioAnalysis> {
   const totalFrames = audio.channels[0].length, duration = totalFrames / audio.sampleRate;
   const { startFrame, endFrame } = interval(audio, input.startSeconds ?? 0, input.endSeconds ?? duration);
   const count = Math.min(input.bins ?? 96, endFrame - startFrame);

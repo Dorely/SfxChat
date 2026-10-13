@@ -1,3 +1,32 @@
+# Local workstation foundation (2026-10-13)
+
+Ran typecheck, production build, diff whitespace checks and the real browser host
+against the existing library. No automated suites or test-only scaffolding added.
+A temporary external stdio client initialized the newly built MCP server, discovered
+its tools and called shared operations; stale installed definitions were not used.
+
+- Project Local workstation trials / Engine foundation: eight-measure SoundFont
+  arrangement `8516185e-8ba1-4b2a-9676-2efb67f34155`. Browser playback advanced,
+  live expression controls saved revisions, Stop/natural completion worked without
+  console errors. This is transport evidence, not listening or device-output capture.
+- Restart preserved the document. Browser Undo created revision 5; Redo revision 6
+  restored the prior intent. Stale MCP writes returned REVISION_CONFLICT.
+- Ten-minute/32-track subtractive job `50ba4d41-5358-4637-a70e-8f66512a86b8`
+  completed: 28,800,000 frames, 600 seconds, 48 kHz. Actual whole-WAV MCP analysis
+  reported peak 0.11857318, RMS 0.00692081, zero clips with bounded memory reads.
+- Package export included pinned GeneralUser and license. Reopened arrangement
+  `16c7501e-7d63-4811-9217-fe51a3f3e9cf` retained the exact bank hash. PCM24
+  mix/stem job `a770f3a2-acc7-413e-b412-54ad57886ae3` produced two aligned
+  816,000-frame files (17 seconds), identical measured peak/RMS, zero clips.
+  Measurements were taken after encoding.
+- MCP rejected a self-sidechain cycle and missing sample. Job
+  `6cf5414a-f58d-4486-b0ae-5fb36b0cf3dc` cancelled with no published assets.
+
+Remaining at this stage: creative trials/reviews, UI polish and grouped continuous
+edits, complete manual coverage, installed skill hash checks, numerical live/export
+comparison, multi-track SoundFont capacity and packaged desktop validation. Human
+acceptance remains pending. Validation hosts were stopped before the stage commit.
+
 # Review completion and archiving (2026-10-12)
 
 - `npm run typecheck` and `npm run build` passed. No automated test infrastructure

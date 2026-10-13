@@ -211,7 +211,7 @@ void acquireInstanceLock().then(acquired => {
       if (custom) { try { return await loadSoundfont(custom); } catch (error) { diagnostics.record('soundfont.custom_failed', { error: diagnosticError(error) }); } }
       return await loadSoundfont(bundledSoundfont);
     };
-    operations = new Operations(service, rendererPort, exporter);
+    operations = new Operations(service, rendererPort, exporter, () => loadSoundfont(store.setting('soundfont-path', '') || bundledSoundfont));
     service.operation = (name, args) => operations!.call(name, args);
     bridge = await startBridge(root, join(agentRoot, 'sfxchat-helper.exe'), operations);
     const context = (id: string) => ({ projectId: store.conversation(id).projectId, sessionId: id });
@@ -220,6 +220,8 @@ void acquireInstanceLock().then(acquired => {
       try {
         const url = new URL(request.url);
         if (request.method !== 'GET') return new Response(null, { status: 404 });
+        if (url.hostname === 'soundfont') return bytesResponse(await operations!.arrangements.bankBytes(store.activeProjectId(), url.pathname.slice(1)), 'application/octet-stream', request);
+        if (url.hostname === 'sample') return bytesResponse(await media.samplePcm(store.asset(idSchema.parse(url.pathname.slice(1)), store.activeProjectId())), 'application/octet-stream', request);
         if (url.hostname === 'asset') {
           const id = idSchema.parse(url.pathname.slice(1)); const asset = store.asset(id, store.activeProjectId());
           // MIDI assets are symbolic; playback serves the synth render through the bundled bank.

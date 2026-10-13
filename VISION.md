@@ -1,6 +1,6 @@
 # SfxChat vision
 
-SfxChat is a specialist AI sound workbench for turning an idea into usable sound effects, music, and voice, then keeping the resulting audio organized and easy to find.
+SfxChat is an assistant-led local music and sound-design workstation, with optional provider generation, for turning an idea into editable music, usable game audio, and voice, then keeping the results organized and easy to find.
 
 Its assistant should combine sound-design knowledge with skill in prompting AI audio services. Users should be able to describe a need, explore alternatives, audition results, give feedback, refine a sound, and save it into a useful library without manually coordinating disconnected tools.
 
@@ -65,7 +65,17 @@ sound-design guidance used by the app assistant. One maintained source covers de
 provider prompting, revisions, analysis, trimming, loops and evidence limits. Agents
 can discover current guidance/capabilities and export originals or converted selected
 cue packs with provenance. Windows/local agents come first; remote services and a
-layered timeline editor are outside this milestone.
+remote collaboration are outside this milestone. A local arrangement timeline,
+instruments, effects, routing and automation belong to the workstation. Every
+creative agent operation must also have a manual UI path. Playback is user-controlled.
+
+Music guidance teaches general composition, arranging, synthesis and revision
+principles. Genre profiles and style conventions belong to user project briefs,
+not hardcoded skills. Local creation must be a deliberate first-class option.
+The acceptance examples are an orchestral miniature and preview, separate house
+and trance arrangements, and layered game-effect families. These are demonstrations,
+not product-wide style defaults. Human acceptance follows listening. Plugin hosting,
+microphone/hardware MIDI input and direct game-engine integration remain outside scope.
 
 ## Product character
 

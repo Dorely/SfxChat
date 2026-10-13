@@ -4,8 +4,11 @@ import { z } from 'zod';
 import type { WorkbenchService } from './service';
 import { analysisSchema, assetKindSchema, clipSchema, generationSchema, idSchema, midiToolSchema, musicToolSchema, voiceToolSchema, voiceListSchema, voiceModelListSchema, patchSchema, projectNameSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
 import { boardInputSchema, WorkbenchError, type UiCommand, type PlaybackState } from '../shared/workbench';
-import { guidanceDocuments } from '../shared/guidance';
+import { guidanceDocuments, selectGuidance } from '../shared/guidance';
 import type { Exporter } from './exporter';
+import { arrangementOperationDefinitions } from '../shared/arrangement-operations';
+import { Arrangements } from './arrangements';
+import type { SoundfontInfo } from './soundfont';
 
 const project = { projectId: idSchema };
 const session = { ...project, sessionId: idSchema };
@@ -15,8 +18,9 @@ const generation = { ...session, requestId: z.string().uuid().describe('Keep thi
 const obj = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
 const exportFields = { destination: z.string().min(1), format: z.enum(['original', 'wav', 'ogg']).default('original') };
 export const operationDefinitions = {
+  ...arrangementOperationDefinitions,
   status: { schema: obj({}), description: 'App readiness and provider status, without secrets.' },
-  guidance: { schema: obj({}), description: 'Complete current sound-design guidance, version/hash, configured providers and generation controls.' },
+  guidance: { schema: obj({ topics: z.array(z.string().min(1)).min(1).max(24).optional() }), description: 'Read shared guidance by topic filename (music-craft, arranging, synthesis, mixing, local-workflow, editing, or provider references). Omit topics for the compatible complete response. Hash always covers the complete guidance manifest.' },
   projects_list: { schema: obj({}), description: 'List workbench projects.' },
   project_create: { schema: obj({ name: projectNameSchema }), description: 'Create a project without changing the visible project.' },
   project_delete: { schema: obj(project), description: 'Permanently delete a project and its conversations, reviews and library records. Original media files remain on disk. Requires explicit user intent.' },
@@ -27,8 +31,8 @@ export const operationDefinitions = {
   session_create: { schema: obj({ ...project, title: titleSchema }), description: 'Create and label a session in a project.' },
   session_get: { schema: obj(session), description: 'Inspect a session, its Playground and jobs.' },
   rename_session: { schema: obj({ ...session, title: titleSchema }), description: 'Keep a session label specific to the current work.' },
-  generate_sounds: { schema: obj({ ...generation, input: generationSchema }), description: 'Queue sound-effect candidates. Returns durable IDs immediately. Respect requested count; never retry uncertain work with a new request ID.' },
-  generate_music: { schema: obj({ ...generation, input: musicToolSchema }), description: 'Queue music candidates on a configured provider. Returns durable IDs immediately; read guidance for the selected provider.' },
+  generate_sounds: { schema: obj({ ...generation, input: generationSchema }), description: 'Queue paid provider sound-effect candidates when provider generation is intended. Editable local effects use arrangement operations. Respect requested count; never retry uncertain work with a new request ID.' },
+  generate_music: { schema: obj({ ...generation, input: musicToolSchema }), description: 'Queue paid music candidates on a configured provider when that route is intended. Local editable instrumental music uses arrangement operations without a provider. Read the selected provider guidance.' },
   generate_voice: { schema: obj({ ...generation, input: voiceToolSchema }), description: 'Queue single-speaker speech from an exact script. Query list_voice_models, choose a selectable model ID in input.model, follow its guidance and supported controls, and discover voice IDs with list_voices. Omitted model uses the saved default. Returns durable job IDs; never retry uncertain work.' },
   compose_midi: { schema: obj({ ...generation, input: midiToolSchema }), description: 'Compose a MIDI clip from note data into a Standard MIDI File that plays through the bundled General MIDI bank. No provider, key, or spend. Returns durable job IDs immediately.' },
   list_voices: { schema: voiceListSchema, description: 'Discover provider voice IDs, descriptions and language/accent labels. Read successive pages with the same filters. Uses the shared saved key, without synthesis.' },
@@ -67,8 +71,9 @@ export function operationCatalog() {
 export class Operations {
   private pending = new Set<Promise<unknown>>();
   private stopped = false;
-  constructor(private service: WorkbenchService, private ui: UiPort, private exporter: Exporter) {}
-  async close() { this.stopped = true; await Promise.allSettled([...this.pending]); }
+  readonly arrangements: Arrangements;
+  constructor(private service: WorkbenchService, private ui: UiPort, private exporter: Exporter, font: () => Promise<SoundfontInfo>) { this.arrangements = new Arrangements(service, font); }
+  async close() { this.stopped = true; await Promise.allSettled([...this.pending]); await this.arrangements.close(); }
   call(name: string, raw: unknown, origin: 'user' | 'agent' = 'agent'): Promise<unknown> {
     if (this.stopped) return Promise.reject(new WorkbenchError('CLOSING', 'SfxChat is closing.'));
     if (!Object.hasOwn(operationDefinitions, name)) return Promise.reject(new WorkbenchError('UNKNOWN_OPERATION', 'Unknown workbench operation.'));
@@ -83,12 +88,13 @@ export class Operations {
     const s = this.service, store = s.store;
     if (a.projectId) store.project(a.projectId);
     if (a.sessionId && store.conversation(a.sessionId).projectId !== a.projectId) throw new WorkbenchError('NOT_FOUND', 'Session not found in project.');
+    if (Object.hasOwn(arrangementOperationDefinitions, name)) return this.arrangements.call(name, a, origin);
     const review = () => store.review(a.reviewId, a.projectId);
     const sessionJobs = () => store.jobs(a.projectId).filter(j => j.conversationId === a.sessionId);
     const getJobs = () => a.jobIds.map((id: string) => { const job = sessionJobs().find(j => j.id === id); if (!job) throw new WorkbenchError('NOT_FOUND', 'Job not found in session.'); return job; });
     switch (name) {
       case 'status': { const settings = await s.settings(); return { version: 1, ready: true, elevenLabsReady: settings.elevenLabsReady, musicProviders: settings.musicProviders, activeMusicId: settings.activeMusicId, voiceProviders: settings.voiceProviders, activeVoiceId: settings.activeVoiceId, providerKeys: settings.providerKeys }; }
-      case 'guidance': { const settings = await s.settings(); return { version: 1, hash: createHash('sha256').update(JSON.stringify(guidanceDocuments)).digest('hex'), documents: guidanceDocuments, providers: { effects: { kind: 'elevenlabs', model: 'eleven_text_to_sound_v2', ready: settings.elevenLabsReady }, music: settings.musicProviders, activeMusicId: settings.activeMusicId, voiceProviders: settings.voiceProviders, activeVoiceId: settings.activeVoiceId, providerKeys: settings.providerKeys }, controls: { effects: z.toJSONSchema(generationSchema), music: z.toJSONSchema(musicToolSchema), voice: z.toJSONSchema(voiceToolSchema), midi: z.toJSONSchema(midiToolSchema) } }; }
+      case 'guidance': { const settings = await s.settings(); return { version: 1, hash: createHash('sha256').update(JSON.stringify(guidanceDocuments)).digest('hex'), topics: Object.keys(guidanceDocuments), documents: selectGuidance(a.topics), providers: { effects: { kind: 'elevenlabs', model: 'eleven_text_to_sound_v2', ready: settings.elevenLabsReady }, music: settings.musicProviders, activeMusicId: settings.activeMusicId, voiceProviders: settings.voiceProviders, activeVoiceId: settings.activeVoiceId, providerKeys: settings.providerKeys }, controls: { effects: z.toJSONSchema(generationSchema), music: z.toJSONSchema(musicToolSchema), voice: z.toJSONSchema(voiceToolSchema), midi: z.toJSONSchema(midiToolSchema) } }; }
       case 'projects_list': return store.projects();
       case 'project_delete': s.deleteWorkspace(a.projectId); return { deleted: true };
       case 'session_delete': s.deleteWorkspace(a.projectId, a.sessionId); return { deleted: true };

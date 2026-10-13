@@ -20,6 +20,7 @@
     "@iarna/toml": "2.2.5",
     "@modelcontextprotocol/server": "2.2.0",
     "better-sqlite3": "13.0.3",
+    "js-synthesizer": "1.13.0",
     "js-tiktoken": "1.0.21",
     "mpg123-decoder": "1.0.3",
     "music-metadata": "11.15.0",

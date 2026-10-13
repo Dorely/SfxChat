@@ -1,5 +1,14 @@
 # Source provenance
 
+The 2026-10-13 local workstation uses pinned js-synthesizer 1.13.0 / FluidSynth
+2.4.6 Emscripten sources and runtime hashes under
+[third-party/wasm-synthesis](../third-party/wasm-synthesis/README.md). Original
+instrument/effect code, patches and demonstration scores are SfxChat-authored;
+GeneralUser retains its separate bank license. Research records identify exact
+material read and limits: [composition/instructions](research/music-composition.md)
+and [DSP](research/local-dsp.md). Provider-specific references remain applicable
+only when those routes are intentionally chosen.
+
 ## ElevenLabs TTS model discovery and guidance (2026-10-08)
 
 Official endpoint/models, v4, TTS best practices/product guide, voice settings,

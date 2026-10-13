@@ -1,20 +1,59 @@
 ---
 name: sfxchat
-description: Design, generate, audition, refine, organize, and export sound effects, music, and single-speaker voice through the installed SfxChat workbench. Includes live speech-model discovery, model-specific delivery guidance, script preservation, revisions, and shared candidate reviews.
+description: Create and revise editable local music and sound, or use configured audio providers, through SfxChat. Includes composition, synthesis, arrangement, technical inspection, shared candidate reviews, voice, and export.
 ---
 
 # SfxChat
 
-Use SfxChat for the complete sound-design workflow. Respect project-specific creative direction and the user's chosen tools. The app owns providers, credentials, originals, and jobs; do not make raw provider calls or build a separate audition page.
+Use the installed workbench for the complete workflow. The app owns arrangements,
+providers, credentials, immutable originals, and jobs. Do not make raw provider
+calls or build a separate audition interface. Follow the user's chosen route;
+editable local synthesis needs no provider, API key, or paid generation.
 
-Before designing audio, read [design](references/design.md) and [workflow](references/workflow.md). For effects, read the complete [ElevenLabs SFX guidance](references/elevenlabs-sfx.md). For music, read the block matching the configured provider: [ElevenLabs Music](references/elevenlabs-music.md) or [Gemini Lyria](references/gemini-lyria.md). For MIDI clips, read [composing craft](references/music-craft.md), [arranging for the General MIDI bank](references/midi-instruments.md), and [composing with the workbench](references/midi-workflow.md) before `compose_midi`. For spoken scripts, read [ElevenLabs voice](references/elevenlabs-voice.md) or [Gemini voice](references/gemini-voice.md) before `generate_voice`; use `list_voices` for discovery. Before analysis, trimming, listening, spectrograms, or loop work, read [editing and evidence](references/editing.md). These are the same documents the app's assistant uses, including examples and limitations.
+1. Read `guidance`; compare its complete hash with `guidance.json` beside this
+   skill. Use returned current documents if they differ. Discover tools/schemas
+   through MCP or `sfxchat tools`; CLI calls use `sfxchat call <operation> --input
+   <request.json>`. Select or create an explicit project and session. The visible
+   UI project is not the agent's workflow context.
+2. Load only relevant references, using `guidance` with `topics` (filename or stem).
+   Omitting topics remains the complete response. For music read [composition](references/music-craft.md)
+   and [arranging](references/arranging.md); for local sound sources read
+   [synthesis](references/synthesis.md); for effects read [sound design](references/sound-design.md);
+   for production read [mixing](references/mixing.md).
+   Use [local workflow](references/local-workflow.md) for arrangements and revisions,
+   [editing/evidence](references/editing.md) for analysis and loops, and
+   [review workflow](references/workflow.md) for candidate decisions. These teach
+   general principles. Derive stylistic choices from user briefs; do not invent
+   fixed genre profiles, emotion mappings, or guarantees of memorability.
+3. For local work discover `local_catalog`, save intent and structure, then add
+   patterns/tracks incrementally. Use stable IDs and expected revisions. Clone a
+   shared pattern to vary only one occurrence. Render a short preview before
+   developing a long work. Preserve theme notes when changing instrumentation,
+   and preserve timing when changing an effect's weight, unless requested otherwise.
+4. For paid provider work read its exact reference first:
+   [ElevenLabs effects](references/elevenlabs-sfx.md), [ElevenLabs music](references/elevenlabs-music.md),
+   [Gemini music](references/gemini-lyria.md), [ElevenLabs voice](references/elevenlabs-voice.md),
+   or [Gemini voice](references/gemini-voice.md). Query `list_voice_models` and
+   `list_voices` before selecting speech identity/model. Preserve the exact script
+   separately from delivery preparation. Respect authorized scope and count; don't
+   silently switch providers or repeat uncertain billed work. Never ask for secrets.
+5. Keep request IDs and returned job IDs. Retry the same ID only with identical
+   arguments for recovery. Poll jobs rather than assuming submission is completion.
+   Inspect diagnostics and provenance, then revise the requested dimension. Tool
+   defects are not taste questions. Legacy [MIDI workflow](references/midi-workflow.md)
+   and [GM mapping](references/midi-instruments.md) remain available; deriving an
+   arrangement leaves the original MIDI unchanged.
+6. Group initial and revised candidates with `review_create`/`review_update`.
+   `review_open` opens the existing UI without autoplay. Agents cannot start audio.
+   Reconcile review revision conflicts; preserve rejection and uncertainty. Read
+   user decisions through `review_get`/`review_wait`. Completed boards are locked;
+   never reopen merely to bypass that lock. Agent completion is not human acceptance.
+7. Export original assets, aligned stems/components, or portable arrangement
+   packages to an absolute destination. Preserve source/license provenance, engine
+   version, seeds, exact revision, and edit lineage. Preview gain does not alter
+   originals. Inspect export manifests and reopen packages where required.
 
-1. Run `sfxchat guidance`. Compare its hash with `guidance.json` beside this skill; when different, use the returned current documents. Inspect the configured provider roster and supported controls. Never invent provider IDs or ask for secret values; missing credentials are configured in SfxChat Settings.
-2. Run `sfxchat tools` to discover current operation names and JSON schemas. Use `sfxchat call <operation> --input <request.json>` (or `--json <JSON>`). MCP exposes the same named operations. Use `sfxchat help` for installation and command syntax.
-3. Select or create an explicit project and session. Use projectId for reviews and the shared Playground; include sessionId only where the operation schema requires generation/chat attribution. The visible UI project is not your workflow context. Before choosing a speech model, query `list_voice_models` with the provider ID (and `refresh:true` when a fresh catalog is needed). Read selectable status, guidance, controls, language coverage, limits and access flags; pass the exact returned ID as `generate_voice.input.model`. Use `list_voices` separately for voice identity. Omitted model/voice uses saved defaults; per-request selection does not change them. ElevenLabs discovery is live; Gemini's catalog is explicitly built-in. Unreviewed models use plain text without specialized tags or tuning. Follow the provider reference's model-specific advice; unavailable/realtime models cannot be selected.
-4. For generation, supply a unique `requestId` and preserve it with returned job IDs. Reuse that ID only to recover the exact same request. Use `jobs_wait` for bounded waits; inspect existing jobs after a disconnect. Never retry uncertain paid work as a new request without user direction. Defaults and requested candidate counts follow the design guidance.
-5. Use `review_create` and `review_update` to group candidates and current references by named cue. `review_open` opens the existing desktop audition UI without autoplay. Playback is user-controlled; agents have no play/stop tools. Users can enable Loop in the UI. Review writes require `expectedRevision`; fetch and reconcile conflicts instead of overwriting feedback.
-6. Read saved selections, reject-all decisions, and notes through `review_get` or `review_wait`. For the finish signal, use `review_wait` with `condition: completed` and inspect returned status (timeouts return current state). Done saves, archives, and locks the board; unresolved cues stay unreviewed. `review_list` with `status: completed` finds archived boards. `review_complete` and explicit `review_reopen` require `expectedRevision`; never silently reopen to bypass a lock. Completion records `completedAt` and `completedBy`: distinguish user completion from agent completion, and never equate completion with acceptance. MCP review resources support update notifications; use reads/waits when the host does not surface them. Prepare revisions from saved observations and complete parent prompts. Agent-written decisions are never human approval.
-7. Use `export_asset` or `export_review` with an absolute destination and `original`, `wav`, or `ogg` format. Read the returned paths and manifest. Preview gain is never baked into exports. Preserve project-specific integration and in-game validation steps downstream.
-
-External generation returns immediately; the app assistant may wait within its turn. Use files and shell commands only when your calling harness provides them. Both interfaces use the same library operations. MCP audio/image outputs are evidence only when your model and harness actually support receiving that modality. Playing audio in the UI is not proof you heard it. Keep user audition decisions separate from technical checks and model observations.
+Technical checks are not listening. Use audio understanding only when the calling
+model and transport genuinely support it; UI playback alone is not evidence that
+the agent heard anything. Present plain-language listening choices and leave human
+acceptance pending until the user listens.
