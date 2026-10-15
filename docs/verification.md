@@ -1,3 +1,32 @@
+# Installed startup recovery (2026-10-15)
+
+The installed app failed before creating its workbench window. Diagnostics recorded
+`app.start_failed` with `This library was created by a newer SfxChat version.`
+Read-only inspection confirmed library schema 6 and an installed main bundle that
+rejected schemas above 5. Current source at `42240f6` supports schema 6; fetching
+origin confirmed that checkout contains all remote main commits plus 39 local commits.
+
+`npm run typecheck` and the production build inside `npm run dev:browser` passed.
+The first browser launch correctly refused the existing installed owner. After
+authorized shutdown (the stuck processes had no main window to close normally),
+`node scripts/dev-browser.mjs` started the built app. Browser inspection showed
+Connected, the existing project list, and the selected Mozart workspace with its
+saved conversation and five Playground assets. No media playback or paid calls
+were made. The browser host was shut down through its normal shutdown endpoint,
+and its temporary browser tab was closed.
+
+`npx electron-builder --win nsis --x64 --publish never` packaged the verified build.
+The generated NSIS installer completed with exit code 0. SHA-256 hashes of the
+installed and newly packaged `resources/app.asar` matched. The installed CLI's
+`status` returned `ready:true`, and `projects_list` returned all 13 existing
+projects. Launching the installed executable brought up a responding native
+`SfxChat — Sound Workbench` window. Diagnostics recorded a packaged startup with
+no subsequent startup failure. The installed app was left open for the user.
+Native dialog, playback, and provider generation behavior were not revalidated.
+
+The README now documents updating the installed build after development upgrades
+the shared library, without deleting data or weakening the schema guard.
+
 # Local workstation foundation (2026-10-13)
 
 ## Mozart benchmark and development-path repairs

@@ -233,6 +233,14 @@ Invalid returned audio is retained with a failed job. Export checks original has
 
 ## Troubleshooting
 
+If startup reports **This library was created by a newer SfxChat version**, install
+a build from the current source. Development and installed builds share the same
+library, so running newer development code can upgrade it beyond an older installed
+build's supported schema. Build with `npm run package`, close SfxChat, and run the
+new installer in `release/`. Keep the existing library; do not reset its schema
+version or delete it. The displayed app version alone may not distinguish local
+builds made from different commits.
+
 Settings → **Open diagnostic logs** opens `%APPDATA%/SfxChat/logs`. Logs record chat
 requests, tool activity, generation outcomes, and errors with conversation/job IDs,
 HTTP status, provider error details, and request IDs when supplied. Failed chat
