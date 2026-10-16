@@ -15,6 +15,12 @@ made, no temporary host remains, and the installed application was not updated.
 `git diff --check` passed. Reviewed the shared operation callers, renderer command
 acknowledgment, manual launcher selection, and MCP review-result/resource handling.
 
+At the user's request, skipped the live UI check and installed the new build.
+`npx electron-builder --win nsis --x64 --publish never` passed; the NSIS installer
+completed with exit code 0. The installed and packaged `resources/app.asar` SHA-256
+hashes both matched `42C4733C58A960A387A82DCB61811697AB9F67EC730D6C5F8CBF257300BB5B99`.
+No SfxChat process was running before installation, so no forced shutdown was needed.
+
 # Installed startup recovery (2026-10-15)
 
 The installed app failed before creating its workbench window. Diagnostics recorded
