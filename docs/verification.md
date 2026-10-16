@@ -1,3 +1,20 @@
+# Automatic cue-sheet presentation (2026-10-16)
+
+History inspection confirmed that `review_create` only saved a board from its
+introduction in `f39a176`; presentation required a separate `review_open` call.
+Creation now defaults to opening through the same acknowledged renderer command,
+with `open:false` for drafts and a separate UI outcome alongside the saved board.
+The manual launcher retains its own selection. Updates do not navigate.
+
+`npm run typecheck` passed. The full production build within `npm run dev:browser`
+passed, including the agent/native helper build. Browser startup then refused the
+existing installed library owner and exited; the user-owned desktop was left
+running. Browser switching, cross-project presentation, unavailable/busy UI outcomes,
+and native window focus were not live-verified. No provider calls or playback were
+made, no temporary host remains, and the installed application was not updated.
+`git diff --check` passed. Reviewed the shared operation callers, renderer command
+acknowledgment, manual launcher selection, and MCP review-result/resource handling.
+
 # Installed startup recovery (2026-10-15)
 
 The installed app failed before creating its workbench window. Diagnostics recorded

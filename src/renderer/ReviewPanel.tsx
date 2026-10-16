@@ -27,7 +27,7 @@ export function ReviewLauncher({ snapshot, onSelect }: { snapshot: Snapshot; onS
     try {
       const cue = newCue('cue_1'); cue.label = 'Candidates';
       cue.candidates = (startEmpty ? [] : playgroundIds).map(assetId => ({ assetId, label: '', notes: '', gainDb: 0 }));
-      const created = await workbench<ReviewBoard>('review_create', { projectId: snapshot.activeProjectId, content: { title: 'Sound review', cues: [cue] } });
+      const created = await workbench<ReviewBoard>('review_create', { projectId: snapshot.activeProjectId, content: { title: 'Sound review', cues: [cue] }, open: false });
       onSelect(created.id);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not create review.'); }
     finally { setBusy(false); }

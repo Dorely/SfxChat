@@ -50,7 +50,7 @@ export const operationDefinitions = {
   spectrogram_view: { schema: obj({ ...project, id: idSchema, input: spectrogramSchema.default({}) }), description: 'Return a PNG spectrogram and exact mapping. Cut points must come from sample measurements.' },
   audio_listen: { schema: obj({ ...project, id: idSchema, input: clipSchema.default({}) }), description: 'Return a bounded WAV clip. Hearing requires a capable calling model/harness; playback is not hearing.' },
   review_list: { schema: obj({ ...project, status: z.enum(['active', 'completed', 'all']).default('active') }), description: 'List review boards. Defaults to active; completed finds archived reviews, all includes both.' },
-  review_create: { schema: obj({ ...project, content: boardInputSchema }), description: 'Prepare named cues, candidates, references and preview settings without autoplay.' },
+  review_create: { schema: obj({ ...project, content: boardInputSchema, open: z.boolean().default(true) }), description: 'Create a cue sheet and open it in the UI without autoplay. Use open:false while preparing a draft, then review_open when ready. Returns the saved review plus ui.status (opened, skipped, or failed). If opening fails, retry review_open with the returned ID, never recreate the saved sheet.' },
   review_get: { schema: obj(board), description: 'Read a review revision, selections, rejected cues and notes.' },
   review_history: { schema: obj(board), description: 'Inspect saved review revisions and decision/feedback attribution.' },
   review_update: { schema: obj({ ...board, expectedRevision: z.number().int().positive(), content: boardInputSchema }), description: 'Save review content only if its revision still matches. Reconcile conflicts with current feedback.' },
@@ -136,7 +136,18 @@ export class Operations {
       case 'review_list': return store.reviews(a.projectId, a.status);
       case 'review_get': return review();
       case 'review_history': review(); return store.reviewHistory(a.reviewId, a.projectId);
-      case 'review_create': return store.saveReview(a.projectId, a.content, origin);
+      case 'review_create': {
+        const created = store.saveReview(a.projectId, a.content, origin);
+        if (!a.open) return { ...created, ui: { status: 'skipped' } };
+        // Persistence succeeded even if the renderer cannot accept the navigation.
+        // Return its identity so callers can retry opening without duplicating it.
+        try {
+          await this.ui.send({ action: 'open', projectId: a.projectId, sessionId: store.ensureConversation(a.projectId), reviewId: created.id });
+          return { ...created, ui: { status: 'opened' } };
+        } catch (error) {
+          return { ...created, ui: { status: 'failed', code: error instanceof WorkbenchError ? error.code : 'UI_FAILED', message: error instanceof Error ? error.message : 'Could not open review.' } };
+        }
+      }
       case 'review_update': review(); return store.saveReview(a.projectId, a.content, origin, a.reviewId, a.expectedRevision);
       case 'review_complete': review(); return store.saveReview(a.projectId, a.content, origin, a.reviewId, a.expectedRevision, 'completed');
       case 'review_reopen': review(); return store.saveReview(a.projectId, undefined, origin, a.reviewId, a.expectedRevision, 'active');

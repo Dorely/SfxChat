@@ -23,6 +23,9 @@ composer holds the model and reasoning-effort picker; the palette button in the 
 between the Studio, Midnight, Ember, and Daylight themes (also under Settings → Appearance), and
 the choice is remembered per device.
 
+Agent-created cue sheets open automatically in the Playground without starting
+audio. Agents can prepare a draft with `open:false` and open it when ready.
+
 The Playground supports Effects, Music, and Voice modes. Settings has **one API key
 per provider**, shared across ElevenLabs effects/music/voice and Gemini music/voice/
 direct Gemini chat. Model and default-voice choices are independent of credentials.

@@ -178,7 +178,13 @@ board with `set_playground` like any other sound.
 
 ## Audition and export
 
-`review_create` stores `{title,cues}` for a project. Each ordered cue has a stable
+`review_create` stores `{title,cues}` for a project and opens the new sheet in the
+Playground by default, selecting its project without autoplay. Pass `open:false`
+to prepare a draft, then call `review_open` when it is ready. The returned review
+includes `ui.status`: `opened`, `skipped`, or `failed`. A failed open also includes
+`ui.code` and `ui.message`; the review is already saved, so retry `review_open`
+with its returned ID instead of creating another sheet. Updates do not navigate.
+Each ordered cue has a stable
 filename-safe key, label, brief, candidates, optional current reference, notes,
 preview gains. A decision
 is `unreviewed`, `selected` with a candidate ID, or `rejected` with no selected ID.

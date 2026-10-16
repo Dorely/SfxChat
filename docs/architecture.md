@@ -525,6 +525,13 @@ decode waveforms near the viewport and cache up to 256 small peak arrays; they a
 unmounted fetches. Memoized waveforms/note rolls do not rebuild on clock ticks. Ordinary audio cards reuse the same
 transport presentation with their native media position.
 
+`review_create` saves first, then uses RendererPort to open the new sheet by default.
+`open:false` supports draft preparation; the manual launcher uses it because it owns
+its selection locally. Creation returns the saved review with a separate `ui.status`
+(`opened`, `skipped`, or `failed`) so unavailable/busy/timed-out UI navigation never
+turns a successful save into a creation failure. `review_open` retries navigation
+without duplicating a sheet. Review updates do not switch the visible sheet.
+
 RendererPort acknowledges UI commands and reports actual player state. Open commands
 never autoplay. Conflicting simultaneous switches return UI_BUSY. The renderer's
 AuditionPlayer owns one WebAudio context and a single source with preview gain.

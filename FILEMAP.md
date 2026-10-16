@@ -139,7 +139,7 @@ is recorded in [verification](docs/verification.md).
 | [docs/chimera-integration.md](docs/chimera-integration.md) | Migration recipe for Chimera's raw API and HTML audition workflow; no sibling edits. |
 | [docs/research/agent-runtime.md](docs/research/agent-runtime.md) | Pinned runtime/encoder rebuild, official sources and guidance extraction provenance. |
 | [src/cli/index.ts](src/cli/index.ts) | JSON CLI, on-demand desktop startup, authenticated client, stdio MCP tools/media/resources and bounded review notification watches. |
-| [src/main/operations.ts](src/main/operations.ts) | Shared operation schemas, descriptions, project review/Playground scopes, deletion, context validation and owning-operation dispatch. |
+| [src/main/operations.ts](src/main/operations.ts) | Shared schemas/dispatch, project scopes, deletion, validation, and default cue-sheet presentation with separate save/UI outcomes. |
 | [src/main/bridge.ts](src/main/bridge.ts) | Private named-pipe endpoint, authenticated framing and protected discovery. |
 | [src/main/ui-port.ts](src/main/ui-port.ts) | Explicit renderer commands, acknowledgment, visibility stop and actual playback status. |
 | [src/main/exporter.ts](src/main/exporter.ts) | Integrity-checked original/WAV/Vorbis exports, cue packs, provenance and incomplete manifests. |

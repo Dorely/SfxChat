@@ -79,6 +79,9 @@ microphone/hardware MIDI input and direct game-engine integration remain outside
 
 ## Product character
 
+Agent-created cue sheets should switch the workspace to the new sheet when ready,
+without starting playback. Agents may prepare drafts before presenting them.
+
 Reviews have an explicit Done action: completion archives and freezes the review,
 retains its decisions and unresolved cues, and makes completion visible to agents.
 Users and agents can explicitly reopen a completed review for further editing;
