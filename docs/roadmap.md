@@ -146,13 +146,13 @@ note repeat with probability, invert/retrograde. Deterministic and seeded.
 - UI: Studio pattern toolbar with a key/scale selector and transform menu that
   previews the change before applying.
 
-### 8. Effects, generators and slicing
+### 8. Effects, generators and warp
 
 Chorus/flanger/phaser, bitcrush/downsample, stereo width, gate and trance gate,
 transient shaper, ring modulation, frequency shift, pitch/formant shift, convolution
 reverb with bundled or imported impulse responses, Doppler and pan/distance sweeps,
 tempo-synced modulation. sfxr-style generator presets with mutate; procedural
-ambience and RPM-driven engines; beat slicing onto sampler pads; warp to tempo.
+ambience and RPM-driven engines; warp audio to tempo.
 
 ### 9. Live input and plugins
 
