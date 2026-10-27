@@ -184,9 +184,9 @@ track. Lyria and ElevenLabs Music answer length, structure, and vocal questions
 differently; the assistant follows the active provider's documented behavior, and each
 note above records what was verified and what remains unverified.
 
-## Trim sounds
+## Trim sounds and find loops
 
-Open a sound's inspector and choose **Trim as new asset**. Set the in/out points,
+Open a sound's inspector and choose **Trim or loop…**. Set the in/out points,
 zoom into the selection to refine its edges, optionally add short fades, and click
 **Play selection** to hear just that area. The button switches to **Stop selection**
 during playback. Changing the selection or fades stops the old preview; the next
@@ -195,8 +195,20 @@ spectrogram view that the assistant can attach in chat. **Save as new asset** cr
 The source is retained, and the new asset records its parent, exact sample-frame
 interval, fades, source hash, and decoder. Export the derivative through its inspector.
 
+The editor header shows estimated tempo, key, and integrated loudness; hover a chip
+for what it measures. **Bar grid** overlays the estimated bars on the waveform.
+Switch to **Loop** and click **Find loop points** to rank whole-bar loops for music,
+or texture loops for ambience. Optionally set the shortest and longest length or
+require the loop to start at the beginning first. Candidates appear as a list and
+as brackets on the waveform. Select one, adjust the seam crossfade if needed, click
+**Play seam** to hear the end of the loop wrap into its start, or **Play loop** for
+the whole loop once. Then choose **Save loop as new asset**. The assistant and MCP
+agents use the same search through `find_loop_points`. Match labels are
+measurements to help choose what to audition, not musical judgment.
+
 The assistant can use `analyze_audio` to examine timestamped amplitude
-measurements, detect energy-based event intervals as candidate clip spots, and
+measurements, detect energy-based event intervals as candidate clip spots,
+estimate tempo, key, and loudness, rank loop points with `find_loop_points`, and
 probe how a candidate loop's end wraps to its start; `trim_asset` keeps a focused
 section or renders a seamless loop with a wrap crossfade. These local operations
 need no audio-provider key or paid generation. When the configured chat model
@@ -206,8 +218,8 @@ model's fidelity, never approval. Each attachment stays visible and playable in
 the chat history for your own inspection. Give timing hints when the desired event is
 ambiguous, and audition every result yourself.
 
-Editing supports MP3 and RIFF PCM/float WAV, up to 64 MiB each for source bytes and
-decoded float samples. Unsupported WAV encodings remain available for original-file
+Editing supports MP3 and RIFF PCM/float WAV, up to 64 MiB of source bytes and
+192 MiB of decoded float samples. Unsupported WAV encodings remain available for original-file
 playback/export. Edits use decoded duration (which can differ from MP3 metadata),
 round endpoints to nearest sample frames, and save float32 WAV without another lossy
 encode. Zero fades preserve retained decoded samples; optional fades change only

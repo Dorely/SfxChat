@@ -102,10 +102,13 @@ is recorded in [verification](docs/verification.md).
 | [src/main/providers/generic/registry.ts](src/main/providers/generic/registry.ts) | Provider/model validation, base-URL normalization, and effort parsing. |
 | [src/main/providers/generic/capabilities.ts](src/main/providers/generic/capabilities.ts) | Capability probes, max-tokens discovery, vision/audio flags, and tool filtering. |
 | [src/main/store.ts](src/main/store.ts) | SQLite schema v6 migrations, project reviews/shared Playground, lifecycle locks/history, workspace deletion and request replay, FTS5, assets, conversations, jobs, tool ledger, and recovery. |
-| [src/main/media.ts](src/main/media.ts) | Original/chat storage, import, integrity checks, PCM16 conversion, serialized editing/analysis, and bounded decoded cache. |
+| [src/main/media.ts](src/main/media.ts) | Original/chat storage, import, integrity checks, PCM16 conversion, serialized editing/analysis, bounded decoded cache, streamed/decoded frame sources, and cached musical features for analysis, loop search, and seam renders. |
 | [src/main/audio.ts](src/main/audio.ts) | Bounded MP3/WAV decode, timestamped amplitude windows, energy event detection, loop-seam probing, exact sample-frame trims, loop crossfades, fades, mono WAV clip rendering, and float32 WAV rendering. |
 | [src/main/png.ts](src/main/png.ts) | Minimal 8-bit RGB PNG encoder over Node zlib (filter 0 scanlines, hand-rolled CRC32 and chunks). |
-| [src/main/spectrogram.ts](src/main/spectrogram.ts) | Self-contained STFT spectrogram rendering: radix-2 FFT, Hann window, full-scale-dB scaling, colormap, time/frequency grid, and exact mapping. |
+| [src/main/spectrogram.ts](src/main/spectrogram.ts) | STFT spectrogram rendering over the shared DSP: full-scale-dB scaling, colormap, time/frequency grid, and exact mapping. |
+| [src/main/dsp.ts](src/main/dsp.ts) | Shared DSP: frame sources, radix-2 FFT, Hann window, RBJ biquads, BS.1770 K-weighting, Butterworth low-pass, and Pearson correlation. |
+| [src/main/music-analysis.ts](src/main/music-analysis.ts) | Whole-file musical features: onset envelope, chroma, band energies, tempo, beat grid, bar phase, key, and BS.1770 loudness estimates with confidences. |
+| [src/main/loop-finder.ts](src/main/loop-finder.ts) | Music (whole-bar) and texture loop-candidate ranking, sample-level seam alignment, crossfade recommendations, and exact loop-seam renders. |
 | [src/shared/midi.ts](src/shared/midi.ts) | Beat-based MIDI note model, bounds, General MIDI instrument/drum names, and duration/summary helpers. |
 | [src/main/midi.ts](src/main/midi.ts) | Standard MIDI File writer and parser plus clip duration for the MIDI creator. |
 | [src/main/soundfont.ts](src/main/soundfont.ts) | SoundFont bank resolution, SF2 preset enumeration, and cached bank identity for MIDI playback. |
@@ -127,7 +130,7 @@ is recorded in [verification](docs/verification.md).
 | [src/renderer/themes.css](src/renderer/themes.css), [src/renderer/theme.ts](src/renderer/theme.ts) | Theme color tokens (Studio, Midnight, Ember, Daylight) and the per-device theme preference. |
 | [src/renderer/App.tsx](src/renderer/App.tsx), [src/renderer/styles.css](src/renderer/styles.css) | Project switcher, project/conversation deletion confirmations, theme picker, session renaming, chat with the composer model picker, effects, music, and voice libraries, Playground generation, audition, inspector, two-pane settings, and token-based styling. |
 | [src/renderer/Icon.tsx](src/renderer/Icon.tsx) | Shared inline SVG icon set drawn for this project, replacing font glyph icons. |
-| [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Waveform trim selection, fine-window zoom, fades, spectrogram panel, exact rendered preview, and derived-asset saving. |
+| [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Trim/Loop editor: waveform selection, fine-window zoom, fades, spectrogram panel, tempo/key/loudness chips, bar grid, loop-candidate search and brackets, seam preview, exact rendered preview, and derived-asset saving. |
 | [src/renderer/MidiStudio.tsx](src/renderer/MidiStudio.tsx) | MIDI workspace: clip rail, track lanes with sticky headers and key gutters on a shared ruler, note editing and keyboard nudging, transport with playhead audition, and derivative saving. |
 | [src/renderer/ChatContextMeter.tsx](src/renderer/ChatContextMeter.tsx) | Throttled composer context indicator, threshold styling, and estimate details. |
 | [.github/workflows/windows.yml](.github/workflows/windows.yml) | Credential-free Windows typecheck and installer artifact build. |

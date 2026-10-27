@@ -1,3 +1,60 @@
+# Musical analysis and loop finder (2026-10-27)
+
+Roadmap phases 1 and 2. Temporary harnesses outside the repository were bundled
+with esbuild against the real `dsp.ts`, `music-analysis.ts`, and `loop-finder.ts`,
+then deleted.
+
+- Synthetic checks. On generated 128 and 92 BPM pieces, the top music candidates
+  were exact whole-bar loops. A periodic noise texture gives a top texture candidate at a
+  multiple of its period, labeled close, after adding ±3-unit smoothing and
+  texture-specific labels (it had read weak before).
+- Real library tracks.
+
+  | Track | Analysis | Top candidates | Search time |
+  |---|---|---|---|
+  | kelp_shallows | 192 BPM (likely 96 felt), C major, −17.9 LUFS | Close bar loops, 5–10 ms crossfade | 87 ms |
+  | sanctuary | 75.96 BPM | Partial | — |
+  | glimmer | 59.88 BPM | Close or partial | — |
+  | Rogue Frequency (240 s MP3) | 141.9 BPM, confidence 0.41, downbeat uncertain | Weak or partial | 163 ms (analysis 1.0 s) |
+  | Ambiences | Automatic texture mode | Partial or close | — |
+  | Conch hum | — | Weak | — |
+
+  Two measurement fixes came out of these runs:
+  - Level deltas were biased by up to −16 dB on sparse music. They now compare
+    like-for-like windows and read about ±2 dB.
+  - Texture search took about 3 s. Removing array copying in the alignment brought
+    it to 0.3–0.6 s.
+- Operations path through `window.sfx.operation`:
+  - `find_loop_points` on an ambience returned texture mode in 464 ms; Rogue
+    Frequency ran end to end in 1.5 s.
+  - `mode:"music"` on the ambience returned the no-beat-grid error.
+  - `analyze_audio` with `musical:true` returned tempo, key, loudness, and beats.
+  - `audio_listen` with `loopSeam` returned a mono WAV and the seam position.
+    Combining it with start/end was rejected with INVALID_ARGUMENTS.
+- `npm run typecheck` and `npm run build` passed after the final edits.
+- Browser check through `npm run dev:browser`. The installed SfxChat was closed
+  with the user's approval and has not been reopened. The check used the
+  kelp_shallows placeholder in "Nerissa's Mermaid Adventure":
+  - Chips and the bar grid rendered.
+  - Loop search listed 8 candidates with brackets. The top one was "Bars 9–16
+    (8 bars, 10.0 s) after a 10.0 s intro; seam close match."
+  - Selecting another candidate moved in/out and the crossfade, and reset previews.
+  - Play seam ran a 3.995 s one-shot that ended without looping and reset its button.
+  - The check exposed two pre-existing renderer bugs, now fixed: the CSP blocked
+    spectrogram `blob:` images, and a toggle button overflowed the editor
+    horizontally. After the rebuild, the spectrogram loaded (naturalWidth 768) and
+    the editor had no horizontal scroll (743/743).
+  - The active project was set back to Chimera, and the host was stopped through
+    its shutdown endpoint.
+
+Gaps:
+- **Save loop as new asset** was not clicked, to avoid adding an asset to the
+  user's library. It calls the existing `trim_asset loop:true` path.
+- The in-app assistant tool path was not exercised by a live chat model.
+- The native desktop was not checked.
+- No paid calls were made. Nothing here is listening evidence: playback ran, but
+  no one judged the seams by ear.
+
 # Automatic cue-sheet presentation (2026-10-16)
 
 History inspection confirmed that `review_create` only saved a board from its

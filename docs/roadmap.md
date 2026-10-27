@@ -60,6 +60,9 @@ Missing, by origin:
 
 ### 1. Musical analysis foundation
 
+Status: implemented 2026-10-27. WAV streams bounded ranges at any length;
+MP3 uses the whole-file decode, whose bound rose to 192 MiB of float samples.
+
 Streaming decode for analysis beyond the 64 MiB editing bound (full-length music);
 a shared DSP module (FFT, filters, resampling); onset envelope; tempo and beat grid
 with bar/downbeat estimate and confidence; key estimate with confidence; integrated
@@ -71,6 +74,8 @@ loudness (ITU-R BS.1770 / EBU R128 gating) and sample peak.
 - Checks: synthetic signals with known tempo/key/loudness, real library tracks.
 
 ### 2. Loop-point finder
+
+Status: implemented 2026-10-27; see [verification](verification.md).
 
 `find_loop_points` ranks loop candidates for music (bar-aligned, phrase-length
 preference, optional intro) and for non-musical ambience (texture and level

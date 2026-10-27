@@ -116,7 +116,8 @@ without re-rendering. Playback uses the workbench's exclusive player state.
 and caches at most one decoded asset. `audio.ts` decodes MP3 with pinned
 `mpg123-decoder` (gapless enabled), or RIFF PCM 8/16/24/32-bit and IEEE float
 32/64-bit WAV locally. Decode errors fail rather than permit edits across gaps.
-Source bytes and decoded float samples are bounded to 64 MiB; processing yields
+Source bytes are bounded to 64 MiB and decoded float samples to 192 MiB (about
+nine minutes of 44.1 kHz stereo, covering full provider tracks); processing yields
 between blocks. Shutdown waits for pending edits and analysis; edits cannot commit
 after the service closes. Original import/export support is independent of these
 editing bounds and encoding restrictions.
@@ -162,6 +163,47 @@ crossfade length, so wrapped playback continues at consecutive source frames; fa
 are rejected with a loop, and `TrimEdit.loop` records `crossfadeFrames` and
 `outputFrames`. The interval fields keep naming the source selection, and records
 without `loop` stay readable.
+
+### Musical analysis and loop finding
+
+`dsp.ts` holds the shared FFT, Hann window, RBJ biquads, BS.1770 K-weighting and a
+`FrameSource` abstraction: WAV assets stream bounded ranges through `WavReader` at any
+length, other formats use the cached whole-file decode. `music-analysis.ts` computes
+whole-file features once per source hash (the last four are cached) from a mono
+22.05 kHz analysis signal on a 2048/512 STFT grid, up to 900 s: spectral-flux onset
+envelope, chroma (150 Hz–5 kHz), 24 log band energies and per-frame level. From these
+it estimates tempo (normalized onset autocorrelation over 50–220 BPM with a log-normal
+prior around 120 BPM), a beat grid (Ellis 2007 dynamic programming), a bar phase
+(4 beats per bar assumed; the phase with the most low-band onsets and harmonic change),
+key (Krumhansl–Kessler profile correlation on mean chroma) and integrated loudness
+(BS.1770 K-weighting with absolute/relative gating) plus sample peak. Each estimate
+carries a confidence. Tempo may read at half or double the felt tempo. `analyze_audio`
+with `musical:true` adds this summary, with beat and bar lists bounded to the
+requested interval. None of it is listening evidence.
+
+`find_loop_points` (`loop-finder.ts`) ranks loop candidates by comparing the context
+around the jump (the end) with the context around the start. Music mode, chosen
+automatically when tempo confidence is at least 0.3 with 16+ beats, uses beat-synchronous
+units (chroma, band energies, level) over a one-to-two-bar context. It proposes only
+whole-bar loops starting on downbeats when the downbeat is known, with a small
+preference for 4/8/16/32 bars. Texture mode uses 100 ms units smoothed over ±3 units,
+with no grid. Both penalize seams inside fades, suppress near-duplicate candidates,
+and then refine each survivor to the sample. The end is aligned to the start by
+waveform correlation (±30 ms music, ±60 ms texture), then both points slide together
+by up to 1 ms to minimize the wrap step. Each candidate reports exact frames, a
+similarity score and `close`/`partial`/`weak` label, seam correlation, wrap step vs the
+source's natural step, a like-for-like level delta, and a recommended crossfade
+(5–60 ms music, 50–500 ms texture, at most a quarter of the loop). Labels and ranking
+are heuristics for choosing what to audition.
+
+The seam preview (`audio_listen` with `loopSeam`, and the editor's Play seam) renders
+the last `contextSeconds` of the loop, the crossfaded wrap, and its opening exactly as
+a `trim_asset loop:true` render would play it. The UI receives float32 WAV bytes
+through fixed IPC. The assistant receives a bounded mono 16-bit clip with the seam's
+position. `loopSeam` cannot be combined with start/end.
+
+Sources: ITU-R BS.1770-4; D. Ellis, "Beat Tracking by Dynamic Programming" (2007);
+Krumhansl & Kessler (1982) key profiles; R. Bristow-Johnson, Audio EQ Cookbook.
 
 ## Multimodal assistant context
 

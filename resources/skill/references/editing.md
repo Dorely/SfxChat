@@ -24,7 +24,24 @@ contains before cutting. For a clip spot on an effect: events to propose interva
 bins to refine edges, audio_listen to confirm, then trim. If the desired event cannot
 be distinguished from measurements and user feedback, ask for a timing hint.
 
-Designing a loop on existing music follows the same ladder: a coarse overview plus a
+For music, analyze_audio with musical:true adds tempo, beat and bar grid, key, and
+integrated loudness estimates, each with a confidence. Treat them as estimates:
+tempo can read at half or double the felt tempo, and a low-confidence downbeat
+means bar numbers may be offset. Do not present them as heard facts.
+
+To loop a track, start with find_loop_points. It ranks candidates (whole bars on
+the beat grid for music, texture and level continuity for ambience) with exact
+frames, a similarity score, a close/partial/weak seam label, seam measurements, and
+a recommended crossfade. Optional limits: mode, a search region, a length range in
+seconds or bars, allowIntro:false to require starting at the region start, and
+count. When audio_listen is available, pass loopSeam {startSeconds, endSeconds,
+crossfadeMs} to attach exactly what the loop render plays across its wrap; the
+note gives the seam's position in the clip. Present the top few candidates in plain
+words (length, intro, match label), save the one the user picks with trim_asset
+loop:true and its recommended crossfadeMs, and ask the user to audition it. Scores
+rank what to audition; they are not musical judgment.
+
+Designing or adjusting a loop by hand follows the same ladder: a coarse overview plus a
 spectrogram view to find repeating regions and phrase boundaries, a candidate
 [start,end), then analyze_audio with seamProbe on that candidate. Seam numbers tell
 you how the end wraps to the start: a large discontinuity or mismatched head/tail RMS
