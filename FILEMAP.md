@@ -41,6 +41,7 @@ is recorded in [verification](docs/verification.md).
 | [docs/architecture.md](docs/architecture.md) | Implemented runtime ownership, persistence, providers, and recovery. |
 | [docs/verification.md](docs/verification.md) | Dated manual, live, and build evidence with explicit gaps. |
 | [docs/implementation-plan.md](docs/implementation-plan.md) | Accepted v0.1 scope, delivery sequence, and verification requirements. |
+| [docs/roadmap.md](docs/roadmap.md) | Accepted music and sound-tool phases, UI principles, and verification approach. |
 | [docs/sources.md](docs/sources.md) | Source locations, revision/date/hash provenance, copy policy, and original documentation links. |
 | [docs/research/agentic-audio-editing.md](docs/research/agentic-audio-editing.md) | Dated primary-source research, timing/representation limitations, and trimming design decisions. |
 | [docs/research/audio-decoding.md](docs/research/audio-decoding.md) | Pinned MP3 decoder behavior, source revisions, licenses, and rebuild materials. |
