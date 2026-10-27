@@ -1,6 +1,5 @@
 import { encodePng } from './png';
-
-const yieldWork = () => new Promise<void>(resolve => setImmediate(resolve));
+import { fft, hann, yieldWork } from './dsp';
 
 export interface SpectrogramOptions {
   width?: number;
@@ -48,48 +47,6 @@ const COLORMAP = (() => {
   }
   return lut;
 })();
-
-/** In-place iterative radix-2 FFT over Float32 arrays. */
-function fft(re: Float32Array, im: Float32Array): void {
-  const n = re.length;
-  for (let i = 1, j = 0; i < n; i++) {
-    let bit = n >> 1;
-    for (; j & bit; bit >>= 1) j ^= bit;
-    j ^= bit;
-    if (i < j) {
-      const tr = re[i]; re[i] = re[j]; re[j] = tr;
-      const ti = im[i]; im[i] = im[j]; im[j] = ti;
-    }
-  }
-  for (let len = 2; len <= n; len <<= 1) {
-    const angle = (-2 * Math.PI) / len;
-    const stepRe = Math.cos(angle);
-    const stepIm = Math.sin(angle);
-    for (let i = 0; i < n; i += len) {
-      let curRe = 1;
-      let curIm = 0;
-      for (let j = 0; j < len / 2; j++) {
-        const a = i + j;
-        const b = a + len / 2;
-        const vRe = re[b] * curRe - im[b] * curIm;
-        const vIm = re[b] * curIm + im[b] * curRe;
-        re[b] = re[a] - vRe;
-        im[b] = im[a] - vIm;
-        re[a] += vRe;
-        im[a] += vIm;
-        const nextRe = curRe * stepRe - curIm * stepIm;
-        curIm = curRe * stepIm + curIm * stepRe;
-        curRe = nextRe;
-      }
-    }
-  }
-}
-
-function hann(size: number): Float32Array {
-  const window = new Float32Array(size);
-  for (let i = 0; i < size; i++) window[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / size);
-  return window;
-}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));

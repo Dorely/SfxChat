@@ -2,7 +2,7 @@ import { isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { WorkbenchService } from './service';
-import { analysisSchema, assetKindSchema, clipSchema, generationSchema, idSchema, midiToolSchema, musicToolSchema, voiceToolSchema, voiceListSchema, voiceModelListSchema, patchSchema, projectNameSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
+import { analysisSchema, assetKindSchema, clipSchema, loopSearchSchema, generationSchema, idSchema, midiToolSchema, musicToolSchema, voiceToolSchema, voiceListSchema, voiceModelListSchema, patchSchema, projectNameSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
 import { boardInputSchema, WorkbenchError, type UiCommand, type PlaybackState } from '../shared/workbench';
 import { guidanceDocuments, selectGuidance } from '../shared/guidance';
 import type { Exporter } from './exporter';
@@ -45,10 +45,11 @@ export const operationDefinitions = {
   update_asset: { schema: obj({ ...session, id: idSchema, patch: patchSchema }), description: 'Name, tag, organize, and review an asset without changing its bytes.' },
   import_audio: { schema: obj({ ...session, paths: z.array(z.string().min(1)).min(1).max(128), kind: assetKindSchema.default('effect') }), description: 'Import WAV/MP3 files using absolute paths into this project/session.' },
   set_playground: { schema: obj({ ...project, assetIds: z.array(idSchema) }), description: 'Arrange the project’s shared comparison board.' },
-  analyze_audio: { schema: obj({ ...project, id: idSchema, input: analysisSchema.default({}) }), description: 'Measure exact sample-frame amplitude, events and seam data; not semantic listening.' },
+  analyze_audio: { schema: obj({ ...project, id: idSchema, input: analysisSchema.default({}) }), description: 'Measure exact sample-frame amplitude, events and seam data; musical:true adds tempo, beat/bar grid, key and LUFS estimates. Not semantic listening.' },
+  find_loop_points: { schema: obj({ ...project, id: idSchema, input: loopSearchSchema.default({}) }), description: 'Rank loop-point candidates for music (whole bars on the beat grid, optional intro) or ambience/texture, refined to exact frames with seam metrics and a recommended crossfade. Heuristic ranking; audition with audio_listen loopSeam, save with trim_asset loop:true.' },
   trim_asset: { schema: obj({ ...session, id: idSchema, input: trimSchema }), description: 'Save a trim or loop derivative with exact lineage; original unchanged.' },
   spectrogram_view: { schema: obj({ ...project, id: idSchema, input: spectrogramSchema.default({}) }), description: 'Return a PNG spectrogram and exact mapping. Cut points must come from sample measurements.' },
-  audio_listen: { schema: obj({ ...project, id: idSchema, input: clipSchema.default({}) }), description: 'Return a bounded WAV clip. Hearing requires a capable calling model/harness; playback is not hearing.' },
+  audio_listen: { schema: obj({ ...project, id: idSchema, input: clipSchema.default({}) }), description: 'Return a bounded WAV clip, or with input.loopSeam the wrap of a loop exactly as a loop render plays it. Hearing requires a capable calling model/harness; playback is not hearing.' },
   review_list: { schema: obj({ ...project, status: z.enum(['active', 'completed', 'all']).default('active') }), description: 'List review boards. Defaults to active; completed finds archived reviews, all includes both.' },
   review_create: { schema: obj({ ...project, content: boardInputSchema, open: z.boolean().default(true) }), description: 'Create a cue sheet and open it in the UI without autoplay. Use open:false while preparing a draft, then review_open when ready. Returns the saved review plus ui.status (opened, skipped, or failed). If opening fails, retry review_open with the returned ID, never recreate the saved sheet.' },
   review_get: { schema: obj(board), description: 'Read a review revision, selections, rejected cues and notes.' },
@@ -130,9 +131,19 @@ export class Operations {
       case 'import_audio': { if (a.paths.some((path: string) => !isAbsolute(path))) throw new WorkbenchError('INVALID_PATH', 'Import paths must be absolute.'); return s.importFiles(a.sessionId, a.paths, a.kind); }
       case 'set_playground': store.setProjectPlayground(a.projectId, a.assetIds); return { assetIds: store.playground(a.projectId)[a.projectId] };
       case 'analyze_audio': return s.analyzeAudio(a.id, a.input, a.projectId);
+      case 'find_loop_points': return s.findLoopPoints(a.id, a.input, a.projectId);
       case 'trim_asset': return s.trimAsset(a.sessionId, a.id, a.input);
       case 'spectrogram_view': { const { png, mapping } = await s.media.spectrogram(store.asset(a.id, a.projectId), a.input); return { mapping, media: { type: 'image', mimeType: 'image/png', data: png.toString('base64') } }; }
-      case 'audio_listen': { const asset = store.asset(a.id, a.projectId); const { bytes, ...clip } = asset.format === 'mid' ? await s.midiClip(a.id, a.input, a.projectId) : await s.media.clip(asset, a.input); return { clip, media: { type: 'audio', mimeType: 'audio/wav', data: bytes.toString('base64') } }; }
+      case 'audio_listen': {
+        const asset = store.asset(a.id, a.projectId);
+        if (a.input.loopSeam) {
+          if (a.input.startSeconds !== undefined || a.input.endSeconds !== undefined) throw new WorkbenchError('INVALID_ARGUMENTS', 'Pass either loopSeam or startSeconds/endSeconds, not both.');
+          const { bytes, sampleRate, seam } = await s.seamClip(asset, a.input.loopSeam);
+          return { clip: { duration: seam.duration, seamAtSeconds: seam.seamAtSeconds, sampleRate, channels: 1 }, loop: { startFrame: seam.startFrame, endFrame: seam.endFrame, crossfadeFrames: seam.crossfadeFrames }, media: { type: 'audio', mimeType: 'audio/wav', data: bytes.toString('base64') } };
+        }
+        const { bytes, ...clip } = asset.format === 'mid' ? await s.midiClip(a.id, a.input, a.projectId) : await s.media.clip(asset, a.input);
+        return { clip, media: { type: 'audio', mimeType: 'audio/wav', data: bytes.toString('base64') } };
+      }
       case 'review_list': return store.reviews(a.projectId, a.status);
       case 'review_get': return review();
       case 'review_history': review(); return store.reviewHistory(a.reviewId, a.projectId);

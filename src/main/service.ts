@@ -1,12 +1,12 @@
 import { operationDefinitions } from './operations';
 import { Store } from './store';
 import { MediaLibrary, generatedFields } from './media';
-import { analysisSchema, clipSchema, generationSchema, midiCompositionSchema, midiGenerationSchema, musicGenerationSchema, voiceGenerationSchema, patchSchema, spectrogramSchema, trimSchema } from './validation';
+import { analysisSchema, clipSchema, generationSchema, loopSearchSchema, loopSeamSchema, midiCompositionSchema, midiGenerationSchema, musicGenerationSchema, voiceGenerationSchema, patchSchema, spectrogramSchema, trimSchema } from './validation';
 import { instructions, midiInstructions, musicInstructions, voiceInstructions, tools, toolSchemas } from './assistant';
 import { parseMidi, writeMidi } from './midi';
 import { MIDI_TICKS_PER_QUARTER, midiCompositionProblem, midiDurationSeconds, midiSummary, type MidiComposition } from '../shared/midi';
-import type { ClipRender } from './audio';
-import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, MidiComposeInput, MusicProviderKind, SoundfontSummary, VoiceGenerationInput, VoiceListInput, VoicePage, VoiceModelListInput, VoiceModelCatalog, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
+import { floatWav, renderClip, type ClipRender } from './audio';
+import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, LoopSearchInput, LoopSeamInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, MidiComposeInput, MusicProviderKind, SoundfontSummary, VoiceGenerationInput, VoiceListInput, VoicePage, VoiceModelListInput, VoiceModelCatalog, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
 import type { DiagnosticLog } from './diagnostics';
 import { diagnosticError } from './providers/errors';
 import { readFile, unlink } from 'node:fs/promises';
@@ -163,7 +163,9 @@ export class WorkbenchService {
   /** Renders a MIDI clip interval for listening; audio assets stay on the decoded path. */
   midiClip(id: string, raw: { startSeconds?: number; endSeconds?: number }, projectId: string) {
     this.requireOpen();
-    return this.ports.renderMidi(this.store.asset(id, projectId), clipSchema.parse(raw));
+    const { loopSeam, ...input } = clipSchema.parse(raw);
+    if (loopSeam) throw new Error('Loop seams are measured on decoded audio. Render the MIDI clip or arrangement to audio first.');
+    return this.ports.renderMidi(this.store.asset(id, projectId), input);
   }
   /** Parsed notes of a stored clip, loaded into the studio's roll. */
   async midiNotes(id: string, projectId: string): Promise<MidiComposition> {
@@ -301,6 +303,22 @@ export class WorkbenchService {
   analyzeAudio(id: string, raw: AudioAnalysisInput, projectId: string) {
     this.requireOpen();
     return this.media.analyze(this.store.asset(id, projectId), analysisSchema.parse(raw));
+  }
+  findLoopPoints(id: string, raw: LoopSearchInput, projectId: string) {
+    this.requireOpen();
+    return this.media.findLoops(this.store.asset(id, projectId), loopSearchSchema.parse(raw));
+  }
+  /** Mono listening clip across a loop's wrap, exactly as a loop render plays it. */
+  async seamClip(asset: Asset, raw: LoopSeamInput) {
+    this.requireOpen();
+    const seam = await this.media.loopSeam(asset, loopSeamSchema.parse(raw));
+    const clip = await renderClip({ channels: seam.channels, sampleRate: seam.sampleRate, decoder: 'loop seam' }, {});
+    return { ...clip, seam: { startFrame: seam.startFrame, endFrame: seam.endFrame, crossfadeFrames: seam.crossfadeFrames, seamAtSeconds: seam.seamFrame / seam.sampleRate, duration: seam.channels[0].length / seam.sampleRate } };
+  }
+  async previewSeam(id: string, raw: LoopSeamInput, projectId: string) {
+    this.requireOpen();
+    const seam = await this.media.loopSeam(this.store.asset(id, projectId), loopSeamSchema.parse(raw));
+    return new Uint8Array(floatWav(seam.channels, seam.sampleRate));
   }
   async spectrogram(id: string, raw: SpectrogramInput, projectId: string) {
     this.requireOpen();
@@ -457,6 +475,7 @@ export class WorkbenchService {
         }
         case 'search_assets': case 'inspect_asset': result = await operate(call.name, args); break;
         case 'analyze_audio': { const { id, ...input } = args as AudioAnalysisInput & { id: string }; result = await operate(call.name, { id, input }); break; }
+        case 'find_loop_points': { const { id, ...input } = args as LoopSearchInput & { id: string }; result = await operate(call.name, { id, input }); break; }
         case 'trim_asset': { const { id, ...input } = args as TrimInput & { id: string }; result = await this.trimAsset(conversationId, id, input, call.id, signal); break; }
         case 'spectrogram_view': {
           const { id, ...input } = args as SpectrogramInput & { id: string };
@@ -478,8 +497,26 @@ export class WorkbenchService {
           break;
         }
         case 'audio_listen': {
-          const { id, startSeconds, endSeconds } = args as { id: string; startSeconds?: number; endSeconds?: number };
+          const { id, startSeconds, endSeconds, loopSeam } = args as { id: string; startSeconds?: number; endSeconds?: number; loopSeam?: LoopSeamInput };
           const asset = this.store.asset(id, projectId);
+          if (loopSeam) {
+            if (startSeconds !== undefined || endSeconds !== undefined) throw new Error('Pass either loopSeam or startSeconds/endSeconds, not both.');
+            const clip = await this.seamClip(asset, loopSeam);
+            const label = `Loop seam of “${asset.name}” (${loopSeam.endSeconds.toFixed(2)} s → ${loopSeam.startSeconds.toFixed(2)} s)`;
+            const attachmentId = randomUUID();
+            await this.media.saveChatAttachment(attachmentId, clip.bytes, 'wav');
+            this.store.addMessage(conversationId, 'tool', `Attached the loop seam of “${asset.name}” for listening (end ${loopSeam.endSeconds.toFixed(2)} s wrapping to ${loopSeam.startSeconds.toFixed(2)} s).`, 'completed', [
+              { id: attachmentId, kind: 'audio', label, mediaType: 'audio/wav', bytes: clip.bytes.length, duration: clip.seam.duration, sampleRate: clip.sampleRate }
+            ]);
+            result = {
+              attachmentId,
+              clip: { duration: clip.seam.duration, seamAtSeconds: clip.seam.seamAtSeconds, sampleRate: clip.sampleRate, channels: 1, encoding: 'wav16', bytes: clip.bytes.length },
+              loop: { startFrame: clip.seam.startFrame, endFrame: clip.seam.endFrame, crossfadeFrames: clip.seam.crossfadeFrames },
+              note: `The attached WAV is what a loop render (trim_asset loop:true with this crossfadeMs) plays across its wrap: the end of the loop, the crossfade starting ${clip.seam.seamAtSeconds.toFixed(3)} s into the clip, then the loop's opening, downmixed to mono 16-bit PCM. Listening is an observation at the provider model's fidelity; the user audition decides.`
+            };
+            attachments.push({ label: `loop seam of “${asset.name}”`, kind: 'audio', mime: 'audio/wav', base64: clip.bytes.toString('base64') });
+            break;
+          }
           const clip = asset.format === 'mid'
             ? await this.ports.renderMidi(asset, { ...(startSeconds === undefined ? {} : { startSeconds }), ...(endSeconds === undefined ? {} : { endSeconds }) })
             : await this.media.clip(asset, { ...(startSeconds === undefined ? {} : { startSeconds }), ...(endSeconds === undefined ? {} : { endSeconds }) });

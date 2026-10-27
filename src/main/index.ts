@@ -281,6 +281,7 @@ void acquireInstanceLock().then(acquired => {
       updateAsset: (id, patch, conversationId) => operations!.call('update_asset', { ...context(conversationId ?? store.ensureConversation(store.activeProjectId())), id, patch }, 'user'),
       analyzeAudio: (id, input) => operations!.call('analyze_audio', { projectId: store.activeProjectId(), id, input }, 'user'), trimAsset: (conversationId, id, input) => operations!.call('trim_asset', { ...context(conversationId), id, input }, 'user'),
       previewTrim: (id, input) => service!.previewTrim(id, input, store.activeProjectId()),
+      previewSeam: (id, input) => service!.previewSeam(id, input, store.activeProjectId()),
       spectrogram: (id, input) => service!.spectrogram(id, input, store.activeProjectId()),
       midiNotes: id => service!.midiNotes(id, store.activeProjectId()),
       previewMidi: composition => service!.previewMidi(composition),

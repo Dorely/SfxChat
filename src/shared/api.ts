@@ -30,6 +30,7 @@ export function createApi({ call, onChanged, onUiCommand, mediaUrl, hostMode }: 
   updateAsset: (id, patch, conversationId) => call('updateAsset', id, patch, conversationId), setPlayground: (id, ids) => call('setPlayground', id, ids),
   analyzeAudio: (id, input) => call('analyzeAudio', id, input), trimAsset: (conversationId, id, input) => call('trimAsset', conversationId, id, input),
   previewTrim: (id, input) => call('previewTrim', id, input),
+  previewSeam: (id, input) => call('previewSeam', id, input),
   spectrogram: (id, input) => call('spectrogram', id, input),
   midiNotes: id => call('midiNotes', id), previewMidi: composition => call('previewMidi', composition),
   saveMidiEdit: (conversationId, id, composition, name) => call('saveMidiEdit', conversationId, id, composition, name),

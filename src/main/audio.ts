@@ -4,6 +4,8 @@ import type { Asset, AudioAnalysis, AudioAnalysisInput, EventInterval, SeamProbe
 
 // Bounds apply to editing/analysis, not importing or retaining originals.
 export const MAX_AUDIO_BYTES = 64 * 1024 * 1024;
+/** Decoded float samples: about nine minutes of 44.1 kHz stereo, covering full provider tracks. */
+export const MAX_DECODED_BYTES = 192 * 1024 * 1024;
 /** Attachment clips are bounded by duration and by encoded 16-bit mono WAV size. */
 export const MAX_CLIP_SECONDS = 30;
 export const MAX_CLIP_BYTES = 3 * 1024 * 1024;
@@ -12,8 +14,8 @@ export interface DecodedAudio { channels: Float32Array[]; sampleRate: number; de
 export interface ClipRender { bytes: Buffer; startFrame: number; endFrame: number; sampleRate: number }
 
 function checkSize(frames: number, channels: number) {
-  if (!Number.isSafeInteger(frames) || frames <= 0 || channels < 1 || channels > 8 || frames * channels * 4 > MAX_AUDIO_BYTES)
-    throw new Error('Editing supports up to 64 MiB of decoded audio and 1–8 channels.');
+  if (!Number.isSafeInteger(frames) || frames <= 0 || channels < 1 || channels > 8 || frames * channels * 4 > MAX_DECODED_BYTES)
+    throw new Error('Editing supports up to 192 MiB of decoded audio and 1–8 channels.');
 }
 
 export async function decodeAudio(bytes: Buffer, format: Asset['format']): Promise<DecodedAudio> {
@@ -299,6 +301,18 @@ async function probeSeam(audio: DecodedAudio, input: { startSeconds?: number; en
     zeroCrossBeforeEnd: beforeEnd === null ? null : endFrame - 1 - beforeEnd,
     note: 'Seam metrics describe the wrap from the interval end back to its start. discontinuity is the single-sample step across that seam; correlation compares the last window with the first (1 = similar texture, 0 = unrelated); suggestedOffsetFrames slides both endpoints together (length preserved) within ±searchFrames frames and is only reported when it improves the seam correlation by at least 0.1, so noise never nudges an aligned loop. These are measurements, not musical judgment; audition any loop you design.'
   };
+}
+
+/** Interleaved IEEE float32 WAV of the given channels. */
+export function floatWav(channels: Float32Array[], sampleRate: number): Buffer {
+  const count = channels.length, frames = channels[0].length, bytes = Buffer.alloc(44 + frames * count * 4);
+  bytes.write('RIFF', 0); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVEfmt ', 8);
+  bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(3, 20); bytes.writeUInt16LE(count, 22);
+  bytes.writeUInt32LE(sampleRate, 24); bytes.writeUInt32LE(sampleRate * count * 4, 28);
+  bytes.writeUInt16LE(count * 4, 32); bytes.writeUInt16LE(32, 34);
+  bytes.write('data', 36); bytes.writeUInt32LE(frames * count * 4, 40);
+  for (let i = 0; i < frames; i++) for (let c = 0; c < count; c++) bytes.writeFloatLE(channels[c][i], 44 + (i * count + c) * 4);
+  return bytes;
 }
 
 /** Renders a bounded mono 16-bit PCM WAV window for attachment to a chat model. */

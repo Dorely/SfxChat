@@ -41,7 +41,7 @@ export interface TrimEdit {
   requested: TrimInput; decoder: string; outputEncoding: 'float32-wav';
   loop?: { crossfadeFrames: number; outputFrames: number };
 }
-export interface AudioAnalysisInput { startSeconds?: number; endSeconds?: number; bins?: number; events?: boolean; seamProbe?: { startSeconds?: number; endSeconds?: number } }
+export interface AudioAnalysisInput { startSeconds?: number; endSeconds?: number; bins?: number; events?: boolean; seamProbe?: { startSeconds?: number; endSeconds?: number }; musical?: boolean }
 export interface EventInterval {
   startFrame: number; endFrame: number; startSeconds: number; endSeconds: number;
   peak: number; rms: number;
@@ -61,8 +61,47 @@ export interface AudioAnalysis {
   bins: { startFrame: number; endFrame: number; startSeconds: number; endSeconds: number; min: number; max: number; peak: number; rms: number }[];
   events?: EventInterval[];
   seam?: SeamProbe;
+  musical?: MusicalAnalysis;
   note: string;
 }
+export interface MusicalAnalysis {
+  version: 1;
+  tempo: { bpm: number; confidence: number; steady: boolean; beatResidualMs: number } | null;
+  meter: { beatsPerBar: number; assumed: true; downbeatConfidence: number };
+  key: { label: string; tonic: string; mode: 'major' | 'minor'; correlation: number; confidence: number; alternatives: { label: string; correlation: number }[] } | null;
+  loudness: { integratedLufs: number | null; samplePeakDbfs: number | null };
+  beats: number[]; bars: { number: number; seconds: number }[]; truncated: boolean;
+  note: string;
+}
+export interface LoopSearchInput {
+  mode?: 'auto' | 'music' | 'texture';
+  /** Optional search region; candidates lie entirely inside it. */
+  startSeconds?: number; endSeconds?: number;
+  minSeconds?: number; maxSeconds?: number;
+  minBars?: number; maxBars?: number;
+  /** false requires the loop to start at the beginning of the search region. */
+  allowIntro?: boolean;
+  count?: number;
+}
+export interface LoopCandidate {
+  rank: number;
+  startSeconds: number; endSeconds: number; startFrame: number; endFrame: number; lengthSeconds: number;
+  bars: number | null; startBar: number | null; endBar: number | null;
+  introSeconds: number; outroSeconds: number;
+  score: number; match: 'close' | 'partial' | 'weak';
+  similarity: { harmony: number | null; timbre: number; level: number; contextUnits: number };
+  seam: { correlation: number; step: number; naturalStep: number; levelDeltaDb: number; alignmentShiftFrames: number };
+  recommendedCrossfadeMs: number;
+  summary: string;
+}
+export interface LoopSearchResult {
+  version: 1; assetId: string; sourceHash: string; mode: 'music' | 'texture';
+  sampleRate: number; duration: number;
+  tempo: MusicalAnalysis['tempo']; key: string | null; beatsPerBar: number | null;
+  candidates: LoopCandidate[];
+  note: string;
+}
+export interface LoopSeamInput { startSeconds: number; endSeconds: number; crossfadeMs?: number; contextSeconds?: number }
 export interface SpectrogramInput { startSeconds?: number; endSeconds?: number; width?: number; height?: number; freqScale?: 'log' | 'linear' }
 export interface GenerationInput {
   kind?: 'effect'; prompt: string; count?: number; duration?: number | null; loop?: boolean;
@@ -169,6 +208,7 @@ export interface SfxApi {
   analyzeAudio(id: string, input: AudioAnalysisInput): Promise<AudioAnalysis>;
   trimAsset(conversationId: string, id: string, input: TrimInput): Promise<Asset>;
   previewTrim(id: string, input: TrimInput): Promise<Uint8Array>;
+  previewSeam(id: string, input: LoopSeamInput): Promise<Uint8Array>;
   spectrogram(id: string, input: SpectrogramInput): Promise<Uint8Array>;
   midiNotes(id: string): Promise<MidiComposition>;
   previewMidi(composition: MidiComposition): Promise<Uint8Array>;

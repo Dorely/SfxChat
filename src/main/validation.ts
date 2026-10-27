@@ -24,7 +24,24 @@ export const analysisSchema = z.object({
   seamProbe: z.object({
     startSeconds: z.number().finite().min(0).optional(),
     endSeconds: z.number().finite().positive().optional()
-  }).strict().optional().describe('Measure the loop seam where endSeconds wraps back to startSeconds: splice discontinuity, head/tail RMS, start/end correlation, and a suggested frame offset. Omit both fields to probe the whole asset as a loop.')
+  }).strict().optional().describe('Measure the loop seam where endSeconds wraps back to startSeconds: splice discontinuity, head/tail RMS, start/end correlation, and a suggested frame offset. Omit both fields to probe the whole asset as a loop.'),
+  musical: z.boolean().optional().describe('Also estimate tempo, beat and bar grid, key and integrated loudness (LUFS) for the whole file, with beats/bars listed for the requested interval. Estimates with heuristic confidence, not listening evidence. Works on full-length tracks.')
+}).strict();
+export const loopSearchSchema = z.object({
+  mode: z.enum(['auto', 'music', 'texture']).optional().describe('music: whole-bar loops on the detected beat grid; texture: grid-free loops for ambience, drones and noise beds; auto (default) uses music when a steady beat is found.'),
+  startSeconds: z.number().finite().min(0).optional().describe('Search region start; candidates lie entirely inside the region.'),
+  endSeconds: z.number().finite().positive().optional().describe('Search region end (default: end of file).'),
+  minSeconds: z.number().finite().positive().max(900).optional().describe('Shortest loop length (default 4 s for music, 3 s for texture).'),
+  maxSeconds: z.number().finite().positive().max(900).optional(),
+  minBars: z.number().int().min(1).max(256).optional().describe('Music mode: fewest bars (default 4 unless minSeconds is given).'),
+  maxBars: z.number().int().min(1).max(256).optional(),
+  allowIntro: z.boolean().optional().describe('true (default) lets the loop start after an intro that plays once; false requires the loop to start at the region start.'),
+  count: z.number().int().min(1).max(12).optional().describe('Candidates to return (default 5, maximum 12).')
+}).strict();
+export const loopSeamSchema = z.object({
+  startSeconds: z.number().finite().min(0), endSeconds: z.number().finite().positive(),
+  crossfadeMs: z.number().finite().min(0).max(5000).optional().describe('Crossfade used by the loop render (trim_asset loop:true crossfadeMs).'),
+  contextSeconds: z.number().finite().min(0.25).max(10).optional().describe('Audio on each side of the seam (default 2 s, at most 10).')
 }).strict();
 export const spectrogramSchema = z.object({
   startSeconds: z.number().finite().min(0).optional(),
@@ -35,7 +52,8 @@ export const spectrogramSchema = z.object({
 }).strict();
 export const clipSchema = z.object({
   startSeconds: z.number().finite().min(0).optional(),
-  endSeconds: z.number().finite().positive().optional()
+  endSeconds: z.number().finite().positive().optional(),
+  loopSeam: loopSeamSchema.optional().describe('Instead of a plain window, hear a loop wrap exactly as trim_asset loop:true would play it: the end of the loop, the crossfaded seam, then its opening. Do not combine with startSeconds/endSeconds.')
 }).strict();
 export const generationSchema = z.object({
   prompt: z.string().trim().min(1).describe('Complete, concise description of the audible source, action and useful acoustic details; put connected events in order. For revisions, restate the sound with the requested changes. Sent as text without chat history or parent audio.'),
@@ -127,6 +145,8 @@ export const commandSchemas = {
   updateAsset: z.tuple([idSchema, patchSchema, idSchema.optional()]), setPlayground: z.tuple([idSchema, z.array(idSchema)]),
   analyzeAudio: z.tuple([idSchema, analysisSchema]), trimAsset: z.tuple([idSchema, idSchema, trimSchema]),
   previewTrim: z.tuple([idSchema, trimSchema]),
+  findLoopPoints: z.tuple([idSchema, loopSearchSchema]),
+  previewSeam: z.tuple([idSchema, loopSeamSchema]),
   spectrogram: z.tuple([idSchema, spectrogramSchema]),
   midiNotes: z.tuple([idSchema]),
   previewMidi: z.tuple([midiCompositionSchema]),

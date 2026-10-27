@@ -2,37 +2,80 @@ import { mkdir, readFile, writeFile, rename, stat } from 'node:fs/promises';
 import { join, extname, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { parseBuffer } from 'music-metadata';
-import type { Asset, AssetKind, AudioAnalysisInput, AnyGenerationInput, SpectrogramInput, TrimInput } from '../shared/types';
+import type { Asset, AssetKind, AudioAnalysis, AudioAnalysisInput, AnyGenerationInput, LoopSearchInput, LoopSeamInput, SpectrogramInput, TrimInput } from '../shared/types';
 import { analyzeAudio, decodeAudio, interval, renderClip, renderTrim, MAX_AUDIO_BYTES, type ClipRender, type DecodedAudio } from './audio';
 import { renderSpectrogram, type SpectrogramRender } from './spectrogram';
 import { midiFileDurationSeconds } from './midi';
 import { analyzeWav, WavReader } from './wav-reader';
+import { decodedSource, type FrameSource } from './dsp';
+import { computeMusicFeatures, musicalSummary, type MusicFeatures } from './music-analysis';
+import { findLoopPoints, renderSeam } from './loop-finder';
 
 export class MediaLibrary {
   private audioQueue: Promise<unknown> = Promise.resolve();
   private decoded: { hash: string; audio: DecodedAudio } | null = null;
+  /** Musical features by source hash, most recent last; originals are immutable. */
+  private features: { hash: string; features: MusicFeatures }[] = [];
   /** `root` holds immutable originals; `chatRoot` holds durable chat attachment media. */
   constructor(readonly root: string, readonly chatRoot: string) {}
-  private withAudio<T>(asset: Asset, operation: (audio: DecodedAudio) => Promise<T>): Promise<T> {
-    const pending = this.audioQueue.then(async () => {
-      if (asset.format === 'mid') throw new Error('MIDI clips are edited as notes in the MIDI studio, not trimmed, analyzed, or listened to as decoded audio.');
-      if ((await stat(this.path(asset))).size > MAX_AUDIO_BYTES) throw new Error('Editing supports source files up to 64 MiB.');
-      const bytes = await readFile(this.path(asset));
-      if (createHash('sha256').update(bytes).digest('hex') !== asset.hash) throw new Error('Original file integrity check failed.');
-      if (this.decoded?.hash !== asset.hash) {
-        this.decoded = null;
-        this.decoded = { hash: asset.hash, audio: await decodeAudio(bytes, asset.format) };
-      }
-      return operation(this.decoded.audio);
-    });
+  private enqueue<T>(job: () => Promise<T>): Promise<T> {
+    const pending = this.audioQueue.then(job);
     this.audioQueue = pending.catch(() => undefined);
     return pending;
   }
-  analyze(asset: Asset, input: AudioAnalysisInput) {
-    if (asset.format !== 'wav') return this.withAudio(asset, audio => analyzeAudio(audio, asset, input));
-    const pending = this.audioQueue.then(() => analyzeWav(this.path(asset), asset, input));
-    this.audioQueue = pending.catch(() => undefined);
-    return pending;
+  private async loadDecoded(asset: Asset): Promise<DecodedAudio> {
+    if (asset.format === 'mid') throw new Error('MIDI clips are edited as notes in the MIDI studio, not trimmed, analyzed, or listened to as decoded audio.');
+    if ((await stat(this.path(asset))).size > MAX_AUDIO_BYTES) throw new Error('Editing supports source files up to 64 MiB.');
+    const bytes = await readFile(this.path(asset));
+    if (createHash('sha256').update(bytes).digest('hex') !== asset.hash) throw new Error('Original file integrity check failed.');
+    if (this.decoded?.hash !== asset.hash) {
+      this.decoded = null;
+      this.decoded = { hash: asset.hash, audio: await decodeAudio(bytes, asset.format) };
+    }
+    return this.decoded.audio;
+  }
+  private withAudio<T>(asset: Asset, operation: (audio: DecodedAudio) => Promise<T>): Promise<T> {
+    return this.enqueue(async () => operation(await this.loadDecoded(asset)));
+  }
+  /** WAV streams bounded ranges at any length; MP3 uses the cached whole-file decode. Call inside the queue. */
+  private async openSource(asset: Asset): Promise<{ source: FrameSource; close: () => Promise<void> }> {
+    if (asset.format !== 'wav') return { source: decodedSource(await this.loadDecoded(asset)), close: async () => undefined };
+    const reader = await WavReader.open(this.path(asset), asset.hash);
+    return {
+      source: { sampleRate: reader.sampleRate, channels: reader.channels, frames: reader.frames, decoder: 'sfxchat-wav@1; bounded ranges', read: async (start, end) => (await reader.read(start, end)).channels },
+      close: () => reader.close()
+    };
+  }
+  private async musicFeatures(asset: Asset, source: FrameSource): Promise<MusicFeatures> {
+    const cached = this.features.find(entry => entry.hash === asset.hash);
+    if (cached) return cached.features;
+    const features = await computeMusicFeatures(source);
+    this.features = [...this.features.slice(-3), { hash: asset.hash, features }];
+    return features;
+  }
+  private withMusic<T>(asset: Asset, operation: (source: FrameSource, features: MusicFeatures) => Promise<T>): Promise<T> {
+    return this.enqueue(async () => {
+      const { source, close } = await this.openSource(asset);
+      try { return await operation(source, await this.musicFeatures(asset, source)); } finally { await close(); }
+    });
+  }
+  analyze(asset: Asset, input: AudioAnalysisInput): Promise<AudioAnalysis> {
+    return this.enqueue(async () => {
+      const result = asset.format === 'wav' ? await analyzeWav(this.path(asset), asset, input) : await analyzeAudio(await this.loadDecoded(asset), asset, input);
+      if (!input.musical) return result;
+      const { source, close } = await this.openSource(asset);
+      try { return { ...result, musical: musicalSummary(await this.musicFeatures(asset, source), result.startSeconds, result.endSeconds) }; } finally { await close(); }
+    });
+  }
+  findLoops(asset: Asset, input: LoopSearchInput) {
+    return this.withMusic(asset, (source, features) => findLoopPoints(source, features, asset, input));
+  }
+  /** Float channels across a loop's wrap exactly as a loop render plays it. */
+  loopSeam(asset: Asset, input: LoopSeamInput) {
+    return this.enqueue(async () => {
+      const { source, close } = await this.openSource(asset);
+      try { return await renderSeam(source, input); } finally { await close(); }
+    });
   }
   samplePcm(asset: Asset) {
     return this.withAudio(asset, async audio => {

@@ -195,6 +195,7 @@ export const TOOL_CAPABILITIES: Record<string, ToolCapability> = {
   search_assets: 'text',
   inspect_asset: 'text',
   analyze_audio: 'text',
+  find_loop_points: 'text',
   trim_asset: 'text',
   update_asset: 'text',
   rename_session: 'text',
