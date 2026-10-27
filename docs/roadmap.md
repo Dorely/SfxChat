@@ -26,7 +26,9 @@ Missing, by origin:
 - FL Studio piano roll and Ableton MIDI effects: scale lock, chords and
   progressions, arpeggiator, strum, flam, legato, velocity shaping, note repeat
   with probability, invert/retrograde.
-- FL Slicex / Ableton Simpler: slice audio onto sampler pads.
+- Sampling (FL Slicex, Ableton Simpler, hardware samplers): capture regions of any
+  audio, including provider output, as reusable samples with pitch and loop
+  metadata; chop takes into kits; turn samples into playable instruments.
 - Sound design: slice a multi-hit take into one-shots, layer builder,
   sfxr-style generators, procedural ambience/engines, creature and sci-fi effects
   (pitch/formant shift, ring modulation, frequency shift, bitcrush), Doppler and
@@ -82,7 +84,31 @@ and seam metrics, and carries a recommended crossfade. `audio_listen` gains a
 - Checks: synthetic loops with known periods, previously hand-made library loops,
   long provider tracks beyond the old decode bound.
 
-### 3. Loop delivery
+### 3. Sampling
+
+Any library audio, including provider-generated music, effects and voice, is a
+first-class sample source. The engine can already play an asset through sampler,
+granular, drum-pad and audio-clip paths by ID with source sample offsets; this
+phase adds the sampling workflow around that.
+
+- Capture: save a region of any asset as a sample asset with lineage back to the
+  generated original and its prompt, plus sample metadata: detected root pitch
+  (estimate with confidence), suggested sustain-loop points from the loop finder,
+  peak-normalized trim, and role tags (hit, tonal, texture, phrase, vocal).
+- Chop: split a take or generated track at onsets, beats or bars into a sample kit
+  mapped to drum pads, or into a phrase set for audio clips.
+- Use: create or update an arrangement track from a sample or kit in one operation
+  (sampler with root pitch and loop, granular, or pads), so agents can go from
+  "generate a texture" to "play it as an instrument" without manual wiring.
+- Agent: `sample_capture`, `sample_chop` and a `sample_instrument` arrangement
+  helper, all reusing analysis and trimming.
+- UI: editor "Sample" mode (region, detected pitch, sustain loop, role) with
+  "Save sample" and "Use in Studio"; a chop view with pad assignments; a Studio
+  sample browser filtered to sample assets with their source lineage.
+- Provider origin is kept visible on every sample; skill code licensing never
+  establishes rights to generated media, so provenance travels with the sample.
+
+### 4. Loop delivery
 
 Store loop points on an asset without cutting it (intro-then-loop). Export WAV with
 a `smpl` loop and Ogg Vorbis with loop comments; verify conventions against official
@@ -91,7 +117,7 @@ format and consuming-tool documentation first. Review cards can loop between poi
 - UI: "Keep intro, mark loop" save option in Loop mode; loop markers on cards;
   export dialog shows embedded loop points.
 
-### 4. Processing library audio
+### 5. Processing library audio
 
 `process_asset` renders a derivative with exact lineage: normalize (peak or LUFS
 target with a peak ceiling), gain, reverse, DC removal, speed/pitch/time-stretch,
@@ -101,7 +127,7 @@ assets; family loudness matching.
 - UI: editor Process mode as an ordered step list with before/after one-shot
   preview; library multi-select "Match loudness…" and "Process…".
 
-### 5. Sound-effect builders
+### 6. Sound-effect builders
 
 - Slice to assets: onsets or user markers split a take into tightened one-shots.
 - Round-robin variants: bounded pitch, gain, filter and timing variation with seeds.
@@ -111,7 +137,7 @@ assets; family loudness matching.
 - UI: editor Slice mode with editable markers; variant and layer actions from the
   library; export preset picker.
 
-### 6. Composition helpers
+### 7. Composition helpers
 
 Arrangement pattern transforms: scale/key lock, chord and progression builder from
 symbols or roman numerals, arpeggiator, strum, flam, legato, velocity shaping,
@@ -120,7 +146,7 @@ note repeat with probability, invert/retrograde. Deterministic and seeded.
 - UI: Studio pattern toolbar with a key/scale selector and transform menu that
   previews the change before applying.
 
-### 7. Effects, generators and slicing
+### 8. Effects, generators and slicing
 
 Chorus/flanger/phaser, bitcrush/downsample, stereo width, gate and trance gate,
 transient shaper, ring modulation, frequency shift, pitch/formant shift, convolution
@@ -128,7 +154,7 @@ reverb with bundled or imported impulse responses, Doppler and pan/distance swee
 tempo-synced modulation. sfxr-style generator presets with mutate; procedural
 ambience and RPM-driven engines; beat slicing onto sampler pads; warp to tempo.
 
-### 8. Live input and plugins
+### 9. Live input and plugins
 
 Microphone recording into the library, hardware MIDI input for the Studio, and
 VST3/CLAP effect hosting. Each starts with a research spike covering licensing,
