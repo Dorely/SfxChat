@@ -74,8 +74,9 @@ principles. Genre profiles and style conventions belong to user project briefs,
 not hardcoded skills. Local creation must be a deliberate first-class option.
 The acceptance examples are an orchestral miniature and preview, separate house
 and trance arrangements, and layered game-effect families. These are demonstrations,
-not product-wide style defaults. Human acceptance follows listening. Plugin hosting,
-microphone/hardware MIDI input and direct game-engine integration remain outside scope.
+not product-wide style defaults. Human acceptance follows listening. Plugin hosting
+and microphone/hardware MIDI input are candidate workstation features, not exclusions.
+Direct game-engine integration remains outside scope for now; exports stay engine-neutral.
 
 ## Product character
 
