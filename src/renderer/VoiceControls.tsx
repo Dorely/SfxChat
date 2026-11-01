@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { VoiceGenerationInput, VoiceModelCatalog, VoiceOption, VoiceProviderEntry } from '../shared/types';
-import { GEMINI_VOICES, providerLabel, voiceModelProfile, VOICE_DEFAULTS, VOICE_MODELS } from '../shared/voice-models';
+import { GEMINI_VOICES, latestVoiceModel, providerLabel, voiceModelProfile, VOICE_DEFAULTS, VOICE_MODELS } from '../shared/voice-models';
+import { LATEST_MODEL } from '../shared/elevenlabs-models';
 
 /** Provider-aware controls reused by manual generation, settings and regeneration. */
 export default function VoiceControls({ value, providers, onChange, configurationOnly = false }: {
@@ -23,7 +24,10 @@ export default function VoiceControls({ value, providers, onChange, configuratio
   const modelSerial = useRef(0);
   const ready = providers.find(p => p.id === providerId)?.ready ?? false;
   const modelOptions = catalog?.providerId === providerId ? catalog.models : VOICE_MODELS[providerId];
-  const selectedModel = modelOptions.find(m => m.id === model) ?? voiceModelProfile(providerId, model);
+  const latestId = catalog?.providerId === providerId ? catalog.latestModel : latestVoiceModel(providerId);
+  const followsLatest = model === LATEST_MODEL;
+  const resolvedModel = followsLatest ? latestId : model;
+  const selectedModel = modelOptions.find(m => m.id === resolvedModel) ?? voiceModelProfile(providerId, resolvedModel);
   const loadModels = async (refresh = false) => {
     const version = ++modelSerial.current;
     setModelLoading(true); setModelError(null);
@@ -63,20 +67,20 @@ export default function VoiceControls({ value, providers, onChange, configuratio
       }}>{(['elevenlabs', 'gemini'] as const).map(id => <option key={id} value={id}>{providerLabel(id)}{providers.find(p => p.id === id)?.ready ? '' : ' — key needed'}</option>)}</select></label>
       <label>Model<select aria-label="Voice model" value={model} onChange={e => {
         const next = { ...value, providerId, voiceId, model: e.target.value };
-        const target = modelOptions.find(m => m.id === next.model);
+        const target = modelOptions.find(m => m.id === (next.model === LATEST_MODEL ? latestId : next.model));
         if (!target?.selectable) return;
         for (const field of ['stability', 'similarity', 'speed'] as const) if (!target.controls[field]) delete next[field];
         if (target.controls.stabilityValues && next.stability !== undefined && !target.controls.stabilityValues.includes(next.stability)) delete next.stability;
         onChange(next);
-      }}>{!modelOptions.some(m => m.id === model) && <option value={model}>{model} — unavailable in this catalog</option>}{modelOptions.map(m => <option key={m.id} value={m.id} disabled={!m.selectable}>{m.label}{!m.selectable ? ' — unavailable' : m.guidanceStatus === 'generic' ? ' — plain text only' : m.deprecated ? ' — deprecated' : ''}</option>)}</select></label>
+      }}>{providerId === 'elevenlabs' && <option value={LATEST_MODEL}>Latest ({modelOptions.find(m => m.id === latestId)?.label ?? latestId})</option>}{!followsLatest && !modelOptions.some(m => m.id === model) && <option value={model}>{model} — unavailable in this catalog</option>}{modelOptions.map(m => <option key={m.id} value={m.id} disabled={!m.selectable}>{m.label}{providerId === 'elevenlabs' && m.selectable ? ' (pin)' : ''}{!m.selectable ? ' — unavailable' : m.guidanceStatus === 'generic' ? ' — plain text only' : m.deprecated ? ' — deprecated' : ''}</option>)}</select></label>
       <label>Voice<select aria-label="Voice selection" value={selected?.id ?? voiceId} onChange={e => update({ voiceId: e.target.value })}>
         {!selected && <option value={voiceId}>{voiceId}</option>}{voices.map(v => <option value={v.id} key={v.id}>{v.name}{v.description ? ` — ${v.description.slice(0, 60)}` : ''}</option>)}
       </select></label>
     </div>
     <div className="generation-options"><button type="button" className="secondary-button" disabled={modelLoading || (providerId === 'elevenlabs' && !ready)} onClick={() => void loadModels(true)}>{modelLoading ? 'Loading models…' : 'Refresh models'}</button>
       <p className="field-hint">{providerId === 'gemini' ? 'Gemini uses the reviewed built-in model catalog.' : catalog?.providerId === providerId ? `Available ElevenLabs speech models · checked ${new Date(catalog.fetchedAt!).toLocaleTimeString()}` : ready ? 'Showing reviewed profiles until availability is loaded.' : 'Showing reviewed profiles. Save the shared key to query availability.'}</p></div>
-    <p className="field-hint">{selectedModel.note}{selectedModel.maxCharacters ? ` Up to ${selectedModel.maxCharacters.toLocaleString()} characters per clip.` : ''}{selectedModel.requiresAlphaAccess ? ' Provider alpha access required.' : ''}</p>
-    {catalog?.providerId === providerId && !catalog.models.some(m => m.id === model) && <p className="settings-error" role="alert">The selected model is absent from the available catalog. Choose another model explicitly.</p>}
+    <p className="field-hint">{followsLatest ? `Follows the newest model, currently ${selectedModel.label}. ` : providerId === 'elevenlabs' ? 'Pinned: newer models will not be used. ' : ''}{selectedModel.note}{selectedModel.maxCharacters ? ` Up to ${selectedModel.maxCharacters.toLocaleString()} characters per clip.` : ''}{selectedModel.requiresAlphaAccess ? ' Provider alpha access required.' : ''}</p>
+    {catalog?.providerId === providerId && !followsLatest && !catalog.models.some(m => m.id === model) && <p className="settings-error" role="alert">The selected model is absent from the available catalog. Choose another model explicitly.</p>}
     {selectedModel.languages.length > 0 && <details><summary>Model language coverage</summary><p className="field-hint">{selectedModel.languages.map(l => `${l.name} (${l.id})`).join(' · ')}</p></details>}
     {modelError && <p className="settings-error" role="alert">{modelError} Saved selection is retained; refresh to check availability.</p>}
     <details className="voice-discovery"><summary>Find a voice or enter its ID</summary>

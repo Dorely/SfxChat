@@ -135,8 +135,11 @@ their documented app caps even when the provider reports a higher value.
 
 `list_voice_models` is shared by UI, internal assistant, CLI and MCP. It returns exact
 IDs, selectable/guidance status, model notes, controls, caps, languages/access flags,
-source/time and saved defaults. Agents select an ID through `generate_voice.input.model`
-for one request. Defaults and admitted requests are never silently upgraded. The
+source/time, `latestModel` and saved defaults. The ElevenLabs default is `latest`
+(2026-11-01): the newest selectable, non-deprecated, non-alpha discovered model,
+resolved and frozen at admission. Agents pin an ID through `generate_voice.input.model`
+only for a deliberate choice. Pinned defaults and admitted requests are never silently
+upgraded. The
 canonical [voice reference](../../resources/skill/references/elevenlabs-voice.md)
 contains decision guidance and a full MCP query/selection example. Gemini is explicitly
-built-in; SFX/Music remain endpoint-specific catalogs, outside this TTS discovery.
+built-in; SFX/Music use the API-schema discovery described in the architecture, outside this TTS discovery.

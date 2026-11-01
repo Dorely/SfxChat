@@ -1,3 +1,30 @@
+# ElevenLabs latest-model defaults (2026-11-01)
+
+Effects, music, and voice default to `latest`; exact IDs stay selectable as pins.
+No paid generation was run.
+
+- Sources rechecked: the public `https://api.elevenlabs.io/openapi.json` was
+  inspected with curl. `SFXModelId` lists `eleven_text_to_sound_v2` and
+  `eleven_text_to_sound_v3`; `MusicModelID` lists `music_v1` (deprecated via
+  `x-fern-enum`), `music_v2`, and `music_v2_5`.
+- A temporary harness outside the repository was bundled with esbuild against the
+  real `elevenlabs-models.ts` and `voice-models.ts`, run, then deleted:
+  - Live discovery read both enums (`source:"live"`). Latest was
+    `eleven_text_to_sound_v3` and `music_v2_5`; automatic order excluded deprecated
+    `music_v1`.
+  - Marking SFX v3 refused for one key made v2 latest for that key only; another key
+    still resolved v3.
+  - Voice latest resolved `eleven_v4`, skipping realtime-only and deprecated IDs.
+  - Recency sorting put `eleven_v5` before `eleven_flash_v5` and `music_v2_5` before
+    `music_v2`.
+  - Model-refusal detection accepted 400/403/422 model-access errors and rejected an
+    unrelated 422, a 500, and a 401.
+- `npm run typecheck` and `npm run build` passed after the final edits.
+- Gap: no browser or desktop check. `npm run dev:browser` refused to start because
+  the user's installed SfxChat was running, and it was not closed. The Latest pickers
+  in the Playground, music settings, and voice controls, and the refusal fallback
+  against a real account, are unverified.
+
 # Musical analysis and loop finder (2026-10-27)
 
 Roadmap phases 1 and 2. Temporary harnesses outside the repository were bundled

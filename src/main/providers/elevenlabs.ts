@@ -4,9 +4,8 @@ import { ProviderHttpError } from './errors';
 export { ProviderHttpError } from './errors';
 
 const ENDPOINT = 'https://api.elevenlabs.io/v1/sound-generation';
-const DEFAULT_MODEL = 'eleven_text_to_sound_v2';
 const DEFAULT_FORMAT = 'mp3_44100_128';
-export interface ElevenLabsClientOptions { fetch?: typeof globalThis.fetch; endpoint?: string; model?: string; outputFormat?: string }
+export interface ElevenLabsClientOptions { fetch?: typeof globalThis.fetch; endpoint?: string; outputFormat?: string }
 export interface GeneratedSound { bytes: Buffer; requestId: string | null; usage: string | null; model: string }
 
 function validate(input: GenerationInput, key: string): void {
@@ -21,20 +20,21 @@ function validate(input: GenerationInput, key: string): void {
 export class ElevenLabsClient {
   private readonly fetcher: typeof globalThis.fetch;
   private readonly endpoint: string;
-  private readonly model: string;
   private readonly outputFormat: string;
-  constructor(options: ElevenLabsClientOptions = {}) { this.fetcher = options.fetch ?? globalThis.fetch.bind(globalThis); this.endpoint = options.endpoint ?? ENDPOINT; this.model = options.model ?? DEFAULT_MODEL; this.outputFormat = options.outputFormat ?? DEFAULT_FORMAT; }
-  async generateSound(input: GenerationInput, key: string, signal?: AbortSignal): Promise<GeneratedSound> {
-    try { return await this.request(input, key, signal); }
+  constructor(options: ElevenLabsClientOptions = {}) { this.fetcher = options.fetch ?? globalThis.fetch.bind(globalThis); this.endpoint = options.endpoint ?? ENDPOINT; this.outputFormat = options.outputFormat ?? DEFAULT_FORMAT; }
+  /** The model is always an exact ID; "latest" is resolved by the caller. */
+  async generateSound(input: GenerationInput, model: string, key: string, signal?: AbortSignal): Promise<GeneratedSound> {
+    try { return await this.request(input, model, key, signal); }
     catch (error) {
       if (error instanceof ProviderHttpError) throw error;
       throw new Error(redactText(error instanceof Error ? error.message : 'ElevenLabs request failed.', [key]));
     }
   }
-  private async request(input: GenerationInput, key: string, signal?: AbortSignal): Promise<GeneratedSound> {
+  private async request(input: GenerationInput, model: string, key: string, signal?: AbortSignal): Promise<GeneratedSound> {
     validate(input, key);
+    if (!/^[a-zA-Z0-9._-]{1,120}$/.test(model)) throw new Error('Choose a sound-effect model ID.');
     const url = new URL(this.endpoint); url.searchParams.set('output_format', this.outputFormat);
-    const body: Record<string, unknown> = { text: input.prompt, model_id: this.model };
+    const body: Record<string, unknown> = { text: input.prompt, model_id: model };
     if (input.duration !== undefined && input.duration !== null) body.duration_seconds = input.duration;
     if (input.influence !== undefined) body.prompt_influence = input.influence;
     if (input.loop !== undefined) body.loop = input.loop;
@@ -43,9 +43,9 @@ export class ElevenLabsClient {
     const bytes = Buffer.from(await response.arrayBuffer());
     const requestId = response.headers.get('request-id') ?? response.headers.get('x-request-id');
     const usage = response.headers.get('character-cost') ?? response.headers.get('x-character-cost') ?? response.headers.get('x-credits-used') ?? response.headers.get('x-usage') ?? null;
-    return { bytes, requestId, usage, model: this.model };
+    return { bytes, requestId, usage, model };
   }
 }
 
-export const generateSound = (input: GenerationInput, key: string, signal?: AbortSignal, options?: ElevenLabsClientOptions): Promise<GeneratedSound> => new ElevenLabsClient(options).generateSound(input, key, signal);
-export { ENDPOINT as ELEVENLABS_ENDPOINT, DEFAULT_MODEL as ELEVENLABS_DEFAULT_MODEL };
+export const generateSound = (input: GenerationInput, model: string, key: string, signal?: AbortSignal, options?: ElevenLabsClientOptions): Promise<GeneratedSound> => new ElevenLabsClient(options).generateSound(input, model, key, signal);
+export { ENDPOINT as ELEVENLABS_ENDPOINT };

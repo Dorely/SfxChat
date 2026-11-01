@@ -6,13 +6,15 @@ import { instructions, midiInstructions, musicInstructions, voiceInstructions, t
 import { parseMidi, writeMidi } from './midi';
 import { MIDI_TICKS_PER_QUARTER, midiCompositionProblem, midiDurationSeconds, midiSummary, type MidiComposition } from '../shared/midi';
 import { floatWav, renderClip, type ClipRender } from './audio';
-import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, LoopSearchInput, LoopSeamInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, MidiComposeInput, MusicProviderKind, SoundfontSummary, VoiceGenerationInput, VoiceListInput, VoicePage, VoiceModelListInput, VoiceModelCatalog, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
+import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, LoopSearchInput, LoopSeamInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, MidiComposeInput, MusicProviderKind, SoundfontSummary, VoiceGenerationInput, VoiceListInput, VoicePage, VoiceModelListInput, VoiceModelCatalog, AudioModelListInput, AudioModelCatalog, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
 import type { DiagnosticLog } from './diagnostics';
 import { diagnosticError } from './providers/errors';
 import { readFile, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { ContextTokenCounter } from './chat-context';
 import { CHAT_MODELS, resolveChatModel } from '../shared/chat-models';
+import { LATEST_MODEL } from '../shared/elevenlabs-models';
+import { isMusicModel, musicModels } from '../shared/music-models';
 
 export interface ChatResult { output: unknown[]; calls: { id: string; name: string; arguments: string }[]; usage?: unknown; requestId?: string | null }
 /** Media a tool produced for the model; bytes stay out of the tool ledger. */
@@ -39,6 +41,7 @@ export interface ServicePorts {
   generateVoice(input: VoiceGenerationInput, signal: AbortSignal): Promise<GenerationResult>;
   listVoices(input: VoiceListInput): Promise<VoicePage>;
   listVoiceModels(input: VoiceModelListInput): Promise<VoiceModelCatalog>;
+  listAudioModels(input: AudioModelListInput): Promise<AudioModelCatalog>;
   validateVoiceTarget(input: VoiceGenerationInput): Promise<void>;
   /** Renders a MIDI clip's interval through the SoundFont bank for listening. */
   renderMidi(asset: Asset, input: { startSeconds?: number; endSeconds?: number }): Promise<ClipRender>;
@@ -112,6 +115,8 @@ export class WorkbenchService {
     const settings = await this.ports.settings();
     this.requireOpen();
     if (!settings.elevenLabsReady) throw new Error('Add your ElevenLabs API key in Settings first.');
+    if (input.model && input.model !== LATEST_MODEL) await this.requireListedModel('effect', input.model);
+    this.requireOpen();
     const jobs = await this.queueCandidates(conversationId, input, 'effect', callId);
     this.store.addMessage(conversationId, 'tool', `Queued ${jobs.length} sound${jobs.length === 1 ? '' : 's'}: ${input.prompt}`);
     this.pump(); return { jobIds: jobs.map(j => j.id) };
@@ -128,9 +133,15 @@ export class WorkbenchService {
     const target = requested ?? settings.musicProviders.find(entry => entry.id === settings.activeMusicId) ?? settings.musicProviders.find(entry => entry.ready);
     if (!target) throw new Error('Configure a music provider in Settings first.');
     if (!target.ready) throw new Error(`Add the API key for ${target.label} in Settings first.`);
+    if (parsed.model) {
+      if (target.kind === 'elevenlabs-music') { if (parsed.model !== LATEST_MODEL) await this.requireListedModel('music', parsed.model); }
+      else if (!isMusicModel(target.kind, parsed.model)) throw new Error(`"${parsed.model}" is not a ${target.label} model. Choose one of: ${musicModels(target.kind).map(entry => entry.id).join(', ')}.`);
+      this.requireOpen();
+    }
     const input: MusicGenerationInput = { ...parsed, kind: 'music', providerId: target.id };
     const jobs = await this.queueCandidates(conversationId, input, 'music', callId);
-    this.store.addMessage(conversationId, 'tool', `Queued ${jobs.length} track${jobs.length === 1 ? '' : 's'} on ${target.label} (${target.model}): ${input.prompt}`);
+    const model = parsed.model ?? target.model;
+    this.store.addMessage(conversationId, 'tool', `Queued ${jobs.length} track${jobs.length === 1 ? '' : 's'} on ${target.label} (${model === LATEST_MODEL ? `latest: ${target.resolvedModel}` : model}): ${input.prompt}`);
     this.pump(); return { jobIds: jobs.map(j => j.id) };
   }
   async generateVoice(conversationId: string, raw: VoiceGenerationInput, callId?: string) {
@@ -140,7 +151,10 @@ export class WorkbenchService {
     const settings = await this.ports.settings(); this.requireOpen();
     const target = settings.voiceProviders.find(p => p.id === (parsed.providerId ?? settings.activeVoiceId));
     if (!target?.ready) throw new Error('Save or resolve the shared provider key in Settings before generating voice.');
-    const input: VoiceGenerationInput = { ...parsed, kind: 'voice', providerId: target.id, model: parsed.model ?? target.model, voiceId: parsed.voiceId ?? target.voiceId };
+    // "latest" resolves at admission because controls and limits are model-specific.
+    let model = parsed.model ?? target.model;
+    if (model === LATEST_MODEL) { model = (await this.ports.listVoiceModels({ providerId: target.id })).latestModel; this.requireOpen(); }
+    const input: VoiceGenerationInput = { ...parsed, kind: 'voice', providerId: target.id, model, voiceId: parsed.voiceId ?? target.voiceId };
     await this.ports.validateVoiceTarget(input); this.requireOpen();
     const jobs = await this.queueCandidates(conversationId, input, 'voice', callId);
     this.store.addMessage(conversationId, 'tool', `Queued ${jobs.length} voice clip${jobs.length === 1 ? '' : 's'} on ${target.label} (${input.model}, ${input.voiceId}): ${input.text}`);
@@ -148,6 +162,11 @@ export class WorkbenchService {
   }
   listVoices(input: VoiceListInput) { this.requireOpen(); return this.ports.listVoices(input); }
   listVoiceModels(input: VoiceModelListInput) { this.requireOpen(); return this.ports.listVoiceModels(input); }
+  listAudioModels(input: AudioModelListInput) { this.requireOpen(); return this.ports.listAudioModels(input); }
+  private async requireListedModel(kind: AudioModelListInput['kind'], model: string) {
+    const catalog = await this.ports.listAudioModels({ kind });
+    if (!catalog.models.some(entry => entry.id === model)) throw new Error(`"${model}" is not a listed ElevenLabs ${kind === 'effect' ? 'sound-effect' : 'music'} model. Choose one of: ${catalog.models.map(entry => entry.id).join(', ')}, or omit model for the newest.`);
+  }
   /** Composing MIDI is local: it writes a Standard MIDI File and needs no provider, key, or network call. */
   async generateMidi(conversationId: string, raw: MidiComposeInput, callId?: string) {
     this.requireOpen();

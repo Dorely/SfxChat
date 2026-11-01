@@ -33,8 +33,10 @@ editable local synthesis needs no provider, API key, or paid generation.
 4. For paid provider work read its exact reference first:
    [ElevenLabs effects](references/elevenlabs-sfx.md), [ElevenLabs music](references/elevenlabs-music.md),
    [Gemini music](references/gemini-lyria.md), [ElevenLabs voice](references/elevenlabs-voice.md),
-   or [Gemini voice](references/gemini-voice.md). Query `list_voice_models` and
-   `list_voices` before selecting speech identity/model. Preserve the exact script
+   or [Gemini voice](references/gemini-voice.md). ElevenLabs effects, music and voice
+   default to the newest model: omit `model` unless the user deliberately pins an
+   older one, and read `list_audio_models` (effect/music) or `list_voice_models`
+   for the resolved model and its notes. Query `list_voices` before selecting a voice. Preserve the exact script
    separately from delivery preparation. Respect authorized scope and count; don't
    silently switch providers or repeat uncertain billed work. Never ask for secrets.
 5. Keep request IDs and returned job IDs. Retry the same ID only with identical

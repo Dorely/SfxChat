@@ -115,11 +115,15 @@ without project/session scope. ElevenLabs uses its saved key and a live TTS cata
 (up-to-five-minute cache); Gemini returns a labeled built-in catalog. Read each entry's
 `selectable`, `note`, `guidanceStatus`, `controls`, `maxCharacters`, `languages`, and
 `requiresAlphaAccess`, then put an exact selectable ID into `generate_voice.input.model`.
-The response also includes saved `defaultModel` and `defaultVoiceId`. Discovery does
+The response also includes `latestModel`, the resolved saved `defaultModel`,
+`defaultFollowsLatest`, and `defaultVoiceId`. Omitted models follow the newest model
+unless the user pinned one. `list_audio_models` (`kind` `effect` or `music`, optional
+`refresh`) lists ElevenLabs sound/music IDs from the official public API schema with
+`latestModel`; `generate_sounds` and `generate_music` accept an optional `model` pin. Discovery does
 not generate speech or change defaults. New/unreviewed IDs accept plain text only;
 realtime variants cannot use this workbench's speech transport. Missing models and
-failed discovery are explicit errors, never automatic replacements. Music/SFX are
-separate endpoint-specific catalogs; this operation discovers speech models only.
+failed discovery are explicit errors, never automatic replacements of a pinned model.
+`list_voice_models` discovers speech models only.
 `guidance` includes canonical voice references, roster/defaults,
 and schemas; read the applicable provider document before preparing speech. One shared
 vendor key is configured in Settings, never in CLI/MCP requests. Voice libraries,

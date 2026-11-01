@@ -1,4 +1,5 @@
 import type { AudioProviderId, VoiceGenerationInput, VoiceModelOption, VoiceOption } from './types';
+import { LATEST_MODEL, newestModels } from './elevenlabs-models';
 
 // Reviewed prompting/control profiles, not an availability catalog. Live ElevenLabs
 // discovery is authoritative; future TTS IDs use a conservative plain-text profile.
@@ -32,8 +33,13 @@ export function voiceModelProfile(provider: AudioProviderId, id: string): VoiceM
     ? 'Requires the realtime Text to Dialogue WebSocket, which SfxChat does not implement.'
     : 'New or unreviewed model: plain spoken text only; no tuning controls, tags, SSML or IPA claims. Read official model guidance before specialized prompting.', 10000, { stability: false, similarity: false, speed: false }), guidanceStatus: realtime ? 'unavailable' : 'generic', selectable: !realtime };
 }
+/** Newest selectable, non-deprecated ElevenLabs model; Gemini keeps its reviewed default. */
+export function latestVoiceModel(provider: AudioProviderId, models: VoiceModelOption[] = VOICE_MODELS[provider]): string {
+  if (provider === 'gemini') return VOICE_MODELS.gemini[0]!.id;
+  return (newestModels(models, m => m.selectable && !m.deprecated && m.requiresAlphaAccess !== true)[0] ?? newestModels(VOICE_MODELS.elevenlabs, m => !m.deprecated)[0]!).id;
+}
 export const VOICE_DEFAULTS = {
-  elevenlabs: { model: 'eleven_v4', voiceId: 'JBFqnCBsd6RMkjVDRZzb' },
+  elevenlabs: { model: LATEST_MODEL, voiceId: 'JBFqnCBsd6RMkjVDRZzb' },
   gemini: { model: 'gemini-3.8-flash-tts', voiceId: 'Kore' }
 };
 export const providerLabel = (id: AudioProviderId) => id === 'elevenlabs' ? 'ElevenLabs' : 'Gemini';
@@ -48,6 +54,7 @@ export const GEMINI_VOICES: VoiceOption[] = [
 /** Shared by admission and transports; unsupported controls fail before purchase. */
 export function validateVoiceTarget(input: VoiceGenerationInput, discovered?: VoiceModelOption): void {
   const provider = input.providerId;
+  if (input.model === LATEST_MODEL) throw new Error('Resolve "latest" to an exact model before validation.');
   if (!provider || !input.model || !/^[a-zA-Z0-9._-]{1,120}$/.test(input.model) || (provider === 'gemini' && !VOICE_MODELS.gemini.some(m => m.id === input.model))) throw new Error('Choose a supported voice model for this provider.');
   const model = discovered ?? voiceModelProfile(provider, input.model);
   if (model.id !== input.model || !model.selectable) throw new Error(model.note);

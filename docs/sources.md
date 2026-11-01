@@ -87,6 +87,16 @@ v2 looping, influence 0–1, and the `character-cost` response header. The adapt
 requests `mp3_44100_128` and preserves original bytes. No dollar cost guarantee or
 media-license grant is inferred; pricing/rights depend on the provider and account.
 
+On 2026-11-01 the [models overview](https://elevenlabs.io/docs/overview/models), the
+[SFX](https://elevenlabs.io/docs/api-reference/text-to-sound-effects/convert),
+[Music](https://elevenlabs.io/docs/api-reference/music/compose) and
+[models list](https://elevenlabs.io/docs/api-reference/models/list) references, and the
+public [API schema](https://api.elevenlabs.io/openapi.json) were rechecked. `/v1/models`
+has no music or SFX flags; the schema's `SFXModelId` enum lists `eleven_text_to_sound_v2`
+and `eleven_text_to_sound_v3` (v3 access limited by account/region per the overview), and
+`MusicModelID` lists `music_v1` (flagged deprecated), `music_v2`, and `music_v2_5`. The app
+reads these enums at runtime for latest-model defaults.
+
 Build sources: [electron-vite guide](https://electron-vite.org/guide/),
 [electron-builder](https://www.electron.build/), Electron
 [safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage) and

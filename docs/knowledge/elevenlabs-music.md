@@ -33,7 +33,7 @@ the record of what was verified; markdown is not injected into the assistant at 
 | `prompt` | `prompt` | Required description, at most 4100 characters. Shared validation trims whitespace; the adapter sends it unchanged and records it as `providerPrompt`. |
 | `durationMs` | `music_length_ms` | Optional 3000–600000 ms. Omitted when the app leaves length to the model. |
 | `instrumental` | `force_instrumental` | Sent as `true` only when requested. Documented as prompt-only, so it is never combined with a composition plan. |
-| Model choice | `model_id` | `music_v2_5` by default, with `music_v2` and `music_v1` selectable. The app always sends the field rather than relying on the API default. |
+| Provider entry `model`, request `model` | `model_id` | Entries default to `latest`: the newest non-deprecated ID in the official API schema enum (`music_v2_5` as of 2026-11-01). Exact IDs, including deprecated `music_v1`, can be pinned deliberately. The app always sends the field because the API default is still `music_v1`. |
 | — | `output_format` | `auto`: mp3_44100_128 for v1 models, mp3_48000_192 for v2 models. |
 | `count`, `name`, `providerId`, `parentId` | None | App-side candidate jobs, naming, provider routing, and local lineage. |
 

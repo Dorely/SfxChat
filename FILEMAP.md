@@ -84,6 +84,7 @@ is recorded in [verification](docs/verification.md).
 | [src/renderer/browser-api.ts](src/renderer/browser-api.ts) | Same-origin browser calls, byte restoration, change/UI events, and host-path file dialogs. |
 | [src/shared/types.ts](src/shared/types.ts) | Renderer/preload/application operation, project, and snapshot contracts. |
 | [src/shared/chat-models.ts](src/shared/chat-models.ts) | Configured model IDs, Codex effort lists, default context sizes, and legacy/default resolution. |
+| [src/shared/elevenlabs-models.ts](src/shared/elevenlabs-models.ts) | `latest` model sentinel, version-based recency ordering, and reviewed ElevenLabs sound/music model notes. |
 | [src/shared/voice-models.ts](src/shared/voice-models.ts) | Reviewed TTS profiles/controls, Gemini catalog/voices, defaults, conservative future-model guidance and admission guards. |
 | [src/shared/provider-identities.ts](src/shared/provider-identities.ts) | Shared official Gemini host recognition for credential routing. |
 | [src/main/provider-keys.ts](src/main/provider-keys.ts) | Serialized shared vendor credentials and safe legacy consolidation/conflict selection. |
@@ -122,7 +123,8 @@ is recorded in [verification](docs/verification.md).
 | [src/preload/index.ts](src/preload/index.ts) | Isolated renderer bridge with fixed operations and change notifications. |
 | [src/main/providers/auth.ts](src/main/providers/auth.ts) | Codex browser OAuth/PKCE, refresh serialization, and login lifecycle. |
 | [src/main/providers/codex.ts](src/main/providers/codex.ts) | Account Responses SSE transport and tool/message normalization. |
-| [src/main/providers/elevenlabs.ts](src/main/providers/elevenlabs.ts) | Validated SFX requests, exact returned bytes, and response provenance. |
+| [src/main/providers/elevenlabs.ts](src/main/providers/elevenlabs.ts) | Validated SFX requests on an exact per-call model, exact returned bytes, and response provenance. |
+| [src/main/providers/elevenlabs-models.ts](src/main/providers/elevenlabs-models.ts) | Cached sound/music model discovery from the public ElevenLabs API schema, latest resolution, and model-refusal detection. |
 | [src/main/providers/elevenlabs-music.ts](src/main/providers/elevenlabs-music.ts) | Validated Music requests, length/instrumental mapping, `song-id` provenance, and returned formats. |
 | [src/main/providers/gemini-music.ts](src/main/providers/gemini-music.ts) | Lyria prompt composition, Interactions requests with `store:false`, step/lyrics parsing, and fixed-length guards. |
 | [src/main/providers/secrets.ts](src/main/providers/secrets.ts) | Atomic encrypted credential storage using injected OS protection and store-safe secret names. |

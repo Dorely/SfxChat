@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import type { Store } from './store';
 import type { ProviderKeys } from './provider-keys';
 import type { MusicProviderEntry, MusicProviderKind, ProviderKeyStatus } from '../shared/types';
-import { defaultMusicModel, isMusicModel, MUSIC_MODELS, musicModel } from '../shared/music-models';
+import { defaultMusicModel, isMusicModel, MUSIC_MODELS } from '../shared/music-models';
+import { LATEST_MODEL } from '../shared/elevenlabs-models';
+import type { ElevenLabsModels } from './providers/elevenlabs-models';
 
 /** Persisted provider record; readiness is resolved from secure storage on read. */
 export interface MusicProviderRecord {
@@ -14,6 +16,7 @@ export interface MusicProviderRecord {
 
 export interface ResolvedMusicTarget {
   provider: MusicProviderRecord;
+  /** Exact model, or "latest" for ElevenLabs, resolved by the transport per attempt. */
   model: string;
   key: string;
 }
@@ -33,14 +36,20 @@ export function parseMusicProviders(raw: string): MusicProviderRecord[] {
   });
 }
 
-export function validateMusicProviderFields(label: string, kind: unknown, model: string): { label: string; kind: MusicProviderKind; model: string } {
+/** ElevenLabs accepts "latest" or a currently listed ID; Lyria uses its reviewed catalog. */
+export function validateMusicModel(kind: MusicProviderKind, model: string, elevenLabsIds: string[]): void {
+  const allowed = kind === 'elevenlabs-music' ? elevenLabsIds : MUSIC_MODELS[kind].map(entry => entry.id);
+  if (kind === 'elevenlabs-music' ? model !== LATEST_MODEL && !allowed.includes(model) : !isMusicModel(kind, model)) throw new Error(`"${model}" is not a supported model for this provider. Choose one of: ${[...(kind === 'elevenlabs-music' ? [LATEST_MODEL] : []), ...allowed].join(', ')}.`);
+}
+
+export function validateMusicProviderFields(label: string, kind: unknown, model: string, elevenLabsIds: string[]): { label: string; kind: MusicProviderKind; model: string } {
   const name = label.trim();
   if (!name) throw new Error('A provider name is required.');
   if (name.length > 80) throw new Error('Provider name is too long.');
   if (!isMusicProviderKind(kind)) throw new Error('Music provider type must be ElevenLabs Music or Gemini Lyria.');
   const slug = model.trim();
   if (!slug) throw new Error('A model is required.');
-  if (!isMusicModel(kind, slug)) throw new Error(`"${slug}" is not a supported model for this provider. Choose one of: ${MUSIC_MODELS[kind].map(entry => entry.id).join(', ')}.`);
+  validateMusicModel(kind, slug, elevenLabsIds);
   return { label: name, kind, model: slug };
 }
 
@@ -49,7 +58,11 @@ export function validateMusicProviderFields(label: string, kind: unknown, model:
  * One entry is active; a request may override it.
  */
 export class MusicRegistry {
-  constructor(private readonly store: Store, private readonly keys: ProviderKeys) {}
+  constructor(private readonly store: Store, private readonly keys: ProviderKeys, private readonly models: ElevenLabsModels) {}
+
+  private async elevenLabsIds(): Promise<string[]> {
+    return (await this.models.catalog('music', await this.keys.get('elevenlabs').catch(() => null))).models.map(entry => entry.id);
+  }
 
   providers(): MusicProviderRecord[] {
     return parseMusicProviders(this.store.setting('music-providers', '[]'));
@@ -83,12 +96,13 @@ export class MusicRegistry {
     const providers = this.providers();
     const entries: MusicProviderEntry[] = [];
     const status = knownStatus ?? await this.keys.status();
-    for (const provider of providers) entries.push({ ...provider, ready: status.find(s => s.id === (provider.kind === 'elevenlabs-music' ? 'elevenlabs' : 'gemini'))?.ready ?? false });
+    const latest = providers.some(p => p.kind === 'elevenlabs-music' && p.model === LATEST_MODEL) ? this.models.peek('music', await this.keys.get('elevenlabs').catch(() => null)).latestModel : '';
+    for (const provider of providers) entries.push({ ...provider, resolvedModel: provider.model === LATEST_MODEL ? latest : provider.model, ready: status.find(s => s.id === (provider.kind === 'elevenlabs-music' ? 'elevenlabs' : 'gemini'))?.ready ?? false });
     return entries;
   }
 
   async saveProvider(input: { id?: string; label: string; kind: MusicProviderKind; model: string }): Promise<MusicProviderEntry> {
-    const fields = validateMusicProviderFields(input.label, input.kind, input.model);
+    const fields = validateMusicProviderFields(input.label, input.kind, input.model, input.kind === 'elevenlabs-music' ? await this.elevenLabsIds() : []);
     const providers = this.providers();
     const id = input.id?.trim() || randomUUID();
     const existing = providers.findIndex(entry => entry.id === id);
@@ -99,7 +113,7 @@ export class MusicRegistry {
     this.write(providers);
     if (!this.store.setting('music-active', '').trim()) this.store.setSetting('music-active', id);
     const status = await this.keys.status();
-    return { ...record, ready: status.find(s => s.id === (record.kind === 'elevenlabs-music' ? 'elevenlabs' : 'gemini'))?.ready ?? false };
+    return (await this.entries(status)).find(entry => entry.id === record.id)!;
   }
 
   async deleteProvider(id: string): Promise<void> {
@@ -111,19 +125,23 @@ export class MusicRegistry {
 
   /**
    * Resolves the provider for one request. An explicit override must exist; otherwise
-   * the active provider is used. Keys resolve here, inside the privileged operation.
+   * the active provider is used. A request model pins that one generation. Keys resolve
+   * here, inside the privileged operation.
    */
-  async resolve(providerId?: string | null): Promise<ResolvedMusicTarget> {
+  async resolve(providerId?: string | null, model?: string): Promise<ResolvedMusicTarget> {
     const providers = this.providers();
     if (!providers.length) throw new Error('Configure a music provider in Settings first.');
     const requested = providerId?.trim();
     const provider = requested ? providers.find(entry => entry.id === requested) : undefined;
     if (requested && !provider) throw new Error(`No configured music provider has the ID "${requested}". Configured providers: ${providers.map(entry => `${entry.label} (${entry.id})`).join(', ')}. Omit providerId to use the active provider, or pick another in Settings.`);
     const active = provider ?? providers.find(entry => entry.id === this.activeId()) ?? providers[0]!;
-    if (!musicModel(active.kind, active.model)) throw new Error(`The saved model for "${active.label}" is not supported by this version. Update the provider in Settings.`);
     const key = await this.providerKey(active.id);
     if (!key?.trim()) throw new Error(`Add the API key for ${active.label} in Settings first.`);
-    return { provider: active, model: active.model, key };
+    const chosen = model?.trim() || active.model;
+    const ids = active.kind === 'elevenlabs-music' ? (await this.models.catalog('music', key)).models.map(entry => entry.id) : [];
+    try { validateMusicModel(active.kind, chosen, ids); }
+    catch (error) { throw new Error(model ? (error as Error).message : `The saved model for "${active.label}" is not currently available. Update the provider in Settings. ${(error as Error).message}`); }
+    return { provider: active, model: chosen, key };
   }
 }
 

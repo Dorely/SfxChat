@@ -1,7 +1,9 @@
-// Music provider kinds and their reviewed model catalogs. Model IDs, lengths, and
-// notes were checked against official documentation on 2026-09-21; recheck them
-// before changing this list. App-side caps also apply (validation.ts).
+// Music provider kinds and their reviewed model catalogs. Lyria IDs, lengths, and
+// notes were checked against official documentation on 2026-09-21; ElevenLabs entries
+// come from the reviewed list in elevenlabs-models.ts, and live discovery decides which
+// ElevenLabs IDs exist. App-side caps also apply (validation.ts).
 import type { MusicProviderKind } from './types';
+import { LATEST_MODEL, REVIEWED_AUDIO_MODELS } from './elevenlabs-models';
 
 export interface MusicModelOption {
   id: string;
@@ -24,16 +26,12 @@ export const MUSIC_DURATION_MIN_MS = 3_000;
 export const MUSIC_DURATION_MAX_MS = 600_000;
 
 export const MUSIC_PROVIDER_PRESETS: MusicProviderPreset[] = [
-  { kind: 'elevenlabs-music', label: 'ElevenLabs Music', defaultModel: 'music_v2_5', keyHint: 'ElevenLabs API key; the Music API needs a paid plan' },
+  { kind: 'elevenlabs-music', label: 'ElevenLabs Music', defaultModel: LATEST_MODEL, keyHint: 'ElevenLabs API key; the Music API needs a paid plan' },
   { kind: 'gemini-lyria', label: 'Gemini Lyria', defaultModel: 'lyria-3.5', keyHint: 'Google AI Studio (Gemini API) key' }
 ];
 
 export const MUSIC_MODELS: Record<MusicProviderKind, MusicModelOption[]> = {
-  'elevenlabs-music': [
-    { id: 'music_v2_5', label: 'Music v2.5', note: 'Newest model: strongest prompt adherence and audio quality.', maxDurationMs: MUSIC_DURATION_MAX_MS },
-    { id: 'music_v2', label: 'Music v2', note: 'Long-form sections, mid-track transitions, dense vocal delivery.', maxDurationMs: MUSIC_DURATION_MAX_MS },
-    { id: 'music_v1', label: 'Music v1', note: 'Legacy transition default; narrower control than v2.', maxDurationMs: MUSIC_DURATION_MAX_MS }
-  ],
+  'elevenlabs-music': REVIEWED_AUDIO_MODELS.music.map(({ id, label, note }) => ({ id, label, note, maxDurationMs: MUSIC_DURATION_MAX_MS })),
   'gemini-lyria': [
     { id: 'lyria-3.5', label: 'Lyria 3.5', note: 'Full songs of a couple of minutes; length follows the prompt.', maxDurationMs: MUSIC_DURATION_MAX_MS },
     { id: 'lyria-3-clip-preview', label: 'Lyria 3 Clip', note: 'Always a 30-second clip; the cheapest way to explore a direction.', maxDurationMs: 30_000, fixedDurationMs: 30_000 },

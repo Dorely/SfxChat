@@ -226,8 +226,9 @@ encode. Zero fades preserve retained decoded samples; optional fades change only
 their edge samples. Preview gain does not affect saved audio. Research findings and
 source links are recorded under [docs/research](docs/research/agentic-audio-editing.md).
 
-The initial configurable chat model is `gpt-5.6-sol`, following Lorekeeper. SFX uses
-`eleven_text_to_sound_v2`, `mp3_44100_128`, optional 0.5–30 second duration, looping,
+The initial configurable chat model is `gpt-5.6-sol`, following Lorekeeper. ElevenLabs effects,
+music and voice default to the newest model each endpoint lists (older models can be
+pinned deliberately). SFX uses `mp3_44100_128`, optional 0.5–30 second duration, looping,
 and prompt influence. Account availability and output rights are provider-controlled.
 Audio reaches a listening model only as a bounded clip through the assistant's
 capability-gated tool when the model's saved flags allow it, and no aesthetic

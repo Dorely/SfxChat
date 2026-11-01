@@ -105,12 +105,16 @@ export interface LoopSeamInput { startSeconds: number; endSeconds: number; cross
 export interface SpectrogramInput { startSeconds?: number; endSeconds?: number; width?: number; height?: number; freqScale?: 'log' | 'linear' }
 export interface GenerationInput {
   kind?: 'effect'; prompt: string; count?: number; duration?: number | null; loop?: boolean;
-  influence?: number; parentId?: string | null; name?: string;
+  influence?: number;
+  /** Exact ElevenLabs sound model to pin; omitted or "latest" uses the newest available model. */
+  model?: string; parentId?: string | null; name?: string;
 }
 export interface MusicGenerationInput {
   kind: 'music'; prompt: string; count?: number; durationMs?: number | null; instrumental?: boolean;
   /** Local provider override; null or omitted uses the active music provider. */
-  providerId?: string | null; parentId?: string | null; name?: string;
+  providerId?: string | null;
+  /** Exact model for this request; omitted uses the provider's saved model, "latest" the newest. */
+  model?: string; parentId?: string | null; name?: string;
 }
 export interface VoiceGenerationInput {
   kind: 'voice'; text: string; providerId?: AudioProviderId; model?: string; voiceId?: string;
@@ -135,7 +139,7 @@ export interface MidiEdit {
 }
 /** Bank metadata the studio's instrument picker needs; the local path stays in main. */
 export interface SoundfontSummary { name: string; hash: string; presets: { bank: number; program: number; name: string }[] }
-export interface VoiceProviderEntry { id: AudioProviderId; label: string; model: string; voiceId: string; ready: boolean }
+export interface VoiceProviderEntry { id: AudioProviderId; label: string; model: string; voiceId: string; ready: boolean; /** Exact model "latest" currently resolves to. */ resolvedModel: string }
 export interface VoiceListInput { providerId: AudioProviderId; search?: string; language?: string; pageToken?: string }
 export interface VoiceOption { id: string; name: string; description: string; labels: Record<string, string> }
 export interface VoicePage { voices: VoiceOption[]; nextPageToken: string | null }
@@ -150,6 +154,21 @@ export interface VoiceModelOption {
 export interface VoiceModelCatalog {
   providerId: AudioProviderId; source: 'live' | 'built-in'; fetchedAt: string | null;
   models: VoiceModelOption[]; defaultModel: string; defaultVoiceId: string;
+  /** Newest selectable, non-deprecated model; "latest" resolves to it. */
+  latestModel: string;
+  /** True when the saved default is "latest" rather than a pinned model. */
+  defaultFollowsLatest: boolean;
+}
+export type AudioModelKind = 'effect' | 'music';
+export interface AudioModelListInput { kind: AudioModelKind; refresh?: boolean }
+export interface AudioModelOption {
+  id: string; label: string; note: string; deprecated: boolean; reviewed: boolean;
+  /** False after the provider rejected this model for the saved key during this run. */
+  available: boolean;
+}
+export interface AudioModelCatalog {
+  kind: AudioModelKind; source: 'live' | 'built-in'; fetchedAt: string | null; error: string | null;
+  models: AudioModelOption[]; latestModel: string;
 }
 export interface ProviderKeyStatus { id: AudioProviderId; ready: boolean; candidates: { id: string; label: string }[] }
 export interface Job { id: string; conversationId: string; kind: AssetKind; status: JobStatus; input: AnyGenerationInput; assetId: string | null; error: string | null; createdAt: string }
@@ -164,7 +183,7 @@ export interface ChatModelEntry {
 export interface ActiveChatSelection { modelId: string; effort: string }
 export interface ChatModelOption { id: string; label: string; providerLabel: string; slug: string; efforts: string[]; builtIn: boolean }
 export type MusicProviderKind = 'elevenlabs-music' | 'gemini-lyria';
-export interface MusicProviderEntry { id: string; label: string; kind: MusicProviderKind; model: string; ready: boolean }
+export interface MusicProviderEntry { id: string; label: string; kind: MusicProviderKind; model: string; ready: boolean; /** Exact model "latest" currently resolves to. */ resolvedModel: string }
 export interface SettingsStatus { codexReady: boolean; elevenLabsReady: boolean; geminiReady: boolean; providerKeys: ProviderKeyStatus[]; voiceProviders: VoiceProviderEntry[]; activeVoiceId: AudioProviderId; secureStorageAvailable: boolean; loginPending: boolean; model: string; error: string | null; chatModels: ChatModelOption[]; activeChat: ActiveChatSelection; providers: ChatProviderEntry[]; musicProviders: MusicProviderEntry[]; activeMusicId: string | null }
 export interface ChatContext { model: string; tokens: number; limit: number | null; includesHiddenReasoning: boolean; includesEstimatedMedia: boolean }
 /** Every list below is scoped to `activeProjectId`; other projects' rows never reach the renderer. */
@@ -199,6 +218,7 @@ export interface SfxApi {
   generateVoice(conversationId: string, input: VoiceGenerationInput): Promise<void>;
   listVoices(input: VoiceListInput): Promise<VoicePage>;
   listVoiceModels(input: VoiceModelListInput): Promise<VoiceModelCatalog>;
+  listAudioModels(input: AudioModelListInput): Promise<AudioModelCatalog>;
   saveVoiceProvider(input: { id: AudioProviderId; model: string; voiceId: string }): Promise<void>;
   setActiveVoice(id: AudioProviderId): Promise<void>;
   saveProviderKey(id: AudioProviderId, key: string): Promise<void>;

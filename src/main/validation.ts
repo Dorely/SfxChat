@@ -55,12 +55,14 @@ export const clipSchema = z.object({
   endSeconds: z.number().finite().positive().optional(),
   loopSeam: loopSeamSchema.optional().describe('Instead of a plain window, hear a loop wrap exactly as trim_asset loop:true would play it: the end of the loop, the crossfaded seam, then its opening. Do not combine with startSeconds/endSeconds.')
 }).strict();
+const modelIdSchema = z.string().trim().regex(/^[a-zA-Z0-9._-]{1,120}$/);
 export const generationSchema = z.object({
   prompt: z.string().trim().min(1).describe('Complete, concise description of the audible source, action and useful acoustic details; put connected events in order. For revisions, restate the sound with the requested changes. Sent as text without chat history or parent audio.'),
   count: z.number().int().positive().safe().optional().describe('Number of separate candidates using this same prompt. Defaults to 1; follow the user-requested scope.'),
   duration: z.number().min(0.5).max(30).nullable().optional().describe('Whole clip length in seconds, 0.5–30. Omit or use null for automatic duration. Does not specify exact event timestamps.'),
   loop: z.boolean().optional().describe('Request seamless repetition for a continuous sound bed; defaults to false. Use a matching continuous description. Does not extend the maximum clip length.'),
   influence: z.number().min(0).max(1).optional().describe('Prompt adherence, 0–1; omitted uses provider default 0.3. Higher follows the description more closely with less variation. Not volume or quality.'),
+  model: modelIdSchema.optional().describe('Omit (or "latest") for the newest available ElevenLabs sound model. Pin an exact ID from list_audio_models kind "effect" only when the user deliberately wants that model.'),
   parentId: idSchema.nullable().optional().describe('Local revision lineage only. Does not send source audio or earlier prompts to the provider.'),
   name: z.string().trim().min(1).optional().describe('Library name, separate from the provider sound description.')
 }).strict();
@@ -70,6 +72,7 @@ const musicInputFields = {
   durationMs: z.number().int().min(MUSIC_DURATION_MIN_MS).max(MUSIC_DURATION_MAX_MS).nullable().optional().describe('Whole track length in milliseconds, 3000-600000. Omit or use null to let the provider choose a length from the prompt. Not exact section timing, which belongs in the prompt text. Some models always return a fixed length.'),
   instrumental: z.boolean().optional().describe('Request a track without vocals. Defaults to false, and most prompts produce vocals without it.'),
   providerId: z.string().trim().min(1).max(80).nullable().optional().describe('Configured music provider to use for this request, copied exactly from the providerIds in your instructions. Never invent or abbreviate one. Omit or use null for the active provider in Settings.'),
+  model: modelIdSchema.optional().describe('Omit for the saved provider model; ElevenLabs providers follow the newest model by default. "latest" requests the newest ElevenLabs model. Pin an exact ID (list_audio_models kind "music" for ElevenLabs) only when the user deliberately wants that model.'),
   parentId: idSchema.nullable().optional().describe('Local revision lineage only. Music providers receive no source audio and cannot continue an earlier generation.'),
   name: z.string().trim().min(1).optional().describe('Library name, separate from the provider music description.')
 };
@@ -80,7 +83,7 @@ export const musicToolSchema = z.object(musicInputFields).strict();
 const voiceInputFields = {
   text: z.string().min(1).max(64000).refine(value => !!value.trim(), 'Spoken text is required.').describe('Exact user script, preserved without trimming or rewriting. Spoken by one voice. For revisions keep the full script, not bare feedback.'),
   providerId: audioProviderSchema.optional().describe('elevenlabs or gemini. Omit to use the active voice provider; one shared API key serves each provider.'),
-  model: z.string().trim().regex(/^[a-zA-Z0-9._-]{1,120}$/).optional().describe('Exact selectable model ID from list_voice_models. Read its note, controls, language coverage and guidanceStatus. Omit for the saved voice model; no automatic upgrade or fallback.'),
+  model: modelIdSchema.optional().describe('Omit for the saved voice model, which follows the newest ElevenLabs model by default; "latest" requests the newest selectable model (list_voice_models latestModel). Pin an exact selectable ID only when deliberately choosing that model, and read its note, controls, language coverage and guidanceStatus.'),
   voiceId: z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/).optional().describe('Exact voice ID from list_voices, or Gemini prebuilt name. Omit for the saved default voice.'),
   providerText: z.string().min(1).max(64000).refine(value => !!value.trim()).optional().describe('Optional prepared script, e.g. requested normalization or expressive tags. Original text stays separately preserved. Do not change user words unless authorized.'),
   style: z.string().max(1000).optional().describe('Gemini only: concise turn-level delivery such as restrained urgency. Keep stage directions out of spoken text. Empty means natural delivery.'),
@@ -121,6 +124,7 @@ export const midiGenerationSchema = z.object({ kind: z.literal('midi').optional(
 /** Agent-facing tool schema: the kind is implied by the tool name. */
 export const midiToolSchema = z.object(midiInputFields).strict();
 export const voiceListSchema = z.object({ providerId: audioProviderSchema, search: z.string().max(200).optional(), language: z.string().regex(/^[a-zA-Z0-9-]{1,40}$/).optional(), pageToken: z.string().max(2000).optional() }).strict();
+export const audioModelListSchema = z.object({ kind: z.enum(['effect', 'music']), refresh: z.boolean().optional().describe('Fetch the ElevenLabs API schema again instead of using the up-to-six-hour cache. No generation or purchase.') }).strict();
 export const voiceModelListSchema = z.object({ providerId: audioProviderSchema, refresh: z.boolean().optional().describe('Fetch a fresh ElevenLabs catalog instead of using the up-to-five-minute cache. No synthesis or purchase.') }).strict();
 export const patchSchema = z.object({ name: z.string().trim().min(1).optional(), description: z.string().optional(), tags: z.array(z.string().trim().min(1)).optional(), collections: z.array(z.string().trim().min(1)).optional(), review: z.enum(['unreviewed','accepted','rejected']).optional(), feedback: z.string().optional() }).strict();
 export const projectNameSchema = z.string().trim().min(1).max(60);
@@ -137,7 +141,7 @@ export const commandSchemas = {
   sendMessage: z.tuple([idSchema, z.string().trim().min(1)]), cancelTurn: z.tuple([idSchema]),
   generate: z.tuple([idSchema, generationSchema]), cancelJob: z.tuple([idSchema]),
   generateMusic: z.tuple([idSchema, musicGenerationSchema]),
-  generateVoice: z.tuple([idSchema, voiceGenerationSchema]), listVoices: z.tuple([voiceListSchema]), listVoiceModels: z.tuple([voiceModelListSchema]),
+  generateVoice: z.tuple([idSchema, voiceGenerationSchema]), listVoices: z.tuple([voiceListSchema]), listVoiceModels: z.tuple([voiceModelListSchema]), listAudioModels: z.tuple([audioModelListSchema]),
   saveVoiceProvider: z.tuple([z.object({ id: audioProviderSchema, model: z.string().min(1).max(120), voiceId: voiceInputFields.voiceId.unwrap() }).strict()]),
   setActiveVoice: z.tuple([audioProviderSchema]),
   saveProviderKey: z.tuple([audioProviderSchema, z.string().max(1000)]),

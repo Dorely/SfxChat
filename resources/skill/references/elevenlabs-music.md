@@ -3,9 +3,13 @@ instrumentation, tempo, key, era, production notes, structure, and lyrics, and i
 use up to 4100 characters, so spend that budget on musical detail rather than chat
 phrasing. Length is a request between 3 seconds and 10 minutes; omit it to let the
 model pace the track from the prompt, which usually serves the music better than
-forcing a length. Instrumental is a field, not a prompt phrase. Music v2 and v2.5
-understand studio production language, long-form section structure, mid-track genre
-changes, and dense or fast vocal delivery; v1 is the older transitional model. Longer
+forcing a length. Instrumental is a field, not a prompt phrase. ElevenLabs
+music providers default to `"latest"`, the newest non-deprecated model in ElevenLabs'
+official API schema (currently `music_v2_5`); `list_audio_models` with `kind:"music"`
+reports it. Omit the generation `model` to keep the provider's setting; pin an exact ID
+for one request only when the user deliberately chooses an older model. Music v2 and
+v2.5 understand studio production language, long-form section structure, mid-track
+genre changes, and dense or fast vocal delivery; v1 is deprecated by ElevenLabs. Longer
 tracks take longer and cost more, so prefer the shortest length that serves the
 request. This app does not send composition plans, seeds, audio references, word
 timelines, streaming options, or finetune ids; never offer those or invent control

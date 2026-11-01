@@ -19,6 +19,17 @@ Describe desired acoustic properties positively (e.g. dry, close, isolated) inst
 of relying on long exclusion lists. No dedicated negative-prompt field, weighted
 prompt syntax, SSML, or TTS audio-tag controls are exposed by this SFX endpoint.
 
+Model: omit `model` (or send `"latest"`) to use the newest available sound model.
+`list_audio_models` with `kind:"effect"` reads the IDs ElevenLabs' official API
+schema accepts (cached up to six hours) and reports `latestModel`; currently
+`eleven_text_to_sound_v3`, which ElevenLabs limits by account and region. If the
+provider definitively refuses that model for the saved key, the app retries an
+automatic request once per model on the next newest (nothing is generated or billed by
+the refusal) and the asset provenance records the model actually used. Pin an exact
+older ID such as `eleven_text_to_sound_v2` only when the user deliberately wants it;
+pinned requests never fall back. Prompting guidance below applies to both models; the
+provider documents no per-model differences in these fields.
+
 Use the generation fields for controls: omit duration or use null for automatic
 length when timing is flexible; specify 0.5–30 seconds for a required clip length,
 allowing room for the event and its decay. Duration controls the whole clip, not

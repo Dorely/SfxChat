@@ -400,7 +400,8 @@ source or replaces the shared key. Authoritative ciphertext is written before le
 copies are deleted. Deleting a model/target never deletes the shared vendor key.
 
 `MusicRegistry` stores model target metadata separately from credentials. One music
-entry is active and requests may target another by its exact ID. `VoiceRegistry` stores
+entry is active and requests may target another by its exact ID. ElevenLabs entries
+default to `"latest"`; entries report `resolvedModel` for display. `VoiceRegistry` stores
 one model/default-voice selection per vendor plus the active voice vendor. These are
 independent of shared credential selection. Music and voice requests have ten-minute
 transport timeouts; effects retain three minutes. Discovery has a 30-second timeout.
@@ -426,8 +427,35 @@ bypasses it. Responses carry source/time, saved model/voice defaults, language c
 alpha-access flags, prompting status, selectable status, controls and character bounds.
 Discovery has no paid synthesis and does not change defaults. Failures surface explicitly;
 there is no static fallback masquerading as current availability. Gemini returns its
-reviewed built-in catalog, labeled as such. Music/SFX continue using their endpoint-specific
-catalogs because this discovered roster describes TTS.
+reviewed built-in catalog, labeled as such. Music/SFX use separate discovery (below)
+because this roster describes TTS only.
+
+### ElevenLabs latest-model defaults
+
+ElevenLabs effects, music and voice default to the sentinel model `"latest"`
+(`shared/elevenlabs-models.ts`); an exact ID is a deliberate pin and is never upgraded or
+substituted. Recency comes from the model ID's version suffix (`_v4`, `_v2_5`); equal
+versions prefer the base family. Deprecated, unselectable (realtime), and alpha-only
+models are not eligible.
+
+- Voice: `latestVoiceModel` picks from the live `/v1/models` catalog (reviewed profiles
+  before discovery). `"latest"` resolves at admission because controls and limits are
+  model-specific, so the queued job records the exact model. `list_voice_models` returns
+  `latestModel` and `defaultFollowsLatest`; Settings shows a Latest option.
+- Effects and music: ElevenLabs has no model-list endpoint, so
+  `providers/elevenlabs-models.ts` reads the `model_id` enum of `/v1/sound-generation` and
+  `/v1/music` (with `x-fern-enum` deprecation) from the public, unauthenticated
+  `https://api.elevenlabs.io/openapi.json`. Reads are bounded to 16 MiB and 30 seconds,
+  cached six hours, retried after five minutes on failure, and keep the last good list; a
+  first-run failure shows the reviewed IDs labeled `source:"built-in"`. `list_audio_models`
+  serves UI, assistant, CLI and MCP. Effects accept an optional per-request `model`; music
+  provider entries save `"latest"` by default and requests may pin `model` for one
+  generation. Pinned IDs are checked against the catalog at admission.
+- Automatic effect/music requests resolve at dispatch. A definite 400/403/404/422 refusal
+  of the model itself (for example SFX v3's account/region limit) marks that model
+  refused for the key fingerprint for this run and tries the next newest, at most three
+  models; such refusals generate and bill nothing. Pinned requests never fall back. The
+  asset's provenance records the model actually used, and diagnostics record each refusal.
 
 `shared/voice-models.ts` owns reviewed prompting/control profiles rather than ElevenLabs
 availability. v4, v3, Multilingual v2, Flash v2/v2.5 and deprecated Turbo have distinct

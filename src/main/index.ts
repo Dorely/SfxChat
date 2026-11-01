@@ -20,6 +20,8 @@ import { CodexAuth } from './providers/auth';
 import { CodexClient, DEFAULT_MODEL } from './providers/codex';
 import { resolveChatModel } from '../shared/chat-models';
 import { ElevenLabsClient } from './providers/elevenlabs';
+import { ElevenLabsModels, isModelAccessRejection } from './providers/elevenlabs-models';
+import { LATEST_MODEL } from '../shared/elevenlabs-models';
 import { ElevenLabsMusicClient } from './providers/elevenlabs-music';
 import { GeminiMusicClient } from './providers/gemini-music';
 import { ChatRegistry } from './chat-registry';
@@ -112,9 +114,27 @@ void acquireInstanceLock().then(acquired => {
     const elevenMusic = new ElevenLabsMusicClient(); const geminiMusic = new GeminiMusicClient();
     const providerKeys = new ProviderKeys(store, secrets);
     const registry = new ChatRegistry(store, secrets, providerKeys);
-    const music = new MusicRegistry(store, providerKeys);
-    const voice = new VoiceRegistry(store, providerKeys);
+    const elevenModels = new ElevenLabsModels();
+    const music = new MusicRegistry(store, providerKeys, elevenModels);
     const voiceClient = new VoiceClient();
+    const voice = new VoiceRegistry(store, providerKeys, id => voiceClient.latest(id));
+    /**
+     * Runs an ElevenLabs request on a pinned model, or on the newest model when none is
+     * pinned. A definite refusal of the model itself (nothing generated or billed) moves an
+     * automatic request to the next newest model; the result records the model used.
+     */
+    const onLatest = async <T>(kind: 'effect' | 'music', requested: string | undefined, key: string, run: (model: string) => Promise<T>): Promise<T> => {
+      if (requested && requested !== LATEST_MODEL) return run(requested);
+      const order = await elevenModels.automatic(kind, key);
+      for (let index = 0; ; index++) {
+        try { return await run(order[index]!); }
+        catch (error) {
+          if (index + 1 >= order.length || !isModelAccessRejection(error)) throw error;
+          elevenModels.markRefused(kind, order[index]!, key);
+          diagnostics.record('provider.model_refused', { kind, model: order[index], next: order[index + 1] });
+        }
+      }
+    };
     const model = () => resolveChatModel(store.setting('chat-model', DEFAULT_MODEL));
     const livePorts: ServicePorts = {
       settings: async () => {
@@ -150,16 +170,17 @@ void acquireInstanceLock().then(acquired => {
       generateEffect: async (input, signal) => {
         const key = await providerKeys.get('elevenlabs');
         if (!key) throw new Error('Add your ElevenLabs API key in Settings first.');
-        const result = await eleven.generateSound(input, key, AbortSignal.any([signal, AbortSignal.timeout(180_000)]));
+        const timeout = AbortSignal.any([signal, AbortSignal.timeout(180_000)]);
+        const result = await onLatest('effect', input.model, key, model => eleven.generateSound(input, model, key, timeout));
         return { ...result, format: 'mp3' as const, provider: 'ElevenLabs' };
       },
       generateMusic: async (input, signal) => {
         // The provider, model, and key resolve here rather than in tool arguments or the
         // renderer; every capability uses the one shared vendor key.
-        const target = await music.resolve(input.providerId);
+        const target = await music.resolve(input.providerId, input.model);
         const timeout = AbortSignal.any([signal, AbortSignal.timeout(600_000)]);
         if (target.provider.kind === 'elevenlabs-music') {
-          const result = await elevenMusic.compose(input, target.model, target.key, timeout);
+          const result = await onLatest('music', target.model, target.key, model => elevenMusic.compose(input, model, target.key, timeout));
           return { ...result, provider: target.provider.label };
         }
         const result = await geminiMusic.compose(input, target.model, target.key, timeout);
@@ -180,7 +201,12 @@ void acquireInstanceLock().then(acquired => {
         const key = input.providerId === 'elevenlabs' ? await providerKeys.get(input.providerId) : '';
         const catalog = await voiceClient.models(input, key ?? '', AbortSignal.timeout(30_000));
         const defaults = voice.configuration(input.providerId);
-        return { ...catalog, defaultModel: defaults.model, defaultVoiceId: defaults.voiceId };
+        const followsLatest = defaults.model === LATEST_MODEL;
+        return { ...catalog, defaultModel: followsLatest ? catalog.latestModel : defaults.model, defaultFollowsLatest: followsLatest, defaultVoiceId: defaults.voiceId };
+      },
+      listAudioModels: async input => {
+        const key = await providerKeys.get('elevenlabs').catch(() => null);
+        return elevenModels.catalog(input.kind, key, input.refresh);
       },
       validateVoiceTarget: async input => {
         if (!input.providerId) throw new Error('Choose a voice provider.');
@@ -267,6 +293,7 @@ void acquireInstanceLock().then(acquired => {
       generateVoice: (id, input) => { const { kind: _kind, ...fields } = input; return operations!.call('generate_voice', { ...context(id), requestId: randomUUID(), input: fields }, 'user').then(requireAdmission); },
       listVoices: input => operations!.call('list_voices', input, 'user'),
       listVoiceModels: input => operations!.call('list_voice_models', input, 'user'),
+      listAudioModels: input => operations!.call('list_audio_models', input, 'user'),
       saveVoiceProvider: async input => {
         if (input.id === 'elevenlabs') {
           const key = await providerKeys.get(input.id);

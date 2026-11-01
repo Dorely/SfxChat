@@ -35,7 +35,7 @@ uses JSON and an `xi-api-key` resolved inside the privileged provider operation.
 | `duration` | `duration_seconds` | Optional 0.5–30 seconds. App null/omission omits the field for provider-selected duration. |
 | `influence` | `prompt_influence` | Optional 0–1, documented default 0.3. Higher adherence reduces variation; it is not a quality score. |
 | `loop` | `loop` | Optional boolean, default false; v2 supports smooth repetition. |
-| Provider configuration | `model_id` | App sends `eleven_text_to_sound_v2`. |
+| `model` | `model_id` | Optional exact pin; omitted or `latest` sends the newest ID from the official API schema enum (`eleven_text_to_sound_v3` as of 2026-11-01, limited by account/region), falling back to the next newest only when an automatic request's model is refused. The API default remains `eleven_text_to_sound_v2`. |
 | `count`, `name`, `parentId` | None | App candidate jobs, metadata, and lineage. No reference audio is transmitted. |
 
 The schema exposes no negative-prompt field, seed, reference input, SSML controls,

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { AudioProviderId, VoiceGenerationInput, VoiceListInput, VoiceModelListInput, VoiceModelCatalog, VoiceModelOption, VoiceOption, VoicePage } from '../../shared/types';
-import { GEMINI_VOICES, providerLabel, validateVoiceTarget, voiceModelProfile, VOICE_MODELS, VOICE_DEFAULTS } from '../../shared/voice-models';
+import { GEMINI_VOICES, latestVoiceModel, providerLabel, validateVoiceTarget, voiceModelProfile, VOICE_MODELS, VOICE_DEFAULTS } from '../../shared/voice-models';
+import { LATEST_MODEL } from '../../shared/elevenlabs-models';
 import { redactText } from '../diagnostics';
 import { ProviderHttpError } from './errors';
 import type { GenerationResult } from '../service';
@@ -49,9 +50,13 @@ export class VoiceClient {
       throw new Error(redactText(e instanceof Error ? e.message : 'Voice request failed.', [key]));
     }
   }
+  /** Newest model from the cached live catalog, or the reviewed profiles before discovery. */
+  latest(provider: AudioProviderId): string {
+    return latestVoiceModel(provider, provider === 'elevenlabs' && this.modelCache ? this.modelCache.catalog.models : VOICE_MODELS[provider]);
+  }
   async models(input: VoiceModelListInput, key: string, signal: AbortSignal): Promise<VoiceModelCatalog> {
     const defaults = VOICE_DEFAULTS[input.providerId];
-    if (input.providerId === 'gemini') return { providerId: 'gemini', source: 'built-in', fetchedAt: null, models: VOICE_MODELS.gemini, defaultModel: defaults.model, defaultVoiceId: defaults.voiceId };
+    if (input.providerId === 'gemini') return { providerId: 'gemini', source: 'built-in', fetchedAt: null, models: VOICE_MODELS.gemini, defaultModel: defaults.model, defaultVoiceId: defaults.voiceId, latestModel: latestVoiceModel('gemini'), defaultFollowsLatest: false };
     if (!key.trim()) throw new Error('Save the shared ElevenLabs API key in Settings to discover available models.');
     const fingerprint = createHash('sha256').update(key).digest('hex');
     if (!input.refresh && this.modelCache?.fingerprint === fingerprint && this.modelCache.expires > Date.now()) return this.modelCache.catalog;
@@ -71,7 +76,8 @@ export class VoiceClient {
         const languages = (Array.isArray(item.languages) ? item.languages : []).filter(record).flatMap(language => typeof language.language_id === 'string' ? [{ id: language.language_id.slice(0, 40), name: typeof language.name === 'string' ? language.name.slice(0, 100) : language.language_id.slice(0, 40) }] : []).slice(0, 200);
         models.push({ ...profile, label: typeof item.name === 'string' ? item.name.slice(0, 200) : profile.label, description: typeof item.description === 'string' ? item.description.slice(0, 2000) : '', maxCharacters: Math.min(limit ?? profile.maxCharacters ?? 10000, profile.maxCharacters ?? 10000), languages, requiresAlphaAccess: typeof item.requires_alpha_access === 'boolean' ? item.requires_alpha_access : null });
       }
-      const catalog: VoiceModelCatalog = { providerId: 'elevenlabs', source: 'live', fetchedAt: new Date().toISOString(), models, defaultModel: defaults.model, defaultVoiceId: defaults.voiceId };
+      const latestModel = latestVoiceModel('elevenlabs', models);
+      const catalog: VoiceModelCatalog = { providerId: 'elevenlabs', source: 'live', fetchedAt: new Date().toISOString(), models, defaultModel: defaults.model === LATEST_MODEL ? latestModel : defaults.model, defaultVoiceId: defaults.voiceId, latestModel, defaultFollowsLatest: defaults.model === LATEST_MODEL };
       this.modelCache = { fingerprint, expires: Date.now() + 5 * 60_000, catalog };
       return catalog;
     });
