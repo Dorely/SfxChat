@@ -20,10 +20,21 @@ No paid generation was run.
   - Model-refusal detection accepted 400/403/422 model-access errors and rejected an
     unrelated 422, a 500, and a 401.
 - `npm run typecheck` and `npm run build` passed after the final edits.
-- Gap: no browser or desktop check. `npm run dev:browser` refused to start because
-  the user's installed SfxChat was running, and it was not closed. The Latest pickers
-  in the Playground, music settings, and voice controls, and the refusal fallback
-  against a real account, are unverified.
+- Browser check through `npm run dev:browser`, after the user closed the installed
+  SfxChat; the host was stopped afterwards:
+  - `listAudioModels` returned live catalogs: effect latest
+    `eleven_text_to_sound_v3`, music latest `music_v2_5` with `music_v1` deprecated.
+    `listVoiceModels` returned live `eleven_v4` as latest.
+  - The Playground sound model select defaulted to "Latest (Sound Effects v3)" with
+    v3 and v2 as pins.
+  - In music settings, a new provider defaulted to "Latest (Music v2.5)"; the user's
+    existing ElevenLabs entry showed as pinned to `music_v2_5`.
+  - Voice settings showed the user's saved `eleven_v4` default as pinned, with the
+    "Pinned: newer models will not be used" hint. Selecting "Latest (Eleven v4)"
+    changed the hint to follow the newest model; it was reverted without saving.
+  - `guidance` reported effects as `model:"latest"`. No console errors.
+- Gaps: no paid generation, so the per-request resolution and the model-refusal
+  fallback were not exercised against a real account. No native desktop check.
 
 # Musical analysis and loop finder (2026-10-27)
 
