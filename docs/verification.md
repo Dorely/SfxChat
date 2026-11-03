@@ -1375,3 +1375,12 @@ automatically by an older snapshot.
 - Gaps: MCP resource notifications on the new wait shape, a Codex client holding a long
   wait, and the in-app assistant without `review_wait` were not exercised. The
   development host and browser tab were closed after checks.
+
+- Packaged NSIS into `release/review-wait` with the installed Electron distribution
+  (the existing extraction-lock workaround); `/S` installation exited 0 and the installed
+  `SfxChat.exe`, `app.asar`, and CLI matched the build hashes. The installed CLI reported
+  ready and `review_wait` (`wait: 0`) on an existing review returned the new shape.
+  User skills (Codex and Claude) were refreshed with `--force`; every replaced file
+  matched an earlier committed skill version, and 18 backups were written. The Codex MCP
+  entry now carries `tool_timeout_sec = 1900`; all 38 skill/config entries are
+  up-to-date. Reconnect existing MCP clients for the new `review_wait` schema.
