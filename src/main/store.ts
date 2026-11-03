@@ -134,9 +134,10 @@ export class Store {
     })();
     this.changed(); return result;
   }
-  reviewHistory(id: string, projectId: string): ReviewBoard[] {
+  /** Saved revisions in order, optionally from revision `from` onward. */
+  reviewHistory(id: string, projectId: string, from = 0): ReviewBoard[] {
     this.review(id, projectId);
-    return this.db.prepare('SELECT json FROM review_history WHERE review_id=? ORDER BY revision').all(id).map(normalizeReview);
+    return this.db.prepare('SELECT json FROM review_history WHERE review_id=? AND revision>=? ORDER BY revision').all(id, from).map(normalizeReview);
   }
   beginExternal(id: string, projectId: string, sessionId: string, operation: string, args: string) {
     const old = this.db.prepare('SELECT * FROM external_requests WHERE id=?').get(id) as { project_id: string; session_id: string; operation: string; args: string } | undefined;

@@ -144,7 +144,7 @@ is recorded in [verification](docs/verification.md).
 | [docs/agent-workbench.md](docs/agent-workbench.md) | CLI/MCP operations, scopes, installation, review/export contracts and limits. |
 | [docs/chimera-integration.md](docs/chimera-integration.md) | Migration recipe for Chimera's raw API and HTML audition workflow; no sibling edits. |
 | [docs/research/agent-runtime.md](docs/research/agent-runtime.md) | Pinned runtime/encoder rebuild, official sources and guidance extraction provenance. |
-| [src/cli/index.ts](src/cli/index.ts) | JSON CLI, on-demand desktop startup, authenticated client, stdio MCP tools/media/resources and bounded review notification watches. |
+| [src/cli/index.ts](src/cli/index.ts) | JSON CLI, on-demand desktop startup, authenticated client, stdio MCP tools/media/resources, bounded review notification watches, and the `watch-review` JSON-lines stream. |
 | [src/main/operations.ts](src/main/operations.ts) | Shared schemas/dispatch, project scopes, deletion, validation, and default cue-sheet presentation with separate save/UI outcomes. |
 | [src/main/bridge.ts](src/main/bridge.ts) | Private named-pipe endpoint, authenticated framing and protected discovery. |
 | [src/main/ui-port.ts](src/main/ui-port.ts) | Explicit renderer commands, acknowledgment, visibility stop and actual playback status. |

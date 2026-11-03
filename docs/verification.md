@@ -1356,3 +1356,22 @@ automatically by an older snapshot.
 - NSIS packaging and silent installation completed with exit 0. Installed executable,
   app.asar and CLI hashes matched release/review-playback-final. The installed app reopened
   the same 58-cue review with playback stopped. Skills needed no changes for this renderer fix.
+
+## 2026-11-03 — review_wait matches PixelChat
+
+- `npm run typecheck` and `npm run build` passed. `npm run dev:browser` ran on the real
+  profile with the installed app closed, in a scratch project with two imported 0.5 s
+  local tones (no provider calls); the project was deleted afterwards.
+- `review_wait` with `wait: 0` returned no events, cursor 1, `timedOut: true`; the old
+  `timeoutMs` argument returned INVALID_ARGUMENTS; `from: "any"` after revision 0
+  returned the agent's `created` event. A 75 s wait completed with `timedOut: true`,
+  confirming the bridge no longer drops authenticated requests at 60 s.
+- A waiting call ignored an agent `review_update` (revision 2) and woke about 0.2 s after
+  a browser click selected a candidate, returning only the user's revision 3 (`saved`,
+  cue `tone`). With `until: "completed"`, pressing Done woke it about 0.15 s later with a
+  user `completed` event and `completedBy: "user"`.
+- `sfxchat watch-review` on the completed review printed `watch.started` then
+  `watch.ended` (completed) and exited 0; a missing review ID printed the usage error.
+- Gaps: MCP resource notifications on the new wait shape, a Codex client holding a long
+  wait, and the in-app assistant without `review_wait` were not exercised. The
+  development host and browser tab were closed after checks.

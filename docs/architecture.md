@@ -545,12 +545,19 @@ from opening the library and bypassing completion locks. Historical JSON is
 normalized on read without rewriting history. Renderer snapshots include both
 active and archived reviews; review_list defaults to active.
 
+review_wait blocks until a review has saved revisions after a cursor (by default only
+the user's), or until it is completed, and returns those revisions as events with kind
+and changed cue keys, the review, a new cursor, and timedOut. Waits default to 50
+seconds and go up to 30 minutes; the bridge clears its idle socket timeout once a
+request authenticates so long waits are not cut off. `sfxchat watch-review` loops it
+into a JSON-lines stream. The in-app assistant does not get review_wait.
+
 MCP exposes scoped review resource templates with subscription notifications through
 the SDK's modern/legacy stdio routing. Reads, opens, and returned review mutations
 start deduplicated revision watches (maximum 128 per connection; oldest evicted).
-Watches use bounded review_wait calls over the existing private bridge, back off
-from 1 to 30 seconds on failure, never launch the desktop, and abort their sockets
-and timers when stdio closes. Notifications identify the changed URI; reads and
+Watches use 30-second review_wait calls (any origin) over the existing private
+bridge, back off from 1 to 30 seconds on failure, never launch the desktop, and abort
+their sockets and timers when stdio closes. Notifications identify the changed URI; reads and
 waits remain authoritative across disconnects and hosts that do not surface
 notifications. Explicit reads restart evicted watches.
 

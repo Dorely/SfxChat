@@ -35,6 +35,8 @@ export async function startBridge(root: string, helper: string, operations: Oper
           const supplied = Buffer.from(typeof message.token === 'string' ? message.token : '');
           if (supplied.length !== token.length || !timingSafeEqual(supplied, Buffer.from(token))) throw new WorkbenchError('UNAUTHORIZED', 'Invalid local bridge authentication.');
           if (closing) throw new WorkbenchError('CLOSING', 'SfxChat is closing.');
+          // Authenticated: operations may wait for minutes (review waits).
+          socket.setTimeout(0);
           const result = message.operation === 'tools' ? operationCatalog() : await operations.call(message.operation, message.args ?? {});
           if (!socket.destroyed) socket.end(JSON.stringify({ ok: true, result }) + '\n');
         } catch (e) { if (!socket.destroyed) socket.end(JSON.stringify(operationError(e)) + '\n'); }

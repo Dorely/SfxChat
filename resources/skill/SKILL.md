@@ -48,7 +48,8 @@ editable local synthesis needs no provider, API key, or paid generation.
 6. Group initial and revised candidates with `review_create`/`review_update`.
    `review_open` opens the existing UI without autoplay. Agents cannot start audio.
    Reconcile review revision conflicts; preserve rejection and uncertainty. Read
-   user decisions through `review_get`/`review_wait`. Completed boards are locked;
+   user decisions through `review_get`; to respond as the user works or wait for Done,
+   loop on `review_wait` (or run `sfxchat watch-review`). Completed boards are locked;
    never reopen merely to bypass that lock. Agent completion is not human acceptance.
 7. Export original assets, aligned stems/components, or portable arrangement
    packages to an absolute destination. Preserve source/license provenance, engine

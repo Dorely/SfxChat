@@ -31,8 +31,11 @@ repeated, and duplicates are coalesced.
 | User | `~/.agents/skills/sfxchat` | `~/.claude/skills/sfxchat` | `$CODEX_HOME/config.toml` (default `~/.codex`), `~/.claude.json` |
 
 Registration names the server `sfxchat` and points to the installed runtime and CLI
-using absolute paths. Project registration is therefore machine-local: review before
-committing it to a team repository. Harness trust/restart requirements still apply.
+using absolute paths. The Codex entry sets `tool_timeout_sec = 1900` so long
+`review_wait` calls fit (Codex otherwise ends tool calls after 60 seconds); an existing
+entry without it reports `different` and needs `--force` to update. Project
+registration is therefore machine-local: review before committing it to a team
+repository. Harness trust/restart requirements still apply.
 Moving/uninstalling the app invalidates those paths; rerun integration installation
 at the new location. App uninstall removes only its owned PATH entry, not skills,
 harness configuration, or the audio library.
@@ -69,9 +72,14 @@ reopen reviews, with attribution retained in immutable history.
 - `review_list` accepts status: active (default), completed (archive), or all.
 - Reads, history, waits, and export manifests expose status, completedAt, and
   completedBy (user or agent; completion fields are null while active).
-- `review_wait` accepts condition: revision (default) or completed, afterRevision,
-  and timeoutMs (0–30000). It returns the current board even on timeout. Inspect
-  status/revision; an already-completed board satisfies completed immediately.
+- `review_wait` blocks until the review has saved revisions after `afterRevision`
+  (default: the current revision), by default only the user's (`from: "any"` includes
+  agents), or with `until: "completed"` until it is completed, which the user does by
+  pressing Done. It returns `events` (revision, origin, time, kind created/saved/
+  completed/reopened, status, and changed cue keys), the current `review`, a `cursor` to
+  pass as `afterRevision` next time, and `timedOut`. `wait` is seconds: default 50
+  (under common client tool timeouts), up to 1800. An already-completed board satisfies
+  `until: "completed"` immediately. The in-app assistant does not get this tool.
 - Resources use `sfxchat://projects/{projectId}/reviews/{reviewId}`.
   Read/open a review to observe it. Subscribe using the host's negotiated protocol:
   modern `subscriptions/listen` or legacy `resources/subscribe`. An update notification
@@ -88,12 +96,16 @@ sfxchat tools
 sfxchat call projects_list
 sfxchat call project_create --json '{"name":"Game sound design"}'
 sfxchat call session_create --input C:\work\session.json
+sfxchat watch-review <projectId> <reviewId> [--from user|any] [--once]
 sfxchat mcp
 ```
 
 Normal results are one JSON object: `{ "ok": true, "result": ... }`. Failures are
 `{ "ok": false, "error": { "code": "...", "message": "..." } }` with exit code 1.
 Diagnostics never go to MCP stdout. Use JSON files to avoid shell quoting surprises.
+`watch-review` is the exception: it holds one connection and prints JSON lines
+(`watch.started`, each review event, `watch.retrying` while the app is unreachable,
+then `watch.ended`) until the review is completed, or after the first events with `--once`.
 `tools` returns current descriptions and JSON schemas. MCP exposes those same names,
 structured results, PNG/audio content, and the `sfxchat://guidance` resource.
 

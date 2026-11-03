@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { WorkbenchService } from './service';
 import { analysisSchema, assetKindSchema, clipSchema, loopSearchSchema, generationSchema, idSchema, midiToolSchema, musicToolSchema, voiceToolSchema, voiceListSchema, voiceModelListSchema, audioModelListSchema, patchSchema, projectNameSchema, spectrogramSchema, titleSchema, trimSchema } from './validation';
-import { boardInputSchema, WorkbenchError, type UiCommand, type PlaybackState } from '../shared/workbench';
+import { boardInputSchema, WorkbenchError, type UiCommand, type PlaybackState, type ReviewBoard, type ReviewEvent, type ReviewWait } from '../shared/workbench';
 import { guidanceDocuments, selectGuidance } from '../shared/guidance';
 import type { Exporter } from './exporter';
 import { arrangementOperationDefinitions } from '../shared/arrangement-operations';
@@ -58,7 +58,7 @@ export const operationDefinitions = {
   review_update: { schema: obj({ ...board, expectedRevision: z.number().int().positive(), content: boardInputSchema }), description: 'Save review content only if its revision still matches. Reconcile conflicts with current feedback.' },
   review_complete: { schema: obj({ ...board, expectedRevision: z.number().int().positive(), content: boardInputSchema.optional() }), description: 'Save optional final content and mark the review completed/archived atomically. Locks edits until explicitly reopened. Unreviewed cues are allowed; completion does not imply acceptance. Records agent or user attribution.' },
   review_reopen: { schema: obj({ ...board, expectedRevision: z.number().int().positive() }), description: 'Explicitly restore a completed review to active and editable, preserving completion history.' },
-  review_wait: { schema: obj({ ...board, afterRevision: z.number().int().min(0), condition: z.enum(['revision', 'completed']).default('revision'), ...wait }), description: 'Wait up to 30 seconds for a revision change or completed status. Always returns current review; inspect status/revision to distinguish timeout. Completion does not imply all cues were accepted.' },
+  review_wait: { schema: obj({ ...board, afterRevision: z.number().int().min(0).optional(), until: z.enum(['change', 'completed']).default('change'), from: z.enum(['user', 'any']).default('user'), wait: z.number().int().min(0).max(1800).default(50) }), description: 'Block until the user acts on a review: a saved draft, a cue decision or note, Done (completion), or reopening (from any includes agents). until completed waits for the review to be completed. Returns the saved revisions after afterRevision (default: now) as events with origin, kind and changed cue keys, the review as it is now, a cursor to pass as afterRevision next time, and timedOut. wait is seconds (default 50, under common client tool timeouts; raise it only when your client allows longer calls). Completion does not imply all cues were accepted. For one streaming connection run sfxchat watch-review.' },
   review_open: { schema: obj(board), description: 'Show and focus this review in SfxChat without autoplay.' },
   playback_status: { schema: obj(session), description: 'Read actual renderer playback status. Does not imply listening approval.' },
   export_asset: { schema: obj({ ...project, id: idSchema, ...exportFields }), description: 'Export an original, PCM WAV or Ogg Vorbis plus provenance; refuses existing files.' },
@@ -164,7 +164,15 @@ export class Operations {
       case 'review_update': review(); return store.saveReview(a.projectId, a.content, origin, a.reviewId, a.expectedRevision);
       case 'review_complete': review(); return store.saveReview(a.projectId, a.content, origin, a.reviewId, a.expectedRevision, 'completed');
       case 'review_reopen': review(); return store.saveReview(a.projectId, undefined, origin, a.reviewId, a.expectedRevision, 'active');
-      case 'review_wait': { await this.waitUntil(() => a.condition === 'completed' ? review().status === 'completed' : review().revision > a.afterRevision, a.timeoutMs); return review(); }
+      case 'review_wait': {
+        // Without a cursor, wait for what happens next. Filtering by origin skips the caller's own saves.
+        const after = a.afterRevision ?? review().revision;
+        const events = () => review().revision > after ? reviewEvents(store.reviewHistory(a.reviewId, a.projectId, after), after, a.from) : [];
+        const ready = () => a.until === 'completed' ? review().status === 'completed' : events().length > 0;
+        await this.waitUntil(ready, a.wait * 1000);
+        const found = events();
+        return { review: review(), events: found, cursor: found.at(-1)?.revision ?? after, timedOut: !ready() } satisfies ReviewWait;
+      }
       case 'review_open': review(); return this.ui.send({ action: 'open', projectId: a.projectId, sessionId: store.ensureConversation(a.projectId), reviewId: a.reviewId });
       case 'playback_status': return this.ui.state(a.sessionId);
       case 'export_asset': return this.exporter.asset(store.asset(a.id, a.projectId), a.destination, a.format);
@@ -175,6 +183,16 @@ export class Operations {
     const until = Date.now() + timeout;
     while (!this.stopped && !done() && Date.now() < until) await new Promise(resolve => setTimeout(resolve, Math.min(250, until - Date.now())));
   }
+}
+/** Saved revisions after `after`, described as events. `history` starts at revision `after` so each event has its predecessor. */
+function reviewEvents(history: ReviewBoard[], after: number, from: 'user' | 'any'): ReviewEvent[] {
+  return history.flatMap((board, i) => {
+    if (board.revision <= after || (from === 'user' && board.origin !== 'user')) return [];
+    const previous = history[i - 1];
+    const kind = !previous ? board.revision === 1 ? 'created' : 'saved' : previous.status === board.status ? 'saved' : board.status === 'completed' ? 'completed' : 'reopened';
+    const changed = (audit: ReviewBoard['cueAudit'][string]) => [audit.decision, audit.notes, ...Object.values(audit.candidates)].some(stamp => stamp.revision === board.revision);
+    return [{ revision: board.revision, origin: board.origin, at: board.updatedAt, kind, status: board.status, cues: Object.entries(board.cueAudit ?? {}).filter(([, audit]) => changed(audit)).map(([key]) => key) }];
+  });
 }
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;

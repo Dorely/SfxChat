@@ -8,7 +8,7 @@ import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod';
 import { native } from '../shared/native';
 import { installIntegration, skillText } from '../shared/install';
-import { WorkbenchError, type OperationResponse, type ReviewBoard } from '../shared/workbench';
+import { WorkbenchError, type OperationResponse, type ReviewBoard, type ReviewWait } from '../shared/workbench';
 
 const helper = join(__dirname, 'sfxchat-helper.exe');
 const root = join(process.env.APPDATA || '', 'SfxChat');
@@ -38,6 +38,8 @@ async function endpoint() {
   }
   throw new WorkbenchError('APP_UNAVAILABLE', 'SfxChat did not start its local bridge. Open the app and inspect its diagnostic logs.');
 }
+// Long enough for the longest operation wait (review_wait up to 1800 s) plus the request itself.
+const REQUEST_TIMEOUT = 1860000;
 function exchange(e: { pipe: string; token: string }, operation: string, args: unknown, signal?: AbortSignal): Promise<OperationResponse> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(signal.reason); return; }
@@ -45,7 +47,7 @@ function exchange(e: { pipe: string; token: string }, operation: string, args: u
     const abort = () => { socket.destroy(); reject(signal?.reason); };
     signal?.addEventListener('abort', abort, { once: true });
     socket.once('close', () => signal?.removeEventListener('abort', abort));
-    socket.setEncoding('utf8'); socket.setTimeout(180000, () => { socket.destroy(); reject(new WorkbenchError('TIMEOUT', 'Request timed out. Inspect existing jobs before resubmitting.')); });
+    socket.setEncoding('utf8'); socket.setTimeout(REQUEST_TIMEOUT, () => { socket.destroy(); reject(new WorkbenchError('TIMEOUT', 'Request timed out. Inspect existing jobs before resubmitting.')); });
     socket.on('connect', () => socket.write(JSON.stringify({ token: e.token, operation, args }) + '\n'));
     socket.on('error', reject);
     socket.on('data', data => { buffer += data; if (Buffer.byteLength(buffer) > 32 * 1024 * 1024) { socket.destroy(); reject(new Error('Bridge response exceeds 32 MiB.')); } });
@@ -62,15 +64,49 @@ function argsFrom(argv: string[]) {
   }
   return { positional, flags };
 }
+async function result<T>(operation: string, args: unknown): Promise<T> {
+  const response = await call(operation, args);
+  if (!response.ok) throw new WorkbenchError(response.error?.code ?? 'CLI_FAILED', response.error?.message ?? 'SfxChat returned an error.');
+  return response.result as T;
+}
+/**
+ * Streams a review's events as JSON lines until it is completed or deleted, so an agent can hold one
+ * connection and respond as the user reviews. Survives app restarts by resuming from its cursor.
+ */
+async function watchReview(projectId: string, reviewId: string, from: string, once: boolean) {
+  const line = (value: unknown) => process.stdout.write(JSON.stringify(value) + '\n');
+  let cursor: number | undefined, backoff = 1000;
+  for (;;) {
+    // The first call returns at once so the watch reports its start (and an already completed review) immediately.
+    let page: ReviewWait;
+    try { page = await result<ReviewWait>('review_wait', { projectId, reviewId, from, ...(cursor === undefined ? { wait: 0 } : { wait: 300, afterRevision: cursor }) }); backoff = 1000; }
+    catch (error) {
+      if (error instanceof WorkbenchError && ['NOT_FOUND', 'INVALID_ARGUMENTS'].includes(error.code)) throw error;
+      line({ kind: 'watch.retrying', error: error instanceof Error ? error.message : 'SfxChat could not be reached.' });
+      await delay(backoff); backoff = Math.min(backoff * 2, 30000); continue;
+    }
+    if (cursor === undefined) line({ kind: 'watch.started', review: page.review, cursor: page.cursor });
+    cursor = page.cursor;
+    for (const event of page.events) line(event);
+    if (page.review.status === 'completed') { line({ kind: 'watch.ended', reason: 'completed', review: page.review }); return; }
+    if (once && page.events.length) { line({ kind: 'watch.ended', reason: 'once', review: page.review, cursor }); return; }
+  }
+}
 async function main() {
   const { positional, flags } = argsFrom(process.argv.slice(2)); const [command, name] = positional;
   const installation = ['skill', 'install', 'uninstall'].includes(command);
-  const allowed = new Set(installation ? ['scope', 'target', 'project', 'directory', 'mcp', 'dry-run', 'force', 'help'] : ['input', 'json', 'help']);
+  const allowed = new Set(installation ? ['scope', 'target', 'project', 'directory', 'mcp', 'dry-run', 'force', 'help'] : command === 'watch-review' ? ['from', 'once', 'help'] : ['input', 'json', 'help']);
   for (const [key, values] of Object.entries(flags)) {
     if (!allowed.has(key) || (key !== 'target' && values.length !== 1)) throw new WorkbenchError('INVALID_ARGUMENTS', `Unknown or repeated option: --${key}`);
-    if (['mcp', 'dry-run', 'force', 'help'].includes(key) ? values[0] !== 'true' : values.some(v => v === 'true')) throw new WorkbenchError('INVALID_ARGUMENTS', `Invalid value for --${key}`);
+    if (['mcp', 'dry-run', 'force', 'help', 'once'].includes(key) ? values[0] !== 'true' : values.some(v => v === 'true')) throw new WorkbenchError('INVALID_ARGUMENTS', `Invalid value for --${key}`);
   }
-  if (positional.length > (['call', 'skill'].includes(command) ? 2 : 1)) throw new WorkbenchError('INVALID_ARGUMENTS', 'Unexpected positional arguments.');
+  if (positional.length > (['call', 'skill'].includes(command) ? 2 : command === 'watch-review' ? 3 : 1)) throw new WorkbenchError('INVALID_ARGUMENTS', 'Unexpected positional arguments.');
+  if (command === 'watch-review' && !flags.help) {
+    if (positional.length !== 3) throw new WorkbenchError('INVALID_ARGUMENTS', 'Usage: sfxchat watch-review <projectId> <reviewId> [--from user|any] [--once]');
+    const from = flags.from?.[0] ?? 'user';
+    if (!['user', 'any'].includes(from)) throw new WorkbenchError('INVALID_ARGUMENTS', 'Invalid value for --from');
+    await watchReview(positional[1], positional[2], from, !!flags.once); return;
+  }
   if (command === 'mcp') {
     const catalogResult = await call('tools');
     if (!catalogResult.ok) throw new Error(catalogResult.error?.message);
@@ -87,11 +123,11 @@ async function main() {
         if (watches.size >= 128) { const oldest = watches.keys().next().value!; watches.get(oldest)!.abort(); watches.delete(oldest); subscribed.delete(oldest); }
         const controller = new AbortController(); watches.set(uri, controller);
         void (async () => {
-          let revision = initial.revision, backoff = 1000;
+          let cursor = initial.revision, backoff = 1000;
           while (!controller.signal.aborted) {
             try {
               // Discovery only: background observation never launches the desktop.
-              const response = await exchange(await discovery(), 'review_wait', { projectId: initial.projectId, reviewId: initial.id, afterRevision: revision, timeoutMs: 30000 }, controller.signal);
+              const response = await exchange(await discovery(), 'review_wait', { projectId: initial.projectId, reviewId: initial.id, afterRevision: cursor, from: 'any', wait: 30 }, controller.signal);
               if (!response.ok) {
                 if (response.error?.code === 'NOT_FOUND') {
                   if (era === 'modern' || subscribed.has(uri)) await server.server.sendResourceUpdated({ uri });
@@ -99,11 +135,9 @@ async function main() {
                 }
                 throw new Error(response.error?.message);
               }
-              const current = response.result as ReviewBoard;
-              if (current.revision !== revision) {
-                if (era === 'modern' || subscribed.has(uri)) await server.server.sendResourceUpdated({ uri });
-                revision = current.revision;
-              }
+              const page = response.result as ReviewWait;
+              if (page.events.length && (era === 'modern' || subscribed.has(uri))) await server.server.sendResourceUpdated({ uri });
+              cursor = page.cursor;
               backoff = 1000;
             } catch {
               if (controller.signal.aborted) break;
@@ -154,7 +188,7 @@ async function main() {
     output({ ok: true, result }); return;
   }
   if (!command || command === 'help' || flags.help) {
-    output({ ok: true, result: { commands: ['status', 'tools', 'guidance', 'call <operation> --input <file.json> | --json <JSON>', 'mcp', 'skill', 'skill install|uninstall|status --scope project|user --target codex|claude [--project <absolute-directory>] [--directory <skills-parent>] [--mcp] [--dry-run] [--force]'], note: 'Generation returns durable IDs. Reviews and Playground use project IDs; generation and chat also require session IDs. App starts on demand. No provider credentials are accepted by this CLI.' } }); return;
+    output({ ok: true, result: { commands: ['status', 'tools', 'guidance', 'call <operation> --input <file.json> | --json <JSON>', 'watch-review <projectId> <reviewId> [--from user|any] [--once]', 'mcp', 'skill', 'skill install|uninstall|status --scope project|user --target codex|claude [--project <absolute-directory>] [--directory <skills-parent>] [--mcp] [--dry-run] [--force]'], note: 'Generation returns durable IDs. Reviews and Playground use project IDs; generation and chat also require session IDs. App starts on demand. No provider credentials are accepted by this CLI.' } }); return;
   }
   if (command === 'call' && !name) throw new WorkbenchError('INVALID_ARGUMENTS', 'Specify an operation; run sfxchat tools for schemas.');
   if (flags.input && flags.json) throw new WorkbenchError('INVALID_ARGUMENTS', 'Use either --input or --json.');

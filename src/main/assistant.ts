@@ -45,7 +45,7 @@ export function voiceInstructions(providers: VoiceProviderEntry[], activeId: Aud
 Before generating speech, load guidance topics ${providers.map(p => p.id === 'elevenlabs' ? 'elevenlabs-voice' : 'gemini-voice').join(', ')} as relevant. Preserve the exact script separately from delivery preparation. Follow the selected model's supported controls.`;
 }
 
-const additionalTools = ['list_voices', 'list_voice_models', 'list_audio_models', 'guidance', 'review_list', 'review_create', 'review_get', 'review_history', 'review_update', 'review_wait', 'review_open', 'playback_status', 'export_asset', 'export_review', 'import_audio', 'cancel_job'] as const;
+const additionalTools = ['list_voices', 'list_voice_models', 'list_audio_models', 'guidance', 'review_list', 'review_create', 'review_get', 'review_history', 'review_update', 'review_open', 'playback_status', 'export_asset', 'export_review', 'import_audio', 'cancel_job'] as const;
 const additionalSchemas = Object.fromEntries(additionalTools.map(name => [name, z.object(Object.fromEntries(Object.entries(operationDefinitions[name].schema.shape).filter(([key]) => key !== 'projectId' && key !== 'sessionId'))).strict()]));
 const arrangementSchemas = Object.fromEntries(Object.entries(arrangementOperationDefinitions).map(([name, definition]) => [name, z.object(Object.fromEntries(Object.entries(definition.schema.shape).filter(([key]) => key !== 'projectId' && key !== 'sessionId'))).strict()]));
 export const toolSchemas = {

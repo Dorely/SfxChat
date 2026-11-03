@@ -52,10 +52,17 @@ user completion from agent completion. review_list defaults to active; request
 status: completed or all to find archived reviews. Archived boards remain readable,
 auditionable by the user, and exportable.
 
-Use review_wait with condition: completed, afterRevision, and timeoutMs (up to 30000)
-when waiting for the user's finish signal; inspect returned status because a timeout
-also returns the current board. MCP review resources support subscription update
-notifications, but host support varies and durable reads/waits are authoritative.
+To respond while the user reviews, loop on `review_wait { projectId, reviewId }`. It
+blocks until the user saves the review (a cue decision, notes, Done, or reopening) and
+returns those `events` (revision, kind, changed cue keys), the current `review`, and a
+`cursor`. Pass the cursor as `afterRevision` next time so nothing is missed, act on the
+events (read details with `review_get`), and wait again. `until: "completed"` waits for
+Done instead. On `timedOut`, just wait again. Waits default to 50 seconds; pass a longer
+`wait` (up to 1800) only if your client allows long tool calls. From a shell,
+`sfxchat watch-review <projectId> <reviewId>` prints each event as a JSON line until the
+review is completed; run it in the background and react to each line. MCP review
+resources support subscription update notifications, but host support varies and
+durable reads/waits are authoritative.
 review_complete can optionally save final content atomically with completion;
 review_reopen explicitly restores editing. Both require expectedRevision and full
 project/review scope. Never automatically reopen to bypass REVIEW_COMPLETED;
