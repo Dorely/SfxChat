@@ -163,10 +163,17 @@ seam crossfade (`crossfadeMs`, 0–5000 ms) blends the loop's last frames into t
 source frames just before `start` (`crossfadeSource: 'before-start'`); a loop that
 starts closer to the file start than the crossfade instead fades its first frames in
 from the frames just after `end` (`'after-end'`). Either way the wrap lands on
-consecutive source frames. `loopCrossfadeSource`/`loopSample` in `audio.ts` define
-this once for the render and the seam preview (`renderSeam`). Fades are rejected with
-a loop. `TrimEdit` version 2 records `crossfadeFrames`, `crossfadeSource`,
-`outputFrames` and the loop region; version 1 loop records describe the superseded
+consecutive source frames. `crossfadeShape` picks the blend curve: `linear` (the
+default; gains sum to one, right for correlated material such as repeating bars) or
+`equal-power` (sine/cosine, so uncorrelated noise or ambience does not dip mid-blend).
+find_loop_points recommends linear for music and equal-power for texture. Optional
+`levelMatchDb` (±12 dB, usually a candidate's `seam.levelDeltaDb`) ramps the loop body
+from 0 dB at its start to minus that at its end, so a loop whose end is louder does
+not jump in level at the wrap; blend material after the end takes the end gain.
+`loopCrossfadeSource`/`loopBlend`/`loopSample` in `audio.ts` define this once for the
+render and the seam preview (`renderSeam`). Fades are rejected with a loop. `TrimEdit`
+version 2 records `crossfadeFrames`, `crossfadeSource`, `crossfadeShape`,
+`levelMatchDb`, `outputFrames` and the loop region; version 1 loop records describe the superseded
 render that dropped the crossfade length (shortening the period by it). The interval
 fields keep naming the source selection, and records without `loop` stay readable.
 

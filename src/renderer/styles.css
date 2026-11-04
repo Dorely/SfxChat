@@ -105,6 +105,7 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .loop-options label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 12px; }
 .loop-options input[type="number"], .loop-options select { width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--text); background: var(--surface-2); font: 13px var(--font-sans); }
 .loop-options .loop-intro-option { flex-direction: row; align-items: center; gap: 7px; grid-column: 1 / 3; }
+.loop-level-match span { display: flex; align-items: center; gap: 6px; }
 .loop-keep-intro { display: flex; flex-direction: row; align-items: center; gap: 7px; }
 .loop-options > button { justify-self: end; }
 .loop-mode-note { margin: 10px 0 0; }

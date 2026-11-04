@@ -1,6 +1,6 @@
 import { BAND_COUNT, beatFrame, chromaMean, keyLabel, musicalSummary, type MusicFeatures } from './music-analysis';
 import { yieldWork, type FrameSource } from './dsp';
-import { loopCrossfadeSource, loopSample } from './audio';
+import { loopBlend, loopCrossfadeSource, loopSample } from './audio';
 import type { Asset, LoopCandidate, LoopSearchInput, LoopSearchResult, LoopSeamInput } from '../shared/types';
 
 /**
@@ -287,7 +287,7 @@ export async function findLoopPoints(source: FrameSource, f: MusicFeatures, asse
     version: 1, assetId: asset.id, sourceHash: asset.hash, mode, sampleRate: source.sampleRate, duration: f.duration,
     tempo: summary.tempo, key: f.key ? keyLabel(f.key.tonic, f.key.mode) : null, beatsPerBar: mode === 'music' ? bpb : null,
     candidates: top,
-    note: `${mode === 'music' ? `Music mode: candidates come from bars of an estimated ${summary.tempo?.bpm.toFixed(1)} BPM grid (4 beats per bar assumed${f.downbeatConfidence < 0.15 ? '; downbeat uncertain, so bar numbers may be offset' : ''}) and from a grid-free comparison of the track with itself, so a misread tempo cannot hide a real repeat. Each length is re-measured as the source's repeat spacing within ±${SPACING_SEARCH_BEATS} beat (lengthSource, rhythmCorrelation) unless lengthSeconds fixes it; bars for grid-free candidates are approximate. Ranking favors phrase lengths (multiples of 4 or 8 bars) over odd bar counts. match rates how strongly the music repeats (rhythm and harmony one loop length later); seamMatch separately rates how cleanly the waveform joins.` : 'Texture mode: no reliable beat grid, so candidates use 100 ms units and texture/level continuity only; recommended crossfades stay within half the typical gap between sharp onsets near the seam. match rates texture similarity; seamMatch rates the level step at the wrap.'} startSeconds/endSeconds/frames are final: startShiftFrames/endShiftFrames report adjustments already applied, so pass the times to trim_asset unchanged. score compares harmony/timbre/level around the jump with the music around the loop start; seam values come from sample-level waveform alignment (correlation of matching context windows, wrap step vs the source's own step). Frames are exact; ranking is heuristic. Audition the seam (audio_listen loopSeam, or Play seam in the editor) and let the user decide. Save with trim_asset loop:true and the recommended crossfadeMs.`
+    note: `${mode === 'music' ? `Music mode: candidates come from bars of an estimated ${summary.tempo?.bpm.toFixed(1)} BPM grid (4 beats per bar assumed${f.downbeatConfidence < 0.15 ? '; downbeat uncertain, so bar numbers may be offset' : ''}) and from a grid-free comparison of the track with itself, so a misread tempo cannot hide a real repeat. Each length is re-measured as the source's repeat spacing within ±${SPACING_SEARCH_BEATS} beat (lengthSource, rhythmCorrelation) unless lengthSeconds fixes it; bars for grid-free candidates are approximate. Ranking favors phrase lengths (multiples of 4 or 8 bars) over odd bar counts. match rates how strongly the music repeats (rhythm and harmony one loop length later); seamMatch separately rates how cleanly the waveform joins.` : 'Texture mode: no reliable beat grid, so candidates use 100 ms units and texture/level continuity only; recommended crossfades stay within half the typical gap between sharp onsets near the seam. match rates texture similarity; seamMatch rates the level step at the wrap.'} startSeconds/endSeconds/frames are final: startShiftFrames/endShiftFrames report adjustments already applied, so pass the times to trim_asset unchanged. score compares harmony/timbre/level around the jump with the music around the loop start; seam values come from sample-level waveform alignment (correlation of matching context windows, wrap step vs the source's own step). Frames are exact; ranking is heuristic. Audition the seam (audio_listen loopSeam, or Play seam in the editor) and let the user decide. Save with trim_asset loop:true, the recommended crossfadeMs and crossfadeShape; when seam.levelDeltaDb is large (about 1 dB or more), levelMatchDb set to it ramps the loop's level so the wrap does not jump.`
   };
 }
 
@@ -426,6 +426,8 @@ async function refine(source: FrameSource, f: MusicFeatures, pair: Seed, mode: '
   const gap = mode === 'texture' ? onsetGap(f, [[endSeconds - 2, endSeconds], [startSeconds - 2, startSeconds]]) : null;
   const onsetCap = gap === null ? Infinity : Math.max(20, Math.floor(gap * 500));
   const recommendedCrossfadeMs = Math.max(0, Math.min(crossfade, onsetCap, Math.floor(lengthSeconds * 250)));
+  // Repeating music is correlated across the blend; noise-like texture is not, and a linear blend would dip.
+  const recommendedCrossfadeShape = mode === 'music' ? 'linear' as const : 'equal-power' as const;
   // The match label is musical repeat evidence: rhythm plus harmony agreeing one loop
   // length later (steady drums alone correlate everywhere), or overall context similarity.
   // Waveform continuity is rated separately as seamMatch, since a crossfade can fix a
@@ -459,7 +461,7 @@ async function refine(source: FrameSource, f: MusicFeatures, pair: Seed, mode: '
     score: Math.max(0, Math.min(1, pair.score)), match, seamMatch,
     similarity: { harmony: pair.harmony, timbre: pair.timbre, level: pair.level, contextUnits: pair.context },
     seam: { correlation, step: wrapStep, naturalStep, levelDeltaDb, startShiftFrames: start - plannedStart, endShiftFrames: end - plannedEnd },
-    recommendedCrossfadeMs, summary
+    recommendedCrossfadeMs, recommendedCrossfadeShape, summary
   };
 }
 
@@ -474,7 +476,7 @@ export async function renderSeam(source: FrameSource, input: LoopSeamInput): Pro
   if (!(start >= 0 && end > start && end <= total)) throw new Error(`Choose an ordered loop within 0–${(total / rate).toFixed(3)} seconds.`);
   const crossfade = Math.round((input.crossfadeMs ?? 0) * rate / 1000);
   if (crossfade >= end - start) throw new Error('The loop crossfade must be shorter than the loop.');
-  const crossfadeSource = loopCrossfadeSource(start, end, total, crossfade);
+  const crossfadeSource = loopCrossfadeSource(start, end, total, crossfade), blend = loopBlend(crossfade, crossfadeSource, input);
   const context = Math.max(1, crossfade, Math.min(Math.round((input.contextSeconds ?? 2) * rate), end - start));
   // The loop's last and first `context` frames, plus the crossfade material beside them.
   const read = async (from: number, to: number) => ({ from, to, data: to > from ? await source.read(from, to) : [] });
@@ -486,8 +488,8 @@ export async function renderSeam(source: FrameSource, input: LoopSeamInput): Pro
   const channels = Array.from({ length: source.channels }, (_, c) => {
     const at = (frame: number) => { const w = windows.find(w => frame >= w.from && frame < w.to)!; return w.data[c][frame - w.from]; };
     const out = new Float32Array(2 * context);
-    for (let i = 0; i < context; i++) out[i] = loopSample(at, end - start - context + i, start, end, crossfade, crossfadeSource);
-    for (let i = 0; i < context; i++) out[context + i] = loopSample(at, i, start, end, crossfade, crossfadeSource);
+    for (let i = 0; i < context; i++) out[i] = loopSample(at, end - start - context + i, start, end, blend);
+    for (let i = 0; i < context; i++) out[context + i] = loopSample(at, i, start, end, blend);
     return out;
   });
   const crossfadeStartFrame = crossfadeSource === 'before-start' ? context - crossfade : context;

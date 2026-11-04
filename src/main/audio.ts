@@ -360,18 +360,36 @@ export function loopCrossfadeSource(startFrame: number, endFrame: number, totalF
 }
 
 /**
+ * How a loop render joins its end to its start. `shape` sets the crossfade curve:
+ * linear gains sum to one, right for correlated material such as a repeating bar;
+ * equal-power (sine/cosine) keeps the loudness of uncorrelated material such as noise
+ * from dipping mid-blend. `levelMatchDb` is how much louder the loop end is than its
+ * start (a candidate's seam.levelDeltaDb): the loop body ramps smoothly from 0 dB at
+ * the start to -levelMatchDb at the end, so the wrap does not jump in level.
+ */
+export interface LoopBlend { crossfadeFrames: number; source: 'before-start' | 'after-end' | null; shape: 'linear' | 'equal-power'; levelMatchDb: number }
+export function loopBlend(crossfadeFrames: number, source: LoopBlend['source'], input: { crossfadeShape?: LoopBlend['shape']; levelMatchDb?: number }): LoopBlend {
+  return { crossfadeFrames, source, shape: input.crossfadeShape ?? 'linear', levelMatchDb: input.levelMatchDb ?? 0 };
+}
+const fadeGains = (mix: number, shape: LoopBlend['shape']): [number, number] => shape === 'equal-power' ? [Math.cos(mix * Math.PI / 2), Math.sin(mix * Math.PI / 2)] : [1 - mix, mix];
+
+/**
  * Sample at loop position i (0 ≤ i < endFrame - startFrame) as the loop render
  * plays it. `at(frame)` reads one source channel by absolute frame.
  */
-export function loopSample(at: (frame: number) => number, i: number, startFrame: number, endFrame: number, crossfadeFrames: number, source: 'before-start' | 'after-end' | null): number {
-  const length = endFrame - startFrame, value = at(startFrame + i);
+export function loopSample(at: (frame: number) => number, i: number, startFrame: number, endFrame: number, blend: LoopBlend): number {
+  const length = endFrame - startFrame, { crossfadeFrames, source } = blend;
+  // The ramp applies to the loop body; blend material from before the start already
+  // sits at the start's level, and material after the end gets the end's gain.
+  const ramp = blend.levelMatchDb ? Math.pow(10, -blend.levelMatchDb * (i / length) / 20) : 1;
+  const value = at(startFrame + i) * ramp;
   if (source === 'before-start' && i >= length - crossfadeFrames) {
-    const k = i - (length - crossfadeFrames), mix = (k + 1) / crossfadeFrames;
-    return value * (1 - mix) + at(startFrame - crossfadeFrames + k) * mix;
+    const k = i - (length - crossfadeFrames), [out, into] = fadeGains((k + 1) / crossfadeFrames, blend.shape);
+    return value * out + at(startFrame - crossfadeFrames + k) * into;
   }
   if (source === 'after-end' && i < crossfadeFrames) {
-    const mix = i / crossfadeFrames;
-    return value * mix + at(endFrame + i) * (1 - mix);
+    const [out, into] = fadeGains(i / crossfadeFrames, blend.shape), endGain = blend.levelMatchDb ? Math.pow(10, -blend.levelMatchDb / 20) : 1;
+    return value * into + at(endFrame + i) * endGain * out;
   }
   return value;
 }
@@ -407,6 +425,8 @@ export async function renderTrim(audio: DecodedAudio, asset: Asset, input: TrimI
   if (!loop && fadeInFrames + fadeOutFrames > frames) throw new Error('Combined fades cannot exceed the selection duration.');
   if (crossfadeFrames >= frames) throw new Error('The loop crossfade must be shorter than the selection.');
   const crossfadeSource = loop ? loopCrossfadeSource(startFrame, endFrame, total, crossfadeFrames) : null;
+  if (!loop && (input.crossfadeShape !== undefined || input.levelMatchDb !== undefined)) throw new Error('crossfadeShape and levelMatchDb shape a loop render; they need loop:true.');
+  const blend = loopBlend(crossfadeFrames, crossfadeSource, input);
   // A loop render plays [introStart, start) once, then repeats [start, end).
   const intro = startFrame - introStartFrame, outputFrames = intro + frames;
   const smpl = loop ? smplChunk(audio.sampleRate, intro, outputFrames) : Buffer.alloc(0), data = 56 + smpl.length;
@@ -424,7 +444,7 @@ export async function renderTrim(audio: DecodedAudio, asset: Asset, input: TrimI
       const gainOut = !loop && fadeOutFrames && outputFrames - i <= fadeOutFrames ? (fadeOutFrames === 1 ? 0 : (outputFrames - 1 - i) / (fadeOutFrames - 1)) : 1;
       for (let c = 0; c < channels; c++) {
         const source = audio.channels[c];
-        const value = !loop ? source[startFrame + i] : i < intro ? source[introStartFrame + i] : loopSample(frame => source[frame], i - intro, startFrame, endFrame, crossfadeFrames, crossfadeSource);
+        const value = !loop ? source[startFrame + i] : i < intro ? source[introStartFrame + i] : loopSample(frame => source[frame], i - intro, startFrame, endFrame, blend);
         bytes.writeFloatLE(value * gainIn * gainOut, data + (i * channels + c) * 4);
       }
     }
@@ -433,5 +453,5 @@ export async function renderTrim(audio: DecodedAudio, asset: Asset, input: TrimI
   return { bytes, edit: { kind: 'trim', version: 2, sourceHash: asset.hash, sampleRate: audio.sampleRate,
     startFrame, endFrame, fadeInFrames: loop ? 0 : fadeInFrames, fadeOutFrames: loop ? 0 : fadeOutFrames,
     requested: { ...input }, decoder: audio.decoder, outputEncoding: 'float32-wav',
-    ...(loop ? { loop: { crossfadeFrames, crossfadeSource, outputFrames, introStartFrame, loopStartFrame: intro, loopEndFrame: outputFrames } } : {}) } };
+    ...(loop ? { loop: { crossfadeFrames, crossfadeSource, crossfadeShape: blend.shape, levelMatchDb: blend.levelMatchDb, outputFrames, introStartFrame, loopStartFrame: intro, loopEndFrame: outputFrames } } : {}) } };
 }

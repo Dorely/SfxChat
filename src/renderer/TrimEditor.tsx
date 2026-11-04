@@ -11,6 +11,7 @@ type TrimEditorProps = {
 }
 
 const MAX_BINS = 320
+type CrossfadeShape = NonNullable<TrimInput['crossfadeShape']>
 const LOOP_COUNT = 8
 /** Estimates below this confidence are hidden rather than shown as facts. */
 const SHOW_CONFIDENCE = 0.3
@@ -23,9 +24,9 @@ function clamp(value: number, min: number, max: number) { return Math.min(max, M
 function trimValues(start: number, end: number, duration: number, fadeInMs: number, fadeOutMs: number, name: string): TrimInput {
   return { startSeconds: clamp(start, 0, duration), endSeconds: clamp(end, 0, duration), fadeInMs: Math.max(0, fadeInMs || 0), fadeOutMs: Math.max(0, fadeOutMs || 0), ...(name.trim() ? { name: name.trim() } : {}) }
 }
-function loopValues(start: number, end: number, duration: number, crossfadeMs: number, keepIntro: boolean, name: string): TrimInput {
+function loopValues(start: number, end: number, duration: number, crossfadeMs: number, crossfadeShape: CrossfadeShape, levelMatchDb: number | null, keepIntro: boolean, name: string): TrimInput {
   const startSeconds = clamp(start, 0, duration)
-  return { startSeconds, endSeconds: clamp(end, 0, duration), loop: true, crossfadeMs: Math.max(0, crossfadeMs || 0), ...(keepIntro && startSeconds > 0 ? { introStartSeconds: 0 } : {}), ...(name.trim() ? { name: name.trim() } : {}) }
+  return { startSeconds, endSeconds: clamp(end, 0, duration), loop: true, crossfadeMs: Math.max(0, crossfadeMs || 0), crossfadeShape, ...(levelMatchDb ? { levelMatchDb: clamp(levelMatchDb, -12, 12) } : {}), ...(keepIntro && startSeconds > 0 ? { introStartSeconds: 0 } : {}), ...(name.trim() ? { name: name.trim() } : {}) }
 }
 async function runOperation<T>(name: string, args: unknown): Promise<T> {
   const response = await window.sfx.operation(name, args)
@@ -95,6 +96,9 @@ export default function TrimEditor({ asset, onClose, onSave }: TrimEditorProps) 
   const [loops, setLoops] = useState<LoopSearchResult | null>(null)
   const [loopSearching, setLoopSearching] = useState(false)
   const [crossfadeMs, setCrossfadeMs] = useState(10)
+  const [crossfadeShape, setCrossfadeShape] = useState<CrossfadeShape>('linear')
+  /** null leaves the level alone; a number ramps the loop down by that many dB. */
+  const [levelMatchDb, setLevelMatchDb] = useState<number | null>(null)
   const [seamUrl, setSeamUrl] = useState<string | null>(null)
   const [seamLoading, setSeamLoading] = useState(false)
   const musicalRequestRef = useRef(0)
@@ -209,14 +213,14 @@ export default function TrimEditor({ asset, onClose, onSave }: TrimEditorProps) 
     if (seamUrl) { player.forget(seamUrl); setSeamUrl(null) }
     setSeamLoading(false)
     seamRequestRef.current += 1
-  }, [start, end, fadeInMs, fadeOutMs, crossfadeMs, keepIntro, mode])
+  }, [start, end, fadeInMs, fadeOutMs, crossfadeMs, crossfadeShape, levelMatchDb, keepIntro, mode])
 
   const rate = analysis?.sampleRate ?? 1
   const validFades = fadeInMs <= 10000 && fadeOutMs <= 10000 && Math.round(fadeInMs * rate / 1000) + Math.round(fadeOutMs * rate / 1000) <= Math.round(end * rate) - Math.round(start * rate)
   const validCrossfade = crossfadeMs <= 5000 && Math.round(crossfadeMs * rate / 1000) < Math.round(end * rate) - Math.round(start * rate)
   const validSelection = Boolean(analysis && end > start && start >= fullStart && end <= fullEnd && (mode === 'loop' ? validCrossfade : validFades))
   const durationForInput = analysis?.duration || asset.duration || 0
-  const input = useMemo(() => mode === 'loop' ? loopValues(start, end, durationForInput, crossfadeMs, keepIntro, name) : trimValues(start, end, durationForInput, fadeInMs, fadeOutMs, name), [mode, start, end, durationForInput, fadeInMs, fadeOutMs, crossfadeMs, keepIntro, name])
+  const input = useMemo(() => mode === 'loop' ? loopValues(start, end, durationForInput, crossfadeMs, crossfadeShape, levelMatchDb, keepIntro, name) : trimValues(start, end, durationForInput, fadeInMs, fadeOutMs, name), [mode, start, end, durationForInput, fadeInMs, fadeOutMs, crossfadeMs, crossfadeShape, levelMatchDb, keepIntro, name])
   const activeLoop = loops?.candidates.find(c => sameTime(c.startSeconds, start) && sameTime(c.endSeconds, end)) ?? null
   const barsVisible = Boolean(musical?.tempo && musical.tempo.confidence >= SHOW_CONFIDENCE && musical.bars.length)
   const selectionDuration = Math.max(0, end - start)
@@ -260,6 +264,8 @@ export default function TrimEditor({ asset, onClose, onSave }: TrimEditorProps) 
     setStart(candidate.startSeconds); setEnd(candidate.endSeconds)
     setStartDraft(seconds(candidate.startSeconds)); setEndDraft(seconds(candidate.endSeconds))
     setCrossfadeMs(candidate.recommendedCrossfadeMs)
+    setCrossfadeShape(candidate.recommendedCrossfadeShape)
+    setLevelMatchDb(null)
   }
   const findLoops = async () => {
     if (!analysis || loopSearching) return
@@ -284,7 +290,7 @@ export default function TrimEditor({ asset, onClose, onSave }: TrimEditorProps) 
     const request = ++seamRequestRef.current
     setSeamLoading(true); stopPreviews()
     try {
-      const bytes = await window.sfx.previewSeam(asset.id, { startSeconds: input.startSeconds, endSeconds: input.endSeconds, crossfadeMs: input.crossfadeMs, contextSeconds: 2 })
+      const bytes = await window.sfx.previewSeam(asset.id, { startSeconds: input.startSeconds, endSeconds: input.endSeconds, crossfadeMs: input.crossfadeMs, crossfadeShape: input.crossfadeShape, levelMatchDb: input.levelMatchDb, contextSeconds: 2 })
       const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'audio/wav' }))
       if (request !== seamRequestRef.current) { URL.revokeObjectURL(url); return }
       setSeamUrl(previous => { if (previous) { player.forget(previous); URL.revokeObjectURL(previous) } return url })
@@ -333,6 +339,7 @@ export default function TrimEditor({ asset, onClose, onSave }: TrimEditorProps) 
         <div className="trim-fields"><label>In point (s)<input type="number" min="0" max={durationForInput} step="0.001" value={startDraft} onChange={event => { setStartDraft(event.target.value); const value = Number(event.target.value); if (Number.isFinite(value)) updateStart(value, event.target.value) }} onBlur={commitStartDraft} disabled={loading || saving || !analysis} /></label><label>Out point (s)<input type="number" min="0" max={durationForInput} step="0.001" value={endDraft} onChange={event => { setEndDraft(event.target.value); const value = Number(event.target.value); if (Number.isFinite(value)) updateEnd(value, event.target.value) }} onBlur={commitEndDraft} disabled={loading || saving || !analysis} /></label></div>
         {mode === 'trim' ? <div className="trim-fields"><label>Fade in (ms)<input type="number" min="0" max="10000" step="1" value={fadeInMs} onChange={event => setFadeInMs(Math.max(0, Number(event.target.value) || 0))} disabled={saving || !analysis} /></label><label>Fade out (ms)<input type="number" min="0" max="10000" step="1" value={fadeOutMs} onChange={event => setFadeOutMs(Math.max(0, Number(event.target.value) || 0))} disabled={saving || !analysis} /></label></div> : <>
           <div className="trim-fields"><label>Seam crossfade (ms)<input type="number" min="0" max="5000" step="1" value={crossfadeMs} onChange={event => setCrossfadeMs(Math.max(0, Number(event.target.value) || 0))} disabled={saving || !analysis} /></label><p className="field-hint loop-crossfade-hint">The loop end blends into the audio just before its start over this time; the loop keeps its exact length. Short (5–30 ms) suits music; ambience often needs 200–500 ms.</p></div>
+          <div className="trim-fields"><label>Crossfade shape<select value={crossfadeShape} onChange={event => setCrossfadeShape(event.target.value as CrossfadeShape)} disabled={saving || !analysis}><option value="linear">Linear (music)</option><option value="equal-power">Equal power (texture)</option></select></label><label className="loop-level-match"><span><input type="checkbox" checked={levelMatchDb !== null} onChange={event => setLevelMatchDb(event.target.checked ? Math.round((activeLoop?.seam.levelDeltaDb ?? 0) * 10) / 10 : null)} disabled={saving || !analysis} />Match level across the loop (dB)</span><input type="number" min="-12" max="12" step="0.1" value={levelMatchDb ?? ''} placeholder={activeLoop ? `measured ${activeLoop.seam.levelDeltaDb >= 0 ? '+' : ''}${activeLoop.seam.levelDeltaDb.toFixed(1)}` : 'off'} onChange={event => setLevelMatchDb(event.target.value === '' ? null : Number(event.target.value) || 0)} disabled={saving || !analysis || levelMatchDb === null} aria-label="Level match in dB" /></label></div><p className="field-hint">Linear suits repeating music; equal power keeps noise and ambience from dipping mid-blend. Level match ramps the loop gently down by the dB its end is louder than its start (the measured level step), recorded with the new asset.</p>
           <label className="loop-keep-intro"><input type="checkbox" checked={keepIntro} onChange={event => setKeepIntro(event.target.checked)} disabled={saving || !analysis} />Keep everything before the loop as an intro</label><p className="field-hint">The saved WAV plays the intro once, then repeats the loop; its loop points are embedded for game engines such as Godot.</p>
           {!validCrossfade && <p className="trim-error" role="alert">The crossfade must be at most 5 seconds and shorter than the loop.</p>}
           <section className="loop-panel" aria-labelledby="loop-panel-title">

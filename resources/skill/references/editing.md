@@ -53,7 +53,9 @@ note gives the seam's position in the clip. Ranking favors phrase lengths (multi
 the music repeats one loop length later; seamMatch separately says how cleanly the
 waveform joins, which the crossfade can smooth. Present the top few candidates in plain
 words (length, intro, repeat and seam labels), save the one the user picks with trim_asset
-loop:true and its recommended crossfadeMs (add introStartSeconds:0 when the song
+loop:true and its recommended crossfadeMs and crossfadeShape (linear for music,
+equal-power for texture; add levelMatchDb set to seam.levelDeltaDb when the end is
+audibly louder, about 1 dB or more, to ramp the loop level so the wrap does not jump) (add introStartSeconds:0 when the song
 before the loop should play once, as in game music), and ask the user to audition it. Scores
 rank what to audition; they are not musical judgment.
 

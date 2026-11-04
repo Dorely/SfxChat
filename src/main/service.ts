@@ -370,7 +370,7 @@ export class WorkbenchService {
           this.store.insertAsset(asset);
           this.store.addToPlayground(conversationId, [asset.id]);
           this.store.addMessage(conversationId, 'tool', rendered.edit.loop
-            ? `Looped “${source.name}” from ${rendered.edit.startFrame / rendered.edit.sampleRate}–${rendered.edit.endFrame / rendered.edit.sampleRate}s with a ${rendered.edit.loop.crossfadeFrames}-frame seam crossfade${rendered.edit.loop.loopStartFrame ? `, after a ${(rendered.edit.loop.loopStartFrame / rendered.edit.sampleRate).toFixed(3)} s intro (loop points embedded as a WAV smpl chunk)` : ''} as “${asset.name}”. Original preserved.`
+            ? `Looped “${source.name}” from ${rendered.edit.startFrame / rendered.edit.sampleRate}–${rendered.edit.endFrame / rendered.edit.sampleRate}s with a ${rendered.edit.loop.crossfadeFrames}-frame ${rendered.edit.loop.crossfadeShape ?? 'linear'} seam crossfade${rendered.edit.loop.levelMatchDb ? `, level ramped ${(-rendered.edit.loop.levelMatchDb).toFixed(1)} dB across the loop` : ''}${rendered.edit.loop.loopStartFrame ? `, after a ${(rendered.edit.loop.loopStartFrame / rendered.edit.sampleRate).toFixed(3)} s intro (loop points embedded as a WAV smpl chunk)` : ''} as “${asset.name}”. Original preserved.`
             : `Trimmed “${source.name}” to ${rendered.edit.startFrame / rendered.edit.sampleRate}–${rendered.edit.endFrame / rendered.edit.sampleRate}s as “${asset.name}”. Original preserved.`);
           // Registration and durable tool result commit together: replay cannot create a second derivative.
           if (callId) this.store.finishTool(callId, JSON.stringify(asset));

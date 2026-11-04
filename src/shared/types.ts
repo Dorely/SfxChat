@@ -36,6 +36,10 @@ export interface TrimInput {
   loop?: boolean; crossfadeMs?: number;
   /** Loop render only: keep the source from here up to startSeconds as an intro that plays once. */
   introStartSeconds?: number;
+  /** Loop render only: crossfade curve (default linear). */
+  crossfadeShape?: 'linear' | 'equal-power';
+  /** Loop render only: dB the loop end is louder than its start; the loop ramps gain down by this much across its length. */
+  levelMatchDb?: number;
 }
 export interface TrimEdit {
   /** 1: loop renders were shortened by the crossfade (superseded); 2: loops keep their exact length. */
@@ -43,7 +47,7 @@ export interface TrimEdit {
   startFrame: number; endFrame: number; fadeInFrames: number; fadeOutFrames: number;
   requested: TrimInput; decoder: string; outputEncoding: 'float32-wav';
   /** Version 2 adds the crossfade source, the kept intro's source frame, and the loop region [loopStartFrame, loopEndFrame) within the output. */
-  loop?: { crossfadeFrames: number; outputFrames: number; crossfadeSource?: 'before-start' | 'after-end' | null; introStartFrame?: number; loopStartFrame?: number; loopEndFrame?: number };
+  loop?: { crossfadeFrames: number; outputFrames: number; crossfadeSource?: 'before-start' | 'after-end' | null; crossfadeShape?: 'linear' | 'equal-power'; levelMatchDb?: number; introStartFrame?: number; loopStartFrame?: number; loopEndFrame?: number };
 }
 export interface AudioAnalysisInput { startSeconds?: number; endSeconds?: number; bins?: number; events?: boolean; seamProbe?: { startSeconds?: number; endSeconds?: number }; musical?: boolean; tempoHint?: number; keyHint?: string }
 export interface EventInterval {
@@ -116,6 +120,8 @@ export interface LoopCandidate {
   /** Frames the start moved from its grid position and the end from the planned end (start + set length); already included in startFrame/endFrame. */
   seam: { correlation: number; step: number; naturalStep: number; levelDeltaDb: number; startShiftFrames: number; endShiftFrames: number };
   recommendedCrossfadeMs: number;
+  /** linear for music (correlated across the blend), equal-power for texture. */
+  recommendedCrossfadeShape: 'linear' | 'equal-power';
   summary: string;
 }
 export interface LoopSearchResult {
@@ -125,7 +131,7 @@ export interface LoopSearchResult {
   candidates: LoopCandidate[];
   note: string;
 }
-export interface LoopSeamInput { startSeconds: number; endSeconds: number; crossfadeMs?: number; contextSeconds?: number }
+export interface LoopSeamInput { startSeconds: number; endSeconds: number; crossfadeMs?: number; crossfadeShape?: 'linear' | 'equal-power'; levelMatchDb?: number; contextSeconds?: number }
 export interface SpectrogramInput { startSeconds?: number; endSeconds?: number; width?: number; height?: number; freqScale?: 'log' | 'linear' }
 export interface GenerationInput {
   kind?: 'effect'; prompt: string; count?: number; duration?: number | null; loop?: boolean;

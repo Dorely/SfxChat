@@ -16,7 +16,9 @@ export const trimSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   loop: z.boolean().optional().describe('Render a seamless-loop variant of the selection instead of a plain cut: the output keeps the exact selection length, and the seam crossfade blends the loop end into the audio just before the start (or the opening with the audio after the end when the loop starts at the file start). Cannot be combined with fades.'),
   crossfadeMs: z.number().finite().min(0).max(5000).optional().describe('Loop seam crossfade length in milliseconds (0-5000, default 0). A small value such as 5-20 ms usually removes the click at the seam; only used when loop is true.'),
-  introStartSeconds: z.number().finite().min(0).optional().describe('Loop render only: also keep the source from this time up to startSeconds as an intro that plays once before the loop (0 keeps everything before the loop). The WAV carries the loop region in a smpl chunk, which Godot imports as a forward loop by default.')
+  introStartSeconds: z.number().finite().min(0).optional().describe('Loop render only: also keep the source from this time up to startSeconds as an intro that plays once before the loop (0 keeps everything before the loop). The WAV carries the loop region in a smpl chunk, which Godot imports as a forward loop by default.'),
+  crossfadeShape: z.enum(['linear', 'equal-power']).optional().describe('Loop render only: crossfade curve. linear (default) suits music, whose two sides are correlated; equal-power keeps uncorrelated texture or noise from dipping mid-blend. find_loop_points recommends one per candidate.'),
+  levelMatchDb: z.number().finite().min(-12).max(12).optional().describe('Loop render only: how many dB louder the loop end is than its start, usually a candidate\'s seam.levelDeltaDb. The loop ramps smoothly from 0 dB at its start to minus this at its end so the wrap does not jump in level. Omit (or 0) to keep the source level.')
 }).strict();
 const tempoHintSchema = z.number().finite().min(40).max(300).optional().describe('Musical analysis: the tempo you expect in BPM, for example the tempo requested from the music provider. It centers the tempo prior so half, double or two-thirds readings lose; the audio still decides the exact value, and providers often miss requested tempos.');
 export const analysisSchema = z.object({
@@ -48,6 +50,8 @@ export const loopSearchSchema = z.object({
 export const loopSeamSchema = z.object({
   startSeconds: z.number().finite().min(0), endSeconds: z.number().finite().positive(),
   crossfadeMs: z.number().finite().min(0).max(5000).optional().describe('Crossfade used by the loop render (trim_asset loop:true crossfadeMs).'),
+  crossfadeShape: z.enum(['linear', 'equal-power']).optional().describe('Crossfade curve used by the loop render (default linear).'),
+  levelMatchDb: z.number().finite().min(-12).max(12).optional().describe('Level match used by the loop render (trim_asset levelMatchDb).'),
   contextSeconds: z.number().finite().min(0.25).max(10).optional().describe('Audio on each side of the seam (default 2 s, at most 10).')
 }).strict();
 export const spectrogramSchema = z.object({
