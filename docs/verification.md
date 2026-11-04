@@ -1,3 +1,41 @@
+# Loop making: seam, repeat length, hints, intro and Godot export (2026-11-04)
+
+Fixes from agent feedback on looping a song. Local DSP only; no provider calls.
+
+- Temporary harnesses outside the repository, bundled with esbuild against the real
+  `audio.ts`, `loop-finder.ts`, `music-analysis.ts`, `media.ts` and `exporter.ts` on
+  synthetic audio, run, then deleted:
+  - Loop renders keep the exact `[start,end)` length. On a periodic source the
+    rendered loop matched the source sample for sample (max error 0) for
+    `before-start` and `after-end` crossfades and no crossfade, and the seam preview
+    matched the render.
+  - On a song-like source whose grid misread the tempo (84 vs 126 BPM), the
+    grid-free repeat search found the true 49.524 s repeat (rhythm correlation about
+    0.97, seam correlation 1.0, `close`) with and without a tempo hint. Steady drums
+    alone no longer earn `close` without harmony agreement.
+  - `tempoHint` 122 turned the two-thirds reading into the right tempo; key hints
+    parsed (`A minor`, `Am`, `F# major`) and reported rank among 24 keys.
+  - Intro loops: with `introStartSeconds` 0 and 10000 frames before a 30000-frame
+    loop start, intro frames were bit-exact copies of the source, the loop body was
+    exact, the RIFF size was right, the `smpl` chunk (before `data`) held one forward
+    loop with start = intro frames and end = output frames (exclusive), and
+    `decodeAudio` read the full file back. Without an intro the chunk spans the file.
+  - Exports: a missing nested folder was created; a repeat export failed with
+    `DESTINATION_EXISTS`; `overwrite: true` replaced the file and manifest with no
+    temporary files left; a directory target was refused; a cue pack was created in
+    missing folders and refused when it existed. The manifest's `loop` gave the
+    frames, intro seconds, the embedded chunk and the Godot note.
+  - Texture crossfade: steady noise kept 500 ms; noise with bursts 180-320 ms apart
+    got 116-127 ms (half the median attack gap).
+- Not checked: Godot itself was not run, so the import of the `smpl` chunk rests on
+  Godot's documented "Detect From WAV" behavior and its importer reading `dwEnd` as
+  exclusive. PCM16 `pcmWav` exports were checked by code review, not by a harness.
+- `npm run typecheck` and `npm run build` passed after the final edits.
+- Browser check not run: `npm run dev:browser` refused to start because the
+  installed SfxChat was running and owns the library, and it was left open. The loop
+  editor's keep-intro option and the export changes have no UI evidence yet. No audio
+  was heard.
+
 # ElevenLabs latest-model defaults (2026-11-01)
 
 Effects, music, and voice default to `latest`; exact IDs stay selectable as pins.
