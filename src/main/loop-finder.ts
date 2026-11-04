@@ -288,7 +288,7 @@ export async function findLoopPoints(source: FrameSource, f: MusicFeatures, asse
     version: 1, assetId: asset.id, sourceHash: asset.hash, mode, sampleRate: source.sampleRate, duration: f.duration,
     tempo: summary.tempo, key: f.key ? keyLabel(f.key.tonic, f.key.mode) : null, beatsPerBar: mode === 'music' ? bpb : null,
     candidates: top,
-    note: `${mode === 'music' ? `Music mode: candidates come from bars of an estimated ${summary.tempo?.bpm.toFixed(1)} BPM grid (4 beats per bar assumed${f.downbeatConfidence < 0.15 ? '; downbeat uncertain, so bar numbers may be offset' : ''}) and from a grid-free comparison of the track with itself, so a misread tempo cannot hide a real repeat. Each length is re-measured as the source's repeat spacing within ±${SPACING_SEARCH_BEATS} beat (lengthSource, rhythmCorrelation) unless lengthSeconds fixes it; bars for grid-free candidates are approximate.` : 'Texture mode: no reliable beat grid, so candidates use 100 ms units and texture/level continuity only.'} startSeconds/endSeconds/frames are final: startShiftFrames/endShiftFrames report adjustments already applied, so pass the times to trim_asset unchanged. score compares harmony/timbre/level around the jump with the music around the loop start; seam values come from sample-level waveform alignment (correlation of matching context windows, wrap step vs the source's own step). Frames are exact; ranking is heuristic. Audition the seam (audio_listen loopSeam, or Play seam in the editor) and let the user decide. Save with trim_asset loop:true and the recommended crossfadeMs.`
+    note: `${mode === 'music' ? `Music mode: candidates come from bars of an estimated ${summary.tempo?.bpm.toFixed(1)} BPM grid (4 beats per bar assumed${f.downbeatConfidence < 0.15 ? '; downbeat uncertain, so bar numbers may be offset' : ''}) and from a grid-free comparison of the track with itself, so a misread tempo cannot hide a real repeat. Each length is re-measured as the source's repeat spacing within ±${SPACING_SEARCH_BEATS} beat (lengthSource, rhythmCorrelation) unless lengthSeconds fixes it; bars for grid-free candidates are approximate.` : 'Texture mode: no reliable beat grid, so candidates use 100 ms units and texture/level continuity only; recommended crossfades stay within half the typical gap between sharp onsets near the seam.'} startSeconds/endSeconds/frames are final: startShiftFrames/endShiftFrames report adjustments already applied, so pass the times to trim_asset unchanged. score compares harmony/timbre/level around the jump with the music around the loop start; seam values come from sample-level waveform alignment (correlation of matching context windows, wrap step vs the source's own step). Frames are exact; ranking is heuristic. Audition the seam (audio_listen loopSeam, or Play seam in the editor) and let the user decide. Save with trim_asset loop:true and the recommended crossfadeMs.`
   };
 }
 
@@ -310,6 +310,29 @@ const rankValue = (c: LoopCandidate, mode: 'music' | 'texture') => mode === 'mus
   : 0.9 * c.score + 0.1 * Math.max(0, c.seam.correlation) - 0.02 * Math.abs(c.seam.levelDeltaDb);
 
 interface LengthPlan { endSeconds: number; source: LoopCandidate['lengthSource']; rhythm: number | null }
+
+/**
+ * Median spacing (seconds) between sharp attacks in the given windows, or null when
+ * there are too few to matter. An attack is a still-rising level jump of at least 4 dB
+ * over the quietest of the previous four frames, at least 50 ms after the last one, so steady
+ * noise and slow swells have none. (The onset envelope is normalized over the whole
+ * file and cannot say how sharp an onset is on its own.)
+ */
+function onsetGap(f: MusicFeatures, windows: [number, number][]): number | null {
+  const gaps: number[] = [], minSpacing = Math.ceil(0.05 * f.frameRate);
+  for (const [from, to] of windows) {
+    const a = beatFrame(f, Math.max(0, from)), b = Math.min(f.rmsDb.length, beatFrame(f, to));
+    let last = -Infinity;
+    for (let t = Math.max(4, a); t < b; t++) {
+      const floor = Math.min(f.rmsDb[t - 1], f.rmsDb[t - 2], f.rmsDb[t - 3], f.rmsDb[t - 4]);
+      // Still rising: the analysis window spans several frames, so one attack stays above the old floor for a while.
+      if (f.rmsDb[t] - floor < 4 || f.rmsDb[t] - f.rmsDb[t - 1] < 1.5 || t - last < minSpacing) continue;
+      if (last > -Infinity) gaps.push((t - last) / f.frameRate);
+      last = t;
+    }
+  }
+  return gaps.length >= 3 ? median(gaps) : null;
+}
 
 async function refine(source: FrameSource, f: MusicFeatures, pair: Seed, mode: 'music' | 'texture', regionStart: number, regionEnd: number, plan: LengthPlan): Promise<LoopCandidate> {
   const rate = source.sampleRate, total = source.frames;
@@ -386,7 +409,11 @@ async function refine(source: FrameSource, f: MusicFeatures, pair: Seed, mode: '
   const crossfade = mode === 'music'
     ? (correlation >= 0.9 ? 5 : correlation >= 0.75 ? 10 : correlation >= 0.5 ? 30 : 60)
     : (correlation >= 0.8 ? 50 : correlation >= 0.5 ? 200 : 500);
-  const recommendedCrossfadeMs = Math.max(0, Math.min(crossfade, Math.floor(lengthSeconds * 250)));
+  // A texture crossfade spanning several sharp onsets blends two different hits (audible
+  // flams), so keep it within half the typical gap between onsets in the blended audio.
+  const gap = mode === 'texture' ? onsetGap(f, [[endSeconds - 2, endSeconds], [startSeconds - 2, startSeconds]]) : null;
+  const onsetCap = gap === null ? Infinity : Math.max(20, Math.floor(gap * 500));
+  const recommendedCrossfadeMs = Math.max(0, Math.min(crossfade, onsetCap, Math.floor(lengthSeconds * 250)));
   const match = mode === 'music'
     // Context similarity, or rhythm plus harmony agreeing one loop length later (steady drums
     // alone correlate everywhere), with waveform continuity at the seam.

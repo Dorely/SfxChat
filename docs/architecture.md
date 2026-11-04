@@ -228,7 +228,9 @@ bars, start/end shifts already applied, a similarity score and `close`/`partial`
 `weak` label (music needs seam correlation plus either context similarity or rhythm
 and harmony agreement), seam correlation, wrap step vs the source's natural step, a
 like-for-like level delta, and a recommended crossfade (5–60 ms music, 50–500 ms
-texture, at most a quarter of the loop). Music ranking weighs context similarity,
+texture, at most a quarter of the loop). Texture crossfades also stay within half
+the median gap between sharp attacks (still-rising jumps of 4 dB or more) in the two
+seconds before the start and end, so a long blend never doubles separate hits. Music ranking weighs context similarity,
 rhythm agreement and seam correlation. Labels and ranking are heuristics for choosing
 what to audition.
 
