@@ -165,7 +165,7 @@ is recorded in [verification](docs/verification.md).
 | [resources/skill/references/elevenlabs-music.md](resources/skill/references/elevenlabs-music.md), [gemini-lyria.md](resources/skill/references/gemini-lyria.md) | Complete supported-provider music guidance, controls and examples. |
 | [resources/skill/references/music-craft.md](resources/skill/references/music-craft.md), [midi-instruments.md](resources/skill/references/midi-instruments.md), [midi-workflow.md](resources/skill/references/midi-workflow.md) | Composing craft, arranging for the General MIDI bank, and the compose_midi workflow, bounds, and evidence limits. |
 | [scripts/build-agent.mjs](scripts/build-agent.mjs) | CLI/runtime/skill packaging, pinned source verification (encoding and synthesis archives) and native helper build. |
-| [native/helper.cpp](native/helper.cpp), [native/CMakeLists.txt](native/CMakeLists.txt) | Windows DPAPI/ACL/PATH, bounded Vorbis encoder, and offline FluidSynth MIDI rendering, linked against pinned sources. |
+| [native/helper.cpp](native/helper.cpp), [native/CMakeLists.txt](native/CMakeLists.txt) | Windows DPAPI/ACL/PATH, bounded Vorbis encoder and decoder, and offline FluidSynth MIDI rendering, linked against pinned sources. |
 | [installer/agent.nsh](installer/agent.nsh) | User command discovery installation/removal hooks. |
 | [third-party/encoding/](third-party/encoding/) | Unmodified libogg/libvorbis source archives, SHA-256 manifests, official listings and BSD notices. |
 | [third-party/node-LICENSE.txt](third-party/node-LICENSE.txt) | Pinned redistributed Node runtime and dependency license bundle. |

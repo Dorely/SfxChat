@@ -54,7 +54,7 @@ export function connectBrowserApi() {
   // same scoped operations, on the host filesystem, never an alternate library.
   api.chooseDirectory = () => hostPathDialog('Choose directory', 'Absolute directory path');
   api.importAudio = async (sessionId, kind = 'effect') => {
-    const paths = await hostPathDialog('Import audio', 'Absolute WAV/MP3 paths, one per line', true); if (!paths) return;
+    const paths = await hostPathDialog('Import audio', 'Absolute WAV/MP3/Ogg/MIDI paths, one per line', true); if (!paths) return;
     const snapshot: Snapshot = await api.snapshot();
     result(await api.operation('import_audio', { projectId: snapshot.activeProjectId, sessionId, kind, paths: paths.split('\n').map(p => p.trim()).filter(Boolean) }));
   };

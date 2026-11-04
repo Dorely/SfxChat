@@ -15,8 +15,9 @@ export interface AuditionRequest {
 }
 export interface AuditionState extends PlaybackState { key?: string; position?: number; duration?: number; loading?: boolean }
 
-/** Where a sound repeats when looped: a loop render's recorded region, else the whole file. */
+/** Where a sound repeats when looped: the asset's loop point, a loop render's recorded region, else the whole file. */
 export function assetLoopRegion(asset: Asset): LoopRegion | null {
+  if (asset.loopPoint) return { startSeconds: asset.loopPoint.startSeconds, ...(asset.loopPoint.endSeconds !== null ? { endSeconds: asset.loopPoint.endSeconds } : {}) };
   const loop = asset.edit?.loop;
   if (loop?.loopStartFrame === undefined || !asset.edit) return null;
   return { startSeconds: loop.loopStartFrame / asset.edit.sampleRate, ...(loop.loopEndFrame !== undefined ? { endSeconds: loop.loopEndFrame / asset.edit.sampleRate } : {}) };

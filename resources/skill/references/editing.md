@@ -79,7 +79,11 @@ blends the loop end into the audio just before the start, so do not lengthen the
 end to compensate. introStartSeconds (usually 0) keeps the song before the loop as an
 intro that plays once; every loop WAV embeds its loop region in a smpl chunk, which
 Godot imports as a forward loop by default. For Ogg exports the manifest gives the
-Loop Offset to set in Godot's Import dock instead. Preserve
+Loop Offset to set in Godot's Import dock instead. To loop an existing file from a
+point without re-rendering (an imported in-game track whose loop offset is known),
+set update_asset patch.loopPoint {startSeconds, endSeconds?}; review and library
+playback then play the intro once and repeat from there, and WAV export embeds it.
+Imports already read WAV smpl loops and Ogg LOOPSTART/LOOPLENGTH tags. Preserve
 quiet attacks and decay tails unless removal was requested. Report the retained
 interval and new asset; use set_playground to compare source and trim when helpful.
 Further refinement can use prompt-based regeneration. Sound effects are generated

@@ -84,7 +84,11 @@ renamed before database registration. Provenance includes SHA-256, bytes, probed
 duration, exact prompt/settings, request ID/usage when returned, and revision parent.
 Invalid returned audio remains preserved but fails its job. A crash between file
 write and database commit can leave an unreferenced original; startup does not delete
-it or regenerate. Imports validate WAV/MP3 before copying. Export verifies hashes
+it or regenerate. Imports validate WAV/MP3/Ogg Vorbis/MIDI before copying. Ogg Vorbis
+originals decode through the bundled helper (`decode`, libvorbisfile, to 32-bit float
+WAV within the editing bounds), so they edit, analyze and convert like other audio.
+Import reads a file's own loop (the first WAV `smpl` loop, or Ogg `LOOPSTART` with
+`LOOPLENGTH`/`LOOPEND` sample tags) into the asset's `loopPoint`. Export verifies hashes
 and refuses existing destinations. Playback gain never changes files.
 
 The `sfx-media://asset/<uuid>` protocol resolves only known assets and supports byte
@@ -188,6 +192,14 @@ repeat the whole file), PCM16 WAV exports carry the chunk too, and export manife
 add `loop` with the frames, intro seconds and Godot guidance. Ogg Vorbis exports
 carry no loop metadata Godot reads, so the manifest gives the Loop Offset to set in
 Godot's Import dock.
+
+An asset `loopPoint` (seconds; null end means the file end; `source` file or user)
+marks where an existing file repeats without re-rendering it, such as an imported
+in-game track's loop offset. `update_asset` sets or clears it (validated against the
+duration, refused for MIDI); it wins over a loop render's region for playback and for
+the PCM16 WAV `smpl` chunk and export manifest. Original-format export embeds no new
+metadata, so the manifest gives the seconds and Godot Loop Offset; an original WAV
+keeps its own smpl chunk only while the loop point is still the one read from it.
 
 ### Musical analysis and loop finding
 
@@ -668,8 +680,8 @@ AuditionPlayer owns one WebAudio context and a single source with preview gain f
 every card and preview. Only a user click starts playback. Loop checkboxes default
 off and live only in renderer interaction state. Loop and preview gain change live
 without restarting: the source's `loop`, `loopStart` and `loopEnd` update in place.
-A loop render's recorded region (`edit.loop.loopStartFrame`/`loopEndFrame`) is the
-looped part, so an intro plays once and only the loop repeats, matching an engine
+An asset's `loopPoint`, else a loop render's recorded region
+(`edit.loop.loopStartFrame`/`loopEndFrame`), is the looped part, so an intro plays once and only the loop repeats, matching an engine
 that honors the smpl chunk; other sounds loop whole. The trim editor's loop preview
 repeats the same way, with the kept intro first. Playback reports `paused` as well
 as `playing`, `stopped` and `error`. Saving review edits or decisions does not stop

@@ -6,7 +6,7 @@ import { instructions, midiInstructions, musicInstructions, voiceInstructions, t
 import { parseMidi, writeMidi } from './midi';
 import { MIDI_TICKS_PER_QUARTER, midiCompositionProblem, midiDurationSeconds, midiSummary, type MidiComposition } from '../shared/midi';
 import { floatWav, renderClip, type ClipRender } from './audio';
-import type { Asset, AssetKind, AssetPatch, AudioAnalysisInput, LoopSearchInput, LoopSeamInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, MidiComposeInput, MusicProviderKind, SoundfontSummary, VoiceGenerationInput, VoiceListInput, VoicePage, VoiceModelListInput, VoiceModelCatalog, AudioModelListInput, AudioModelCatalog, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
+import type { Asset, AssetKind, AssetPatch, AssetUpdate, AudioAnalysisInput, LoopSearchInput, LoopSeamInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, MidiComposeInput, MusicProviderKind, SoundfontSummary, VoiceGenerationInput, VoiceListInput, VoicePage, VoiceModelListInput, VoiceModelCatalog, AudioModelListInput, AudioModelCatalog, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
 import type { DiagnosticLog } from './diagnostics';
 import { diagnosticError } from './providers/errors';
 import { readFile, unlink } from 'node:fs/promises';
@@ -23,7 +23,7 @@ export interface ToolOutcome { output: string; attachments: ToolAttachment[] }
 /** Provider-reported outcome of one generation, including the provider that produced it. */
 export interface GenerationResult {
   bytes: Buffer;
-  format: 'mp3' | 'wav' | 'mid';
+  format: 'mp3' | 'wav' | 'ogg' | 'mid';
   provider: string;
   model: string;
   requestId: string | null;
@@ -303,9 +303,18 @@ export class WorkbenchService {
   }
   updateAsset(id: string, raw: AssetPatch, conversationId?: string) {
     this.requireOpen();
-    const patch = patchSchema.parse(raw);
+    const { loopPoint, ...patch } = patchSchema.parse(raw);
     const projectId = conversationId ? this.store.conversation(conversationId).projectId : this.store.activeProjectId();
-    this.store.updateAsset(id, patch, projectId, conversationId);
+    const update: AssetUpdate = patch;
+    if (loopPoint !== undefined) {
+      const asset = this.store.asset(id, projectId);
+      if (loopPoint && asset.format === 'mid') throw new Error('MIDI clips loop in the MIDI studio and arrangements; set loop points on audio assets.');
+      const end = loopPoint?.endSeconds ?? null, length = asset.duration ?? Infinity;
+      if (loopPoint && (loopPoint.startSeconds >= (end ?? length) || (end !== null && end > length + 0.05)))
+        throw new Error(`Loop point must start before it ends and end within the ${asset.duration?.toFixed(2) ?? 'file'} s file.`);
+      update.loopPoint = loopPoint && { startSeconds: loopPoint.startSeconds, endSeconds: end === null ? null : Math.min(end, length), source: 'user' };
+    }
+    this.store.updateAsset(id, update, projectId, conversationId);
   }
   async importFiles(conversationId: string, paths: string[], kind: AssetKind = 'effect') {
     this.requireOpen();

@@ -29,8 +29,9 @@ creative director: it should read SfxChat's installed design/provider references
 then apply its game constraints before asking SfxChat to generate. Do not copy
 SfxChat's maintained provider instructions into Chimera.
 
-For an existing batch, import its original WAV/MP3 files and current in-game
-references into a dedicated Chimera project/session. Preserve original external
+For an existing batch, import its original WAV/MP3/Ogg Vorbis files and current in-game
+references (set each in-game loop offset as the asset `loopPoint` with `update_asset`
+when the file does not carry one, so reviews loop it the way the game does) into a dedicated Chimera project/session. Preserve original external
 metadata/manifests alongside the imported files; imports cannot reconstruct missing
 provider request records. Build a cue board with the original stable cue names and
 candidate IDs returned by import. Read feedback before planning each revision, use

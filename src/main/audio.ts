@@ -1,4 +1,5 @@
 import { MPEGDecoder } from 'mpg123-decoder';
+import { spawn } from 'node:child_process';
 import { parseBuffer } from 'music-metadata';
 import type { Asset, AudioAnalysis, AudioAnalysisInput, EventInterval, SeamProbe, TrimEdit, TrimInput } from '../shared/types';
 
@@ -18,9 +19,33 @@ function checkSize(frames: number, channels: number) {
     throw new Error('Editing supports up to 192 MiB of decoded audio and 1–8 channels.');
 }
 
+let oggHelper: string | null = null;
+/** The bundled native helper decodes Ogg Vorbis (libvorbisfile) to float WAV. */
+export function setOggDecoder(helperPath: string) { oggHelper = helperPath; }
+function decodeOgg(bytes: Buffer): Promise<Buffer> {
+  const helper = oggHelper;
+  if (!helper) return Promise.reject(new Error('Ogg Vorbis decoding is unavailable in this process.'));
+  return new Promise((resolve, reject) => {
+    const child = spawn(helper, ['decode'], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    const chunks: Buffer[] = [], errors: Buffer[] = []; let size = 0;
+    const timer = setTimeout(() => child.kill(), 120_000);
+    child.stdout.on('data', (chunk: Buffer) => { size += chunk.length; if (size > MAX_DECODED_BYTES + 44) child.kill(); else chunks.push(chunk); });
+    child.stderr.on('data', (chunk: Buffer) => errors.push(chunk));
+    child.on('error', error => { clearTimeout(timer); reject(error); });
+    child.on('close', code => {
+      clearTimeout(timer);
+      if (code === 0 && size <= MAX_DECODED_BYTES + 44) resolve(Buffer.concat(chunks));
+      else reject(new Error(Buffer.concat(errors).toString('utf8').trim() || 'Ogg Vorbis decoding failed or exceeded the 192 MiB decoded bound.'));
+    });
+    child.stdin.on('error', () => undefined);
+    child.stdin.end(bytes);
+  });
+}
+
 export async function decodeAudio(bytes: Buffer, format: Asset['format']): Promise<DecodedAudio> {
   if (bytes.length > MAX_AUDIO_BYTES) throw new Error('Editing supports source files up to 64 MiB.');
   if (format === 'wav') return decodeWav(bytes);
+  if (format === 'ogg') return decodeWav(await decodeOgg(bytes));
   const metadata = await parseBuffer(bytes, 'audio/mpeg');
   const channels = metadata.format.numberOfChannels;
   if (channels !== 1 && channels !== 2) throw new Error('Unsupported MP3 channel layout.');

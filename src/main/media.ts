@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile, rename, stat } from 'node:fs/promises';
 import { join, extname, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { parseBuffer } from 'music-metadata';
-import type { Asset, AssetKind, AudioAnalysis, AudioAnalysisInput, AnyGenerationInput, LoopSearchInput, LoopSeamInput, SpectrogramInput, TrimInput } from '../shared/types';
+import type { Asset, AssetKind, AssetLoopPoint, AudioAnalysis, AudioAnalysisInput, AnyGenerationInput, LoopSearchInput, LoopSeamInput, SpectrogramInput, TrimInput } from '../shared/types';
 import { analyzeAudio, decodeAudio, interval, renderClip, renderTrim, smplChunk, MAX_AUDIO_BYTES, type ClipRender, type DecodedAudio } from './audio';
 import { renderSpectrogram, type SpectrogramRender } from './spectrogram';
 import { midiFileDurationSeconds } from './midi';
@@ -92,7 +92,7 @@ export class MediaLibrary {
    */
   pcmWav(asset: Asset, loopChunk = true) {
     return this.withAudio(asset, async audio => {
-      const channels = audio.channels.length, frames = audio.channels[0].length, region = loopChunk ? loopRegion(asset) : null;
+      const channels = audio.channels.length, frames = audio.channels[0].length, region = loopChunk ? loopRegion(asset, { sampleRate: audio.sampleRate, frames }) : null;
       const smpl = region ? smplChunk(audio.sampleRate, region.startFrame, region.endFrame) : Buffer.alloc(0), data = 44 + smpl.length;
       const bytes = Buffer.alloc(data + frames * channels * 2);
       bytes.write('RIFF', 0); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVE', 8);
@@ -144,7 +144,7 @@ export class MediaLibrary {
     await writeFile(temp, bytes, { flag: 'wx' });
     await rename(temp, path);
   }
-  async save(bytes: Buffer, format: 'mp3' | 'wav' | 'mid', fields: Partial<Asset> & { projectId: string }): Promise<Asset> {
+  async save(bytes: Buffer, format: Asset['format'], fields: Partial<Asset> & { projectId: string }): Promise<Asset> {
     await mkdir(this.root, { recursive: true });
     const id = randomUUID();
     // Preserve bytes even if probing fails. Such output remains inspectable but the
@@ -156,7 +156,7 @@ export class MediaLibrary {
     let duration: number | null = null;
     try {
       if (format === 'mid') duration = midiFileDurationSeconds(bytes);
-      else { const metadata = await parseBuffer(bytes, format === 'mp3' ? 'audio/mpeg' : 'audio/wav', { duration: true }); duration = metadata.format.duration ?? null; }
+      else { const metadata = await parseBuffer(bytes, AUDIO_MIME[format], { duration: true }); duration = metadata.format.duration ?? null; }
     } catch { /* originals still preserved */ }
     return { id, name: 'Untitled sound', description: '', tags: [], collections: [], review: 'unreviewed', feedback: '', source: 'imported', kind: 'effect', format, hash: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length, duration, prompt: '', provider: null, model: null, requestId: null, request: null, usage: null, parentId: null, createdAt: new Date().toISOString(), ...fields };
   }
@@ -167,17 +167,57 @@ export class MediaLibrary {
       midiFileDurationSeconds(bytes);
       return this.save(bytes, 'mid', { projectId, name: basename(path, extension), source: 'imported', kind: 'midi' });
     }
-    if (extension !== '.mp3' && extension !== '.wav') throw new Error('Import a WAV, MP3, or MIDI file.');
-    const bytes = await readFile(path);
-    const metadata = await parseBuffer(bytes, extension === '.mp3' ? 'audio/mpeg' : 'audio/wav', { duration: true });
+    if (extension !== '.mp3' && extension !== '.wav' && extension !== '.ogg') throw new Error('Import a WAV, MP3, Ogg Vorbis, or MIDI file.');
+    const format = extension.slice(1) as 'mp3' | 'wav' | 'ogg', bytes = await readFile(path);
+    const metadata = await parseBuffer(bytes, AUDIO_MIME[format], { duration: true });
     if (!metadata.format.codec || !metadata.format.duration) throw new Error('The file does not contain playable audio.');
-    return this.save(bytes, extension.slice(1) as 'mp3' | 'wav', { projectId, name: basename(path, extension), source: 'imported', kind });
+    if (format === 'ogg' && !/vorbis/i.test(metadata.format.codec)) throw new Error(`This Ogg file holds ${metadata.format.codec}; import Ogg Vorbis, WAV, or MP3.`);
+    const loopPoint = fileLoopPoint(bytes, format, metadata.format.sampleRate, metadata.format.duration, metadata.native.vorbis ?? []);
+    return this.save(bytes, format, { projectId, name: basename(path, extension), source: 'imported', kind, ...(loopPoint ? { loopPoint } : {}) });
   }
 
 }
 
-/** The repeating region of a loop render in output frames; version 1 loops repeat the whole file. */
-export function loopRegion(asset: Pick<Asset, 'edit'>): { startFrame: number; endFrame: number; sampleRate: number } | null {
+export const AUDIO_MIME = { mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg' } as const;
+
+/**
+ * A loop stored in the file itself: the first smpl chunk loop of a WAV (dwEnd read as the
+ * first frame after the loop, as SfxChat writes it) or the LOOPSTART with LOOPLENGTH or
+ * LOOPEND sample tags many game tools write into Ogg Vorbis comments.
+ */
+function fileLoopPoint(bytes: Buffer, format: 'mp3' | 'wav' | 'ogg', sampleRate: number | undefined, duration: number, tags: { id: string; value: unknown }[]): AssetLoopPoint | null {
+  if (!sampleRate) return null;
+  let start: number | null = null, end: number | null = null;
+  if (format === 'wav') {
+    for (let at = 12; at + 8 <= bytes.length;) {
+      const length = bytes.readUInt32LE(at + 4);
+      if (bytes.toString('ascii', at, at + 4) === 'smpl' && length >= 60 && at + 8 + length <= bytes.length && bytes.readUInt32LE(at + 36) > 0) {
+        start = bytes.readUInt32LE(at + 52); end = bytes.readUInt32LE(at + 56); break;
+      }
+      at += 8 + length + (length % 2);
+    }
+  } else if (format === 'ogg') {
+    const tag = (name: string) => { const value = Number(tags.find(entry => entry.id.toUpperCase() === name)?.value); return Number.isSafeInteger(value) && value >= 0 ? value : null; };
+    start = tag('LOOPSTART');
+    const loopLength = tag('LOOPLENGTH'), loopEnd = tag('LOOPEND');
+    end = start === null ? null : loopLength ? start + loopLength : loopEnd;
+  }
+  if (start === null) return null;
+  const startSeconds = start / sampleRate, endSeconds = end === null || end / sampleRate >= duration - 0.001 ? null : end / sampleRate;
+  return startSeconds < (endSeconds ?? duration) ? { startSeconds, endSeconds, source: 'file' } : null;
+}
+
+/**
+ * Where a looped asset repeats, in frames. A loop point on the asset wins over a loop
+ * render's recorded region and needs the decoded rate and length to become frames;
+ * version 1 loop renders repeat the whole file.
+ */
+export function loopRegion(asset: Pick<Asset, 'edit' | 'loopPoint'>, decoded?: { sampleRate: number; frames: number }): { startFrame: number; endFrame: number; sampleRate: number } | null {
+  if (asset.loopPoint) {
+    if (!decoded) return null;
+    const { startSeconds, endSeconds } = asset.loopPoint, endFrame = endSeconds === null ? decoded.frames : Math.min(decoded.frames, Math.round(endSeconds * decoded.sampleRate));
+    return { startFrame: Math.min(endFrame - 1, Math.round(startSeconds * decoded.sampleRate)), endFrame, sampleRate: decoded.sampleRate };
+  }
   const loop = asset.edit?.loop;
   if (!loop) return null;
   return { startFrame: loop.loopStartFrame ?? 0, endFrame: loop.loopEndFrame ?? loop.outputFrames, sampleRate: asset.edit!.sampleRate };

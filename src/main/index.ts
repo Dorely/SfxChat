@@ -9,8 +9,8 @@ import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } fro
 import { join } from 'node:path';
 import { mkdir, readFile } from 'node:fs/promises';
 import { Store } from './store';
-import { MediaLibrary } from './media';
-import { decodeAudio, renderClip } from './audio';
+import { AUDIO_MIME, MediaLibrary } from './media';
+import { decodeAudio, renderClip, setOggDecoder } from './audio';
 import { MidiRenderer } from './midi-render';
 import { loadSoundfont } from './soundfont';
 import { midiDurationSeconds } from '../shared/midi';
@@ -228,6 +228,7 @@ void acquireInstanceLock().then(acquired => {
     store.recover(); store.ensureConversation(store.activeProjectId());
     const agentRoot = app.isPackaged ? join(process.resourcesPath, 'agent') : join(__dirname, '../agent');
     rendererPort = new RendererPort(() => window, store, browserMode ? { available: () => browserHost?.available() ?? false, send: command => browserHost?.send(command) } : undefined);
+    setOggDecoder(join(agentRoot, 'sfxchat-helper.exe'));
     const exporter = new Exporter(media, store, join(agentRoot, 'sfxchat-helper.exe'));
     const midiRenderer = new MidiRenderer(join(agentRoot, 'sfxchat-helper.exe'), join(root, 'midi-renders'));
     // The bundled General MIDI bank ships beside the app; a bank saved in Settings overrides it.
@@ -258,7 +259,7 @@ void acquireInstanceLock().then(acquired => {
             return bytesResponse(bytes, 'audio/wav', request);
           }
           const bytes = await readFile(media.path(asset));
-          return bytesResponse(bytes, asset.format === 'mp3' ? 'audio/mpeg' : 'audio/wav', request);
+          return bytesResponse(bytes, AUDIO_MIME[asset.format], request);
         }
         if (url.hostname === 'chat') {
           const [messageId, attachmentId] = url.pathname.slice(1).split('/');
@@ -317,7 +318,7 @@ void acquireInstanceLock().then(acquired => {
       setPlayground: (id, ids) => operations!.call('set_playground', { projectId: context(id).projectId, assetIds: ids }, 'user'),
       searchAssets: query => operations!.call('search_assets', { projectId: store.activeProjectId(), query }, 'user'),
       importAudio: async (id, kind) => {
-        const result = await dialog.showOpenDialog(window!, { title: 'Import audio', filters: [{ name: 'Audio or MIDI', extensions: ['wav', 'mp3', 'mid', 'midi'] }], properties: ['openFile', 'multiSelections'] });
+        const result = await dialog.showOpenDialog(window!, { title: 'Import audio', filters: [{ name: 'Audio or MIDI', extensions: ['wav', 'mp3', 'ogg', 'mid', 'midi'] }], properties: ['openFile', 'multiSelections'] });
         if (!result.canceled) await operations!.call('import_audio', { ...context(id), paths: result.filePaths, kind: kind ?? 'effect' }, 'user');
       },
       exportAsset: async (id, format = 'original', oggQuality = 5) => {

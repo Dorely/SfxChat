@@ -20,16 +20,24 @@ export interface Message { id: string; conversationId: string; role: 'user' | 'a
 export interface Asset {
   id: string; projectId: string; name: string; description: string; tags: string[]; collections: string[];
   review: Review; feedback: string; source: 'generated' | 'imported' | 'edited' | 'authored'; kind: AssetKind;
-  format: 'mp3' | 'wav' | 'mid'; hash: string; bytes: number; duration: number | null;
+  format: 'mp3' | 'wav' | 'ogg' | 'mid'; hash: string; bytes: number; duration: number | null;
   prompt: string; provider: string | null; model: string | null; requestId: string | null;
   request: AnyGenerationInput | null; usage: string | null; parentId: string | null; createdAt: string;
   providerPrompt?: string | null; lyrics?: string; edit?: TrimEdit;
+  /** Where the sound repeats when looped; wins over a loop render's recorded region. */
+  loopPoint?: AssetLoopPoint | null;
   /** Present on MIDI assets: tempo, meter, per-track instrument summary, and musical length. */
   midi?: MidiSummary;
   /** Set on a MIDI clip derived from another clip by editing its notes. */
   midiEdit?: MidiEdit;
   arrangementRender?: { record: import('./arrangement').ArrangementRecord; input: import('./arrangement-operations').RenderInput; sourceHashes: Record<string, string>; seed: number; stem?: string; diagnostics: unknown };
 }
+/**
+ * A loop region in seconds on an existing file: read at import from a WAV smpl chunk or
+ * Ogg LOOPSTART/LOOPLENGTH tags ('file'), or set with update_asset ('user'). A null end
+ * loops to the file end; the audio before the start plays once as an intro.
+ */
+export interface AssetLoopPoint { startSeconds: number; endSeconds: number | null; source: 'file' | 'user' }
 export interface TrimInput {
   startSeconds: number; endSeconds: number; fadeInMs?: number; fadeOutMs?: number; name?: string;
   /** Render a wrap-crossfaded loop instead of a plain cut; fades are not allowed with it. */
@@ -218,7 +226,9 @@ export interface SettingsStatus { codexReady: boolean; elevenLabsReady: boolean;
 export interface ChatContext { model: string; tokens: number; limit: number | null; includesHiddenReasoning: boolean; includesEstimatedMedia: boolean }
 /** Every list below is scoped to `activeProjectId`; other projects' rows never reach the renderer. */
 export interface Snapshot { projects: Project[]; activeProjectId: string; conversations: Conversation[]; messages: Message[]; assets: Asset[]; jobs: Job[]; playground: Record<string, string[]>; settings: SettingsStatus; activeTurns: string[]; reviews: ReviewBoard[] }
-export interface AssetPatch { name?: string; description?: string; tags?: string[]; collections?: string[]; review?: Review; feedback?: string }
+export interface AssetPatch { name?: string; description?: string; tags?: string[]; collections?: string[]; review?: Review; feedback?: string; loopPoint?: { startSeconds: number; endSeconds?: number | null } | null }
+/** A validated patch as stored; a loop point gains its source. */
+export type AssetUpdate = Omit<AssetPatch, 'loopPoint'> & { loopPoint?: AssetLoopPoint | null }
 export interface ModelCapabilityResult {
   perEffort: Record<string, 'pass' | 'fail'>; failedEfforts: string[];
   maxTokens: number | null; vision: CapabilityFlag; audio: CapabilityFlag; error?: string;

@@ -38,7 +38,8 @@ Export exact originals, PCM WAV, or Ogg Vorbis through the workbench to absolute
 destinations; missing parent folders are created. export_asset refuses an existing
 file unless overwrite:true, which replaces the file and its .json manifest together
 (never a directory); overwrite only what the user asked to replace. A cue pack needs
-a new directory. Loop renders' manifests add `loop`: the loop frames, intro seconds,
+a new directory. import_audio takes WAV, MP3, Ogg Vorbis and MIDI. Manifests of loop
+renders and assets with a loopPoint add `loop`: the loop frames, intro seconds,
 and Godot import guidance (WAV carries the points; Ogg needs Loop Offset set in
 Godot). Selected-cue packs retain unresolved cues, notes, prompts, hashes,
 conversion details, and lineage in their manifest. Preview gain is not applied.

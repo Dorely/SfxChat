@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { WorkbenchError, type ReviewBoard, type ReviewContent } from '../shared/workbench';
-import type { Asset, AssetKind, AssetPatch, ChatAttachment, Conversation, AnyGenerationInput, Job, Message, Project, TitleSource } from '../shared/types';
+import type { Asset, AssetKind, AssetUpdate, ChatAttachment, Conversation, AnyGenerationInput, Job, Message, Project, TitleSource } from '../shared/types';
 
 const now = () => new Date().toISOString();
 const decode = <T>(row: unknown): T => JSON.parse((row as { json: string }).json) as T;
@@ -268,7 +268,7 @@ export class Store {
     })();
     this.changed();
   }
-  updateAsset(id: string, patch: AssetPatch, projectId: string, conversationId?: string): Asset {
+  updateAsset(id: string, patch: AssetUpdate, projectId: string, conversationId?: string): Asset {
     const asset = { ...this.asset(id, projectId), ...patch };
     this.db.transaction(() => {
       this.db.prepare('UPDATE assets SET json=? WHERE id=?').run(JSON.stringify(asset), id); this.indexAsset(asset);

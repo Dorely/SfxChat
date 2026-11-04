@@ -11,8 +11,9 @@ project-wide Playground views share the right workspace. Generate sound
 effects through ElevenLabs, music through a configured music target, and voice
 through ElevenLabs or Gemini,
 audition candidates, record feedback, regenerate linked alternatives, and organize
-names, descriptions, tags, collections, and review status. WAV/MP3 imports and exports
-preserve original bytes. Search includes original prompts, voice transcripts, and feedback. Local library
+names, descriptions, tags, collections, and review status. WAV/MP3/Ogg Vorbis imports and exports
+preserve original bytes; an asset loop point (read from a WAV smpl chunk or Ogg LOOPSTART
+tags, or set in the inspector) makes looped playback and WAV export repeat from there. Search includes original prompts, voice transcripts, and feedback. Local library
 use needs no provider login.
 
 Work is organized into projects. The project dropdown in the top bar switches between them,

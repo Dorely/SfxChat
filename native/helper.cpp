@@ -11,6 +11,7 @@
 #include <string>
 #include <algorithm>
 #include <vorbis/vorbisenc.h>
+#include <vorbis/vorbisfile.h>
 #include <fluidsynth.h>
 
 static int fail(const char* message) { fprintf(stderr, "%s\n", message); return 1; }
@@ -59,6 +60,48 @@ static int encode(double quality) {
     }
     ogg_stream_clear(&stream); vorbis_block_clear(&block); vorbis_dsp_clear(&dsp); vorbis_comment_clear(&comment); vorbis_info_clear(&info);
     return ok && !fflush(stdout) ? 0 : fail("Truncated PCM or output write failed.");
+}
+struct Memory { const unsigned char* data; size_t size, at; };
+static size_t memoryRead(void* out, size_t size, size_t count, void* source) {
+    auto* m = (Memory*)source; size_t n = size && count ? (std::min)(count, (m->size - m->at) / size) : 0;
+    memcpy(out, m->data + m->at, n * size); m->at += n * size; return n;
+}
+static int memorySeek(void* source, ogg_int64_t offset, int whence) {
+    auto* m = (Memory*)source; ogg_int64_t base = whence == SEEK_SET ? 0 : whence == SEEK_CUR ? (ogg_int64_t)m->at : (ogg_int64_t)m->size;
+    if (base + offset < 0 || base + offset > (ogg_int64_t)m->size) return -1;
+    m->at = (size_t)(base + offset); return 0;
+}
+static long memoryTell(void* source) { return (long)((Memory*)source)->at; }
+// Decodes an Ogg Vorbis file from stdin to a canonical 32-bit float WAV on stdout. Every
+// chained link must share one rate and channel count; sizes match the editing bounds.
+static int decode() {
+    std::vector<unsigned char> bytes; unsigned char block[65536]; size_t n;
+    while ((n = fread(block, 1, sizeof block, stdin))) { bytes.insert(bytes.end(), block, block + n); if (bytes.size() > 64u*1024*1024) return fail("Ogg Vorbis input exceeds 64 MiB."); }
+    Memory memory{bytes.data(), bytes.size(), 0};
+    OggVorbis_File file; ov_callbacks callbacks{memoryRead, memorySeek, nullptr, memoryTell};
+    if (ov_open_callbacks(&memory, &file, nullptr, 0, callbacks)) return fail("Not an Ogg Vorbis file.");
+    vorbis_info* info = ov_info(&file, -1);
+    int channels = info->channels; long rate = info->rate;
+    for (int link = 0; link < ov_streams(&file); link++) { vorbis_info* l = ov_info(&file, link); if (l->channels != channels || l->rate != rate) { ov_clear(&file); return fail("Chained Ogg Vorbis links with different rates or channel counts are unsupported."); } }
+    if (channels < 1 || channels > 8 || rate < 8000 || rate > 192000) { ov_clear(&file); return fail("Ogg Vorbis decoding supports 1-8 channels at 8-192 kHz."); }
+    std::vector<float> samples;
+    for (int link; ;) {
+        float** pcm; long frames = ov_read_float(&file, &pcm, 4096, &link);
+        if (frames == OV_HOLE) continue;
+        if (frames < 0) { ov_clear(&file); return fail("Ogg Vorbis data is damaged."); }
+        if (!frames) break;
+        for (long f = 0; f < frames; f++) for (int ch = 0; ch < channels; ch++) samples.push_back(pcm[ch][f]);
+        if (samples.size() * 4 > 192u*1024*1024) { ov_clear(&file); return fail("Decoded Ogg Vorbis audio exceeds 192 MiB."); }
+    }
+    ov_clear(&file);
+    if (samples.empty()) return fail("Ogg Vorbis file contains no audio.");
+    unsigned data = (unsigned)(samples.size() * 4), align = channels * 4;
+    unsigned char h[44]; memcpy(h, "RIFF", 4); memcpy(h + 8, "WAVEfmt ", 8); memcpy(h + 36, "data", 4);
+    auto put16 = [&](int p, unsigned v) { h[p] = v & 255; h[p+1] = (v >> 8) & 255; };
+    auto put32 = [&](int p, unsigned v) { for (int i = 0; i < 4; i++) h[p+i] = (v >> (8*i)) & 255; };
+    put32(4, 36 + data); put32(16, 16); put16(20, 3); put16(22, channels); put32(24, (unsigned)rate); put32(28, (unsigned)rate * align); put16(32, align); put16(34, 32); put32(40, data);
+    bool ok = fwrite(h, 1, 44, stdout) == 44 && fwrite(samples.data(), 4, samples.size(), stdout) == samples.size();
+    return ok && !fflush(stdout) ? 0 : fail("Output write failed.");
 }
 static int protect(bool decrypt) {
     std::vector<unsigned char> bytes; unsigned char block[4096]; size_t n;
@@ -212,10 +255,11 @@ int wmain(int argc,wchar_t** argv) {
     if(argc==3 && !wcscmp(argv[1],L"encode")) return encode(_wtof(argv[2]));
     if(argc==6 && !wcscmp(argv[1],L"render-midi")) return renderMidi(argv[2],argv[3],argv[4],_wtof(argv[5]),0.5);
     if(argc==7 && !wcscmp(argv[1],L"render-midi")) return renderMidi(argv[2],argv[3],argv[4],_wtof(argv[5]),_wtof(argv[6]));
+    if(argc==2 && !wcscmp(argv[1],L"decode")) return decode();
     if(argc==2 && !wcscmp(argv[1],L"protect")) return protect(false);
     if(argc==2 && !wcscmp(argv[1],L"unprotect")) return protect(true);
     if(argc==3 && !wcscmp(argv[1],L"secure-directory")) return secureDirectory(argv[2]);
     if(argc==3 && !wcscmp(argv[1],L"path-add")) return updatePath(argv[2],false);
     if(argc==3 && !wcscmp(argv[1],L"path-remove")) return updatePath(argv[2],true);
-    return fail("Expected encode [QUALITY 0-10], render-midi MIDI BANK OUT SECONDS [GAIN], protect, unprotect, or secure-directory PATH.");
+    return fail("Expected encode [QUALITY 0-10], decode, render-midi MIDI BANK OUT SECONDS [GAIN], protect, unprotect, or secure-directory PATH.");
 }

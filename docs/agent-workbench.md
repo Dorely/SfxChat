@@ -235,8 +235,8 @@ Conversion uses the existing 64 MiB source/decoded-float bounds. Vorbis currentl
 supports mono/stereo, 8–192 kHz; other channel counts can use original or WAV.
 
 Individual exports include a JSON sidecar with source record, ancestry, original
-and exported hashes, prompt/settings and conversion details; loop renders add `loop`
-(frames, intro seconds, whether a WAV `smpl` chunk carries the points, and Godot
+and exported hashes, prompt/settings and conversion details; loop renders and assets
+with a `loopPoint` add `loop` (frames when decoded, start/end and intro seconds, its source, whether a WAV `smpl` chunk carries the points, and Godot
 import guidance). Packs include
 `manifest.json`, the saved review with unresolved/rejected cues and notes, and all
 selected-file records. A failed pack leaves `incomplete.json` and reports
