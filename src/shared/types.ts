@@ -81,6 +81,10 @@ export interface LoopSearchInput {
   startSeconds?: number; endSeconds?: number;
   minSeconds?: number; maxSeconds?: number;
   minBars?: number; maxBars?: number;
+  /** Music mode: only lengths that are whole multiples of this many bars (e.g. 4 or 8). */
+  barMultiple?: number;
+  /** Exact loop length; replaces the min/max limits and keeps the length unchanged through refinement. */
+  lengthSeconds?: number;
   /** false requires the loop to start at the beginning of the search region. */
   allowIntro?: boolean;
   count?: number;
@@ -88,11 +92,21 @@ export interface LoopSearchInput {
 export interface LoopCandidate {
   rank: number;
   startSeconds: number; endSeconds: number; startFrame: number; endFrame: number; lengthSeconds: number;
+  /** What set the length: the bar grid, the measured repeat spacing near it, the caller, or 100 ms texture units. */
+  lengthSource: 'beat-grid' | 'repeat-spacing' | 'requested' | 'texture-units';
+  /** Music mode: the length the bar grid alone gave. */
+  gridLengthSeconds: number | null;
+  /** Music mode: onset-envelope correlation between the context around the start and the same context one loop length later. */
+  rhythmCorrelation: number | null;
+  /** Tempo implied by whole bars over the final length. */
+  impliedBpm: number | null;
+  /** Bars spanned on the beat grid (fractional only for a requested length). */
   bars: number | null; startBar: number | null; endBar: number | null;
   introSeconds: number; outroSeconds: number;
   score: number; match: 'close' | 'partial' | 'weak';
   similarity: { harmony: number | null; timbre: number; level: number; contextUnits: number };
-  seam: { correlation: number; step: number; naturalStep: number; levelDeltaDb: number; alignmentShiftFrames: number };
+  /** Frames the start moved from its grid position and the end from the planned end (start + set length); already included in startFrame/endFrame. */
+  seam: { correlation: number; step: number; naturalStep: number; levelDeltaDb: number; startShiftFrames: number; endShiftFrames: number };
   recommendedCrossfadeMs: number;
   summary: string;
 }

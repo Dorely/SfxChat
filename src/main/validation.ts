@@ -35,6 +35,8 @@ export const loopSearchSchema = z.object({
   maxSeconds: z.number().finite().positive().max(900).optional(),
   minBars: z.number().int().min(1).max(256).optional().describe('Music mode: fewest bars (default 4 unless minSeconds is given).'),
   maxBars: z.number().int().min(1).max(256).optional(),
+  barMultiple: z.number().int().min(1).max(64).optional().describe('Music mode: only offer lengths that are whole multiples of this many bars, for example 4 or 8 for phrase-length loops.'),
+  lengthSeconds: z.number().finite().positive().max(900).optional().describe('Exact loop length in seconds, for example a repeat spacing you measured. Candidates differ only in where the loop starts; the length is not re-measured. Do not combine with min/max limits.'),
   allowIntro: z.boolean().optional().describe('true (default) lets the loop start after an intro that plays once; false requires the loop to start at the region start.'),
   count: z.number().int().min(1).max(12).optional().describe('Candidates to return (default 5, maximum 12).')
 }).strict();

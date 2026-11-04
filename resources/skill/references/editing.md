@@ -32,9 +32,12 @@ means bar numbers may be offset. Do not present them as heard facts.
 To loop a track, start with find_loop_points. It ranks candidates (whole bars on
 the beat grid for music, texture and level continuity for ambience) with exact
 frames, a similarity score, a close/partial/weak seam label, seam measurements, and
-a recommended crossfade. Optional limits: mode, a search region, a length range in
-seconds or bars, allowIntro:false to require starting at the region start, and
-count. When audio_listen is available, pass loopSeam {startSeconds, endSeconds,
+a recommended crossfade. Music mode also compares the track with itself without the
+grid and re-measures every length as the source's actual repeat spacing, so a misread
+tempo does not set the loop period; returned times already include those adjustments.
+Optional limits: mode, a search region, a length range in seconds or bars,
+barMultiple (4 or 8 for phrase-length loops), lengthSeconds for an exact length you
+already know, allowIntro:false to require starting at the region start, and count. When audio_listen is available, pass loopSeam {startSeconds, endSeconds,
 crossfadeMs} to attach exactly what the loop render plays across its wrap; the
 note gives the seam's position in the clip. Present the top few candidates in plain
 words (length, intro, match label), save the one the user picks with trim_asset

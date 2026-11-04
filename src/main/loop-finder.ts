@@ -8,14 +8,21 @@ import type { Asset, LoopCandidate, LoopSearchInput, LoopSearchResult, LoopSeamI
  * start, how much would the music around the jump resemble the music around the
  * start? Music mode compares beat-synchronous harmony, timbre and level over a
  * two-bar context on each side and only proposes whole bars; texture mode uses
- * 100 ms units without a grid. Survivors are aligned to the sample by waveform
- * correlation. Scores rank candidates; they are not listening judgments.
+ * 100 ms units without a grid. A music loop's length is then re-measured as the
+ * source's own repeat spacing (rhythm correlation within about half a beat of the
+ * grid length), because tracked beats drift, and survivors are aligned to the
+ * sample by waveform correlation. Scores rank candidates; they are not listening
+ * judgments.
  */
 const TEXTURE_UNIT_SECONDS = 0.1;
 const TEXTURE_STEP_UNITS = 5;
 const TEXTURE_SMOOTH_UNITS = 3;
 const MIN_TEMPO_CONFIDENCE = 0.3;
 const MAX_CANDIDATES = 12;
+/** Repeat-spacing search: ± this fraction of a beat around the grid length, over ± this many bars of context. */
+const SPACING_SEARCH_BEATS = 0.6;
+const SPACING_CONTEXT_BARS = 2;
+const SPACING_STEP_FRAMES = 0.25;
 
 interface Units {
   /** Unit boundary times in seconds; unit u spans [times[u], times[u+1]). */
@@ -81,7 +88,114 @@ function scorePair(units: Units, i: number, j: number, near: number, far: number
   return { i, j, score: (total + 0.5) / (weights + 1), harmony: units.chroma ? harmony / weights : null, timbre: timbre / weights, level: level / weights, context: used };
 }
 
+/**
+ * Pearson correlation of the onset envelope around `startSeconds` with the envelope
+ * `lagSeconds` later, over ±SPACING_CONTEXT_BARS bars (linear interpolation between
+ * STFT frames). Null when too little context fits the file.
+ */
+function rhythmCorrelation(f: MusicFeatures, startSeconds: number, lagSeconds: number, contextSeconds: number): number | null {
+  const lag = lagSeconds * f.frameRate, from = Math.max(0, Math.round((startSeconds - contextSeconds) * f.frameRate));
+  const to = Math.min(Math.round((startSeconds + contextSeconds) * f.frameRate), Math.floor(f.count - 2 - lag));
+  if (to - from < 2 * f.frameRate) return null;
+  const whole = Math.floor(lag), frac = lag - whole;
+  let n = 0, sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0;
+  for (let t = from; t < to; t++) {
+    const x = f.onset[t], y = f.onset[t + whole] * (1 - frac) + f.onset[t + whole + 1] * frac;
+    sa += x; sb += y; saa += x * x; sbb += y * y; sab += x * y; n++;
+  }
+  const den = (n * saa - sa * sa) * (n * sbb - sb * sb);
+  return den > 1e-20 ? (n * sab - sa * sb) / Math.sqrt(den) : 0;
+}
+
+/**
+ * The source's repeat spacing near a grid loop length: the lag within
+ * ±SPACING_SEARCH_BEATS beats whose rhythm best matches the context around the
+ * start. Keeps the grid length unless the measured spacing clearly fits better.
+ */
+function repeatSpacing(f: MusicFeatures, startSeconds: number, gridLength: number, maxLength: number) {
+  const beat = f.tempo ? 60 / f.tempo.bpm : 0.5, context = SPACING_CONTEXT_BARS * f.beatsPerBar * beat;
+  const grid = rhythmCorrelation(f, startSeconds, gridLength, context);
+  let best = { length: gridLength, correlation: grid };
+  if (grid === null) return { ...best, grid };
+  const step = SPACING_STEP_FRAMES / f.frameRate;
+  for (let length = gridLength - SPACING_SEARCH_BEATS * beat; length <= Math.min(maxLength, gridLength + SPACING_SEARCH_BEATS * beat); length += step) {
+    const correlation = rhythmCorrelation(f, startSeconds, length, context);
+    if (correlation !== null && correlation > (best.correlation ?? -1)) best = { length, correlation };
+  }
+  // A marginal gain is noise; keep the bar-grid length then.
+  return best.correlation! >= 0.2 && best.correlation! >= grid + 0.03 ? { ...best, grid } : { length: gridLength, correlation: grid, grid };
+}
+
 function median(values: number[]) { const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor(sorted.length / 2)] ?? 0; }
+
+/** A coarse candidate before sample alignment: source times plus its context similarity. */
+interface Seed {
+  start: number; end: number; score: number; harmony: number | null; timbre: number; level: number; context: number;
+  /** Beat indices nearest the start and end, for bar reporting (music mode). */
+  beats: { i: number; j: number } | null;
+  origin: 'grid' | 'repeat' | 'texture';
+}
+
+/** Penalizes seams inside fades (loop edges should sit near the track's typical level) and slightly favors longer loops. */
+function adjustForLevel(pairs: Pair[], units: Units, edge: number, minSeconds: number) {
+  const typical = median(units.level);
+  const meanLevel = (from: number, to: number) => { const values = units.level.slice(Math.max(0, from), Math.max(from + 1, to)); return values.reduce((a, b) => a + b, 0) / values.length; };
+  for (const pair of pairs) {
+    const tail = meanLevel(pair.j - edge, pair.j), head = meanLevel(pair.i, pair.i + edge);
+    pair.score -= Math.min(0.1, Math.max(0, typical - 6 - tail) * 0.01) + Math.min(0.1, Math.max(0, typical - 6 - head) * 0.01);
+    pair.score += Math.min(0.04, 0.015 * Math.log2(Math.max(1, (units.times[pair.j] - units.times[pair.i]) / minSeconds)));
+  }
+}
+
+/**
+ * Compares every coarse start with every later coarse end on fixed-length units,
+ * then refines the strongest pairs to single units. `accept` filters lengths.
+ */
+async function searchUnits(units: Units, options: { first: number; last: number; fixedUnits: number | null; allowIntro: boolean; near: number; far: number; keep: number; accept: (i: number, j: number) => boolean }): Promise<Pair[]> {
+  const { first, last, fixedUnits, near, far, accept } = options, pairs: Pair[] = [];
+  const starts = options.allowIntro ? Array.from({ length: Math.max(0, Math.floor((last - first) / TEXTURE_STEP_UNITS) + 1) }, (_, n) => first + n * TEXTURE_STEP_UNITS) : [first];
+  for (const [index, i] of starts.entries()) {
+    if (index % 8 === 0) await yieldWork();
+    const ends = fixedUnits !== null ? [i + fixedUnits] : Array.from({ length: Math.max(0, Math.floor((last - i) / TEXTURE_STEP_UNITS)) }, (_, n) => i + (n + 1) * TEXTURE_STEP_UNITS);
+    for (const j of ends) {
+      if (j > last || !accept(i, j)) continue;
+      const pair = scorePair(units, i, j, near, far);
+      if (pair) pairs.push(pair);
+    }
+  }
+  pairs.sort((a, b) => b.score - a.score);
+  const refined: Pair[] = [], reach = options.allowIntro ? 2 : 0;
+  for (const pair of pairs.slice(0, options.keep)) {
+    let best = pair;
+    for (let di = -reach; di <= reach; di++) for (let dj = -2; dj <= 2; dj++) {
+      if (fixedUnits !== null && dj !== di) continue;
+      const i = pair.i + di, j = pair.j + dj;
+      if (i < first || j > last || !accept(i, j)) continue;
+      const candidate = scorePair(units, i, j, near, far);
+      if (candidate && candidate.score > best.score) best = candidate;
+    }
+    refined.push(best);
+  }
+  return refined;
+}
+
+/** Keeps the best seeds, skipping near-duplicates (same start and end, or the same length nearby). */
+function distinct(seeds: Seed[], limit: number, tolerance: number) {
+  const chosen: Seed[] = [];
+  for (const seed of [...seeds].sort((a, b) => b.score - a.score)) {
+    if (chosen.length >= limit) break;
+    if (chosen.some(c => (Math.abs(c.start - seed.start) < tolerance && Math.abs(c.end - seed.end) < tolerance) || (Math.abs((c.end - c.start) - (seed.end - seed.start)) < 0.05 && Math.abs(c.start - seed.start) <= 2 * tolerance))) continue;
+    chosen.push(seed);
+  }
+  return chosen;
+}
+
+/** Index of the tracked beat nearest `seconds`. */
+function nearestBeat(beats: Float64Array, seconds: number) {
+  let lo = 0, hi = beats.length - 1;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (beats[mid] < seconds) lo = mid + 1; else hi = mid; }
+  return lo > 0 && Math.abs(beats[lo - 1] - seconds) <= Math.abs(beats[lo] - seconds) ? lo - 1 : lo;
+}
 
 export async function findLoopPoints(source: FrameSource, f: MusicFeatures, asset: Pick<Asset, 'id' | 'hash'>, input: LoopSearchInput): Promise<LoopSearchResult> {
   const regionStart = Math.max(0, input.startSeconds ?? 0), regionEnd = Math.min(f.duration, input.endSeconds ?? f.duration);
@@ -90,20 +204,41 @@ export async function findLoopPoints(source: FrameSource, f: MusicFeatures, asse
   const musical = Boolean(f.tempo && f.tempo.confidence >= MIN_TEMPO_CONFIDENCE && f.beats.length >= 16);
   if (input.mode === 'music' && !musical) throw new Error('No steady beat grid was found for music mode. Use texture mode, or a region with a clearer pulse.');
   const mode: 'music' | 'texture' = input.mode === 'texture' || (input.mode !== 'music' && !musical) ? 'texture' : 'music';
+  const fixed = input.lengthSeconds;
+  if (fixed !== undefined && [input.minSeconds, input.maxSeconds, input.minBars, input.maxBars, input.barMultiple].some(v => v !== undefined)) throw new Error('lengthSeconds sets the exact loop length; omit the length limits and barMultiple with it.');
+  if (fixed !== undefined && fixed > regionEnd - regionStart) throw new Error(`lengthSeconds is longer than the ${(regionEnd - regionStart).toFixed(3)} s search region.`);
+  if (mode === 'texture' && input.barMultiple !== undefined) throw new Error('barMultiple needs music mode; texture loops have no bars.');
   const minSeconds = input.minSeconds ?? (mode === 'music' ? 4 : 3), maxSeconds = input.maxSeconds ?? Infinity;
-  const bpb = f.beatsPerBar, pairs: Pair[] = [];
-  let units: Units, near: number, far: number, tolerance: number;
+  const bpb = f.beatsPerBar, beat = f.tempo ? 60 / f.tempo.bpm : 0.5, barSeconds = bpb * beat;
+  const multiple = input.barMultiple ?? 1;
+  const minBars = Math.max(1, input.minBars ?? (input.minSeconds === undefined ? 4 : 1)), maxBars = input.maxBars ?? Infinity;
+  const allowIntro = input.allowIntro !== false;
+  const unitTimes = () => { const times: number[] = []; for (let t = 0; t <= f.duration + 1e-9; t += TEXTURE_UNIT_SECONDS) times.push(Math.min(t, f.duration)); return times; };
+  const first = Math.ceil(regionStart / TEXTURE_UNIT_SECONDS - 1e-9), last = Math.floor(regionEnd / TEXTURE_UNIT_SECONDS + 1e-9);
+  const fixedUnits = fixed === undefined ? null : Math.round(fixed / TEXTURE_UNIT_SECONDS);
+  const toSeeds = (pairs: Pair[], units: Units, origin: Seed['origin']): Seed[] => pairs.map(p => {
+    const start = units.times[p.i], end = units.times[p.j];
+    const beats = origin === 'grid' ? { i: p.i, j: p.j } : mode === 'music' ? { i: nearestBeat(f.beats, start), j: nearestBeat(f.beats, end) } : null;
+    return { start, end, score: p.score, harmony: p.harmony, timbre: p.timbre, level: p.level, context: p.context, beats, origin };
+  });
+  let seeds: Seed[];
   if (mode === 'music') {
-    units = buildUnits(f, Array.from(f.beats), true);
-    near = bpb; far = 2 * bpb; tolerance = bpb;
+    // Candidates on the bar grid.
+    const units = buildUnits(f, Array.from(f.beats), true), near = bpb, far = 2 * bpb, pairs: Pair[] = [];
     const phaseKnown = f.downbeatConfidence >= 0.15;
-    const minBars = Math.max(1, input.minBars ?? (input.minSeconds === undefined ? 4 : 1)), maxBars = input.maxBars ?? Infinity;
     const eligible = units.times.map((t, i) => i).filter(i => units.times[i] >= regionStart - 1e-6 && units.times[i] <= regionEnd + 1e-6);
     const starts = eligible.filter(i => !phaseKnown || ((i - f.downbeatPhase) % bpb + bpb) % bpb === 0);
-    const allowed = input.allowIntro === false ? starts.slice(0, 1) : starts;
-    for (const [index, i] of allowed.entries()) {
+    for (const [index, i] of (allowIntro ? starts : starts.slice(0, 1)).entries()) {
       if (index % 16 === 0) await yieldWork();
-      for (let bars = minBars; i + bars * bpb < units.times.length && bars <= maxBars; bars++) {
+      if (fixed !== undefined) {
+        // The exact length comes from the caller; score the beat nearest the end.
+        const target = units.times[i] + fixed;
+        if (target > regionEnd + 1e-6) break;
+        const pair = scorePair(units, i, Math.max(i + 1, nearestBeat(f.beats, target)), near, far);
+        if (pair) pairs.push(pair);
+        continue;
+      }
+      for (let bars = Math.ceil(minBars / multiple) * multiple; i + bars * bpb < units.times.length && bars <= maxBars; bars += multiple) {
         const j = i + bars * bpb, length = units.times[j] - units.times[i];
         if (units.times[j] > regionEnd + 1e-6) break;
         if (length < minSeconds || length > maxSeconds) continue;
@@ -113,79 +248,74 @@ export async function findLoopPoints(source: FrameSource, f: MusicFeatures, asse
         pairs.push(pair);
       }
     }
+    adjustForLevel(pairs, units, bpb, minSeconds);
+    // Grid-free repeats: compare the track with itself on 100 ms units, so a
+    // misread tempo or drifting beat grid cannot hide where the music repeats.
+    const repeatUnits = buildUnits(f, unitTimes(), true), spanUnits = Math.round(SPACING_CONTEXT_BARS * barSeconds / TEXTURE_UNIT_SECONDS);
+    const repeats = await searchUnits(repeatUnits, {
+      first, last, fixedUnits, allowIntro, near: Math.max(5, Math.round(spanUnits / 2)), far: Math.max(10, spanUnits), keep: count * 8,
+      accept: (i, j) => {
+        if (fixed !== undefined) return true;
+        const length = (j - i) * TEXTURE_UNIT_SECONDS, bars = length / barSeconds;
+        if (length < minSeconds || length > maxSeconds || bars < minBars - 0.5 || bars > maxBars + 0.5) return false;
+        return multiple === 1 || (Math.round(bars / multiple) > 0 && Math.abs(bars - Math.round(bars / multiple) * multiple) <= 0.25);
+      }
+    });
+    adjustForLevel(repeats, repeatUnits, spanUnits, minSeconds);
+    seeds = [...distinct(toSeeds(pairs, units, 'grid'), count, beat), ...distinct(toSeeds(repeats, repeatUnits, 'repeat'), count, beat)];
   } else {
-    const times: number[] = [];
-    for (let t = 0; t <= f.duration + 1e-9; t += TEXTURE_UNIT_SECONDS) times.push(Math.min(t, f.duration));
-    units = smoothUnits(buildUnits(f, times, false), TEXTURE_SMOOTH_UNITS);
-    near = 3; far = 10; tolerance = 10;
-    const first = Math.ceil(regionStart / TEXTURE_UNIT_SECONDS), last = Math.floor(regionEnd / TEXTURE_UNIT_SECONDS);
-    const minUnits = Math.ceil(minSeconds / TEXTURE_UNIT_SECONDS);
-    const starts = input.allowIntro === false ? [first] : Array.from({ length: Math.max(0, Math.floor((last - first) / TEXTURE_STEP_UNITS) + 1) }, (_, n) => first + n * TEXTURE_STEP_UNITS);
-    for (const [index, i] of starts.entries()) {
-      if (index % 8 === 0) await yieldWork();
-      for (let j = i + minUnits; j <= last; j += TEXTURE_STEP_UNITS) {
-        if ((j - i) * TEXTURE_UNIT_SECONDS > maxSeconds) break;
-        const pair = scorePair(units, i, j, near, far);
-        if (pair) pairs.push(pair);
-      }
-    }
-    // Refine the coarse grid to single units around the strongest pairs.
-    pairs.sort((a, b) => b.score - a.score);
-    const refined: Pair[] = [];
-    for (const pair of pairs.slice(0, count * 8)) {
-      let best = pair;
-      for (let di = input.allowIntro === false ? 0 : -2; di <= (input.allowIntro === false ? 0 : 2); di++) for (let dj = -2; dj <= 2; dj++) {
-        const i = pair.i + di, j = pair.j + dj;
-        if (i < first || j > last || (j - i) < minUnits || (j - i) * TEXTURE_UNIT_SECONDS > maxSeconds) continue;
-        const candidate = scorePair(units, i, j, near, far);
-        if (candidate && candidate.score > best.score) best = candidate;
-      }
-      refined.push(best);
-    }
-    pairs.length = 0; pairs.push(...refined);
+    const units = smoothUnits(buildUnits(f, unitTimes(), false), TEXTURE_SMOOTH_UNITS), minUnits = Math.ceil(minSeconds / TEXTURE_UNIT_SECONDS);
+    const pairs = await searchUnits(units, { first, last, fixedUnits, allowIntro, near: 3, far: 10, keep: count * 8, accept: (i, j) => fixedUnits !== null || ((j - i) >= minUnits && (j - i) * TEXTURE_UNIT_SECONDS <= maxSeconds) });
+    adjustForLevel(pairs, units, 10, minSeconds);
+    seeds = distinct(toSeeds(pairs, units, 'texture'), count * 2, 1);
   }
-  if (!pairs.length) throw new Error('No loop candidates fit the requested length and region. Widen the region or relax the length limits.');
-  // Penalize seams inside fades: the loop edges should sit near the track's typical level.
-  const typical = median(units.level), edge = mode === 'music' ? bpb : 10;
-  const meanLevel = (from: number, to: number) => { const values = units.level.slice(Math.max(0, from), Math.max(from + 1, to)); return values.reduce((a, b) => a + b, 0) / values.length; };
-  for (const pair of pairs) {
-    const tail = meanLevel(pair.j - edge, pair.j), head = meanLevel(pair.i, pair.i + edge);
-    pair.score -= Math.min(0.1, Math.max(0, typical - 6 - tail) * 0.01) + Math.min(0.1, Math.max(0, typical - 6 - head) * 0.01);
-    pair.score += Math.min(0.04, 0.015 * Math.log2(Math.max(1, (units.times[pair.j] - units.times[pair.i]) / minSeconds)));
-  }
-  pairs.sort((a, b) => b.score - a.score);
-  const chosen: Pair[] = [];
-  for (const pair of pairs) {
-    if (chosen.length >= count * 2) break;
-    if (chosen.some(c => (Math.abs(c.i - pair.i) < tolerance && Math.abs(c.j - pair.j) < tolerance) || (c.j - c.i === pair.j - pair.i && Math.abs(c.i - pair.i) <= 2 * tolerance))) continue;
-    chosen.push(pair);
-  }
+  if (!seeds.length) throw new Error('No loop candidates fit the requested length and region. Widen the region or relax the length limits.');
   const candidates: LoopCandidate[] = [];
-  for (const pair of chosen) {
+  for (const seed of seeds) {
     await yieldWork();
-    candidates.push(await refine(source, f, units, pair, mode, regionStart, regionEnd));
+    let plan: LengthPlan;
+    if (fixed !== undefined) plan = { endSeconds: seed.start + fixed, source: 'requested', rhythm: mode === 'music' ? rhythmCorrelation(f, seed.start, fixed, SPACING_CONTEXT_BARS * barSeconds) : null };
+    else if (mode === 'music') {
+      const spacing = repeatSpacing(f, seed.start, seed.end - seed.start, Math.min(regionEnd, f.duration) - seed.start);
+      plan = { endSeconds: seed.start + spacing.length, source: seed.origin === 'grid' && spacing.length === seed.end - seed.start ? 'beat-grid' : 'repeat-spacing', rhythm: spacing.correlation };
+    } else plan = { endSeconds: seed.end, source: 'texture-units', rhythm: null };
+    candidates.push(await refine(source, f, seed, mode, regionStart, regionEnd, plan));
   }
   candidates.sort((a, b) => rankValue(b, mode) - rankValue(a, mode));
-  const top = candidates.slice(0, count).map((c, index) => ({ ...c, rank: index + 1 }));
+  const top = distinctCandidates(candidates, count, mode === 'music' ? beat : 1).map((c, index) => ({ ...c, rank: index + 1 }));
   const summary = musicalSummary(f);
   return {
     version: 1, assetId: asset.id, sourceHash: asset.hash, mode, sampleRate: source.sampleRate, duration: f.duration,
     tempo: summary.tempo, key: f.key ? keyLabel(f.key.tonic, f.key.mode) : null, beatsPerBar: mode === 'music' ? bpb : null,
     candidates: top,
-    note: `${mode === 'music' ? `Music mode: whole-bar loops on an estimated ${summary.tempo?.bpm.toFixed(1)} BPM grid (4 beats per bar assumed${f.downbeatConfidence < 0.15 ? '; downbeat uncertain, so bar numbers may be offset' : ''}).` : 'Texture mode: no reliable beat grid, so candidates use 100 ms units and texture/level continuity only.'} score compares harmony/timbre/level around the jump with the music around the loop start; seam values come from sample-level waveform alignment (correlation of matching context windows, wrap step vs the source's own step). Frames are exact; ranking is heuristic. Audition the seam (audio_listen loopSeam, or Play seam in the editor) and let the user decide. Save with trim_asset loop:true and the recommended crossfadeMs.`
+    note: `${mode === 'music' ? `Music mode: candidates come from bars of an estimated ${summary.tempo?.bpm.toFixed(1)} BPM grid (4 beats per bar assumed${f.downbeatConfidence < 0.15 ? '; downbeat uncertain, so bar numbers may be offset' : ''}) and from a grid-free comparison of the track with itself, so a misread tempo cannot hide a real repeat. Each length is re-measured as the source's repeat spacing within ±${SPACING_SEARCH_BEATS} beat (lengthSource, rhythmCorrelation) unless lengthSeconds fixes it; bars for grid-free candidates are approximate.` : 'Texture mode: no reliable beat grid, so candidates use 100 ms units and texture/level continuity only.'} startSeconds/endSeconds/frames are final: startShiftFrames/endShiftFrames report adjustments already applied, so pass the times to trim_asset unchanged. score compares harmony/timbre/level around the jump with the music around the loop start; seam values come from sample-level waveform alignment (correlation of matching context windows, wrap step vs the source's own step). Frames are exact; ranking is heuristic. Audition the seam (audio_listen loopSeam, or Play seam in the editor) and let the user decide. Save with trim_asset loop:true and the recommended crossfadeMs.`
   };
+}
+
+/** Grid and grid-free searches can converge on the same loop; keep the better-ranked one. */
+function distinctCandidates(candidates: LoopCandidate[], limit: number, tolerance: number) {
+  const chosen: LoopCandidate[] = [];
+  for (const c of candidates) {
+    if (chosen.length >= limit) break;
+    if (!chosen.some(k => Math.abs(k.startSeconds - c.startSeconds) < tolerance && Math.abs(k.endSeconds - c.endSeconds) < tolerance)) chosen.push(c);
+  }
+  return chosen;
 }
 
 // Noise-like textures never correlate sample-for-sample, so texture ranking and
 // labels lean on spectral context and level; the long crossfade hides the waveform.
+// Music ranking adds rhythm agreement one loop length later, the strongest sign of a true repeat.
 const rankValue = (c: LoopCandidate, mode: 'music' | 'texture') => mode === 'music'
-  ? 0.75 * c.score + 0.25 * Math.max(0, c.seam.correlation)
+  ? (c.rhythmCorrelation === null ? 0.75 * c.score : 0.55 * c.score + 0.2 * Math.max(0, c.rhythmCorrelation)) + 0.25 * Math.max(0, c.seam.correlation)
   : 0.9 * c.score + 0.1 * Math.max(0, c.seam.correlation) - 0.02 * Math.abs(c.seam.levelDeltaDb);
 
-async function refine(source: FrameSource, f: MusicFeatures, units: Units, pair: Pair, mode: 'music' | 'texture', regionStart: number, regionEnd: number): Promise<LoopCandidate> {
+interface LengthPlan { endSeconds: number; source: LoopCandidate['lengthSource']; rhythm: number | null }
+
+async function refine(source: FrameSource, f: MusicFeatures, pair: Seed, mode: 'music' | 'texture', regionStart: number, regionEnd: number, plan: LengthPlan): Promise<LoopCandidate> {
   const rate = source.sampleRate, total = source.frames;
   const window = Math.round(rate * (mode === 'music' ? 0.05 : 0.2)), radius = Math.round(rate * (mode === 'music' ? 0.03 : 0.06)), zero = Math.round(rate * 0.001);
-  let start = Math.round(units.times[pair.i] * rate), end = Math.round(units.times[pair.j] * rate);
+  let start = Math.round(pair.start * rate), end = Math.round(plan.endSeconds * rate);
+  const plannedStart = start, plannedEnd = end;
   const minFrame = Math.round(regionStart * rate), maxFrame = Math.round(regionEnd * rate);
   const read = async (center: number, half: number) => {
     const from = Math.max(0, center - half), to = Math.min(total, center + half);
@@ -213,14 +343,15 @@ async function refine(source: FrameSource, f: MusicFeatures, units: Units, pair:
     const den = (n * saa - sa * sa) * (n * sbb - sb * sb);
     return den > 1e-20 ? (n * sab - sa * sb) / Math.sqrt(den) : 0;
   };
-  // Align the end to the start: the beat grid is only accurate to ~one STFT hop.
+  // Align the end to the start: the planned end is only accurate to ~one STFT hop.
+  // A requested length is kept exactly.
   let bestShift = 0, best = matchScore(0) ?? 0;
-  const coarse = Math.max(1, Math.round(rate / 4000));
-  for (let shift = -radius; shift <= radius; shift += coarse) {
+  const coarse = Math.max(1, Math.round(rate / 4000)), searchRadius = plan.source === 'requested' ? 0 : radius;
+  for (let shift = -searchRadius; shift <= searchRadius; shift += coarse) {
     const score = matchScore(shift);
     if (score !== null && score > best && end + shift - start > 0) { best = score; bestShift = shift; }
   }
-  for (let shift = bestShift - coarse; shift <= bestShift + coarse; shift++) {
+  for (let shift = bestShift - coarse; searchRadius && shift <= bestShift + coarse; shift++) {
     const score = matchScore(shift);
     if (score !== null && score > best) { best = score; bestShift = shift; }
   }
@@ -257,23 +388,32 @@ async function refine(source: FrameSource, f: MusicFeatures, units: Units, pair:
     : (correlation >= 0.8 ? 50 : correlation >= 0.5 ? 200 : 500);
   const recommendedCrossfadeMs = Math.max(0, Math.min(crossfade, Math.floor(lengthSeconds * 250)));
   const match = mode === 'music'
-    ? (pair.score >= 0.85 && correlation >= 0.8 ? 'close' : pair.score >= 0.72 && correlation >= 0.4 ? 'partial' : 'weak')
+    // Context similarity, or rhythm plus harmony agreeing one loop length later (steady drums
+    // alone correlate everywhere), with waveform continuity at the seam.
+    ? ((pair.score >= 0.85 || ((plan.rhythm ?? 0) >= 0.8 && (pair.harmony ?? 0) >= 0.9)) && correlation >= 0.8 ? 'close'
+      : (pair.score >= 0.72 || ((plan.rhythm ?? 0) >= 0.6 && (pair.harmony ?? 0) >= 0.8)) && correlation >= 0.4 ? 'partial' : 'weak')
     : (pair.score >= 0.85 && Math.abs(levelDeltaDb) <= 1.5 ? 'close' : pair.score >= 0.72 && Math.abs(levelDeltaDb) <= 3 ? 'partial' : 'weak');
   const bpb = f.beatsPerBar;
-  const bars = mode === 'music' ? (pair.j - pair.i) / bpb : null;
-  const startBar = mode === 'music' && f.downbeatConfidence >= 0.15 ? Math.floor((pair.i - f.downbeatPhase) / bpb) + 1 : null;
-  const endBar = startBar !== null && bars !== null ? startBar + bars : null;
+  const beatSpan = pair.beats ? (pair.beats.j - pair.beats.i) / bpb : null;
+  const bars = beatSpan === null ? null : Math.round(beatSpan * 100) / 100, wholeBars = bars !== null && Number.isInteger(bars);
+  const startBar = mode === 'music' && pair.beats && f.downbeatConfidence >= 0.15 ? Math.floor((pair.beats.i - f.downbeatPhase) / bpb) + 1 : null;
+  const endBar = startBar !== null && wholeBars ? startBar + bars! : null;
+  const impliedBpm = wholeBars ? bars! * bpb * 60 / lengthSeconds : null;
   const intro = startSeconds, outro = f.duration - endSeconds;
   const words = { close: 'close match', partial: 'partial match', weak: 'weak match' }[match];
+  const gridLength = pair.origin === 'grid' ? pair.end - pair.start : null, gridDelta = gridLength === null ? 0 : (lengthSeconds - gridLength) * 1000;
+  const lengthNote = plan.source === 'requested' ? ', requested length' : plan.source !== 'repeat-spacing' ? '' : gridLength === null ? ', length from where the music repeats' : `, length set by the measured repeat (${gridDelta >= 0 ? '+' : ''}${gridDelta.toFixed(0)} ms vs the beat grid)`;
+  const barSpan = startBar !== null && endBar !== null ? `Bars ${startBar}–${endBar - 1}` : startBar !== null ? `From bar ${startBar}` : pair.beats ? `Beats ${pair.beats.i + 1}–${pair.beats.j}` : `${startSeconds.toFixed(2)}–${endSeconds.toFixed(2)} s`;
   const summary = mode === 'music'
-    ? `${startBar !== null ? `Bars ${startBar}–${endBar! - 1}` : `Beats ${pair.i + 1}–${pair.j}`} (${bars} bar${bars === 1 ? '' : 's'}, ${lengthSeconds.toFixed(1)} s)${intro > 0.05 ? ` after a ${intro.toFixed(1)} s intro` : ' from the start'}; seam ${words}.`
-    : `${lengthSeconds.toFixed(1)} s texture loop${intro > 0.05 ? ` from ${intro.toFixed(1)} s` : ' from the start'}; seam ${words}.`;
+    ? `${barSpan} (${wholeBars ? '' : '≈'}${bars} bar${bars === 1 ? '' : 's'}, ${lengthSeconds.toFixed(2)} s${lengthNote})${intro > 0.05 ? ` after a ${intro.toFixed(1)} s intro` : ' from the start'}; seam ${words}.`
+    : `${lengthSeconds.toFixed(2)} s texture loop${intro > 0.05 ? ` from ${intro.toFixed(1)} s` : ' from the start'}${lengthNote}; seam ${words}.`;
   return {
     rank: 0, startSeconds, endSeconds, startFrame: start, endFrame: end, lengthSeconds,
+    lengthSource: plan.source, gridLengthSeconds: gridLength, rhythmCorrelation: plan.rhythm, impliedBpm,
     bars, startBar, endBar, introSeconds: intro, outroSeconds: Math.max(0, outro),
     score: Math.max(0, Math.min(1, pair.score)), match,
     similarity: { harmony: pair.harmony, timbre: pair.timbre, level: pair.level, contextUnits: pair.context },
-    seam: { correlation, step: wrapStep, naturalStep, levelDeltaDb, alignmentShiftFrames: bestShift + bestSlide },
+    seam: { correlation, step: wrapStep, naturalStep, levelDeltaDb, startShiftFrames: start - plannedStart, endShiftFrames: end - plannedEnd },
     recommendedCrossfadeMs, summary
   };
 }

@@ -190,17 +190,31 @@ requested interval. None of it is listening evidence.
 `find_loop_points` (`loop-finder.ts`) ranks loop candidates by comparing the context
 around the jump (the end) with the context around the start. Music mode, chosen
 automatically when tempo confidence is at least 0.3 with 16+ beats, uses beat-synchronous
-units (chroma, band energies, level) over a one-to-two-bar context. It proposes only
+units (chroma, band energies, level) over a one-to-two-bar context. It proposes
 whole-bar loops starting on downbeats when the downbeat is known, with a small
-preference for 4/8/16/32 bars. Texture mode uses 100 ms units smoothed over ±3 units,
-with no grid. Both penalize seams inside fades, suppress near-duplicate candidates,
-and then refine each survivor to the sample. The end is aligned to the start by
-waveform correlation (±30 ms music, ±60 ms texture), then both points slide together
-by up to 1 ms to minimize the wrap step. Each candidate reports exact frames, a
-similarity score and `close`/`partial`/`weak` label, seam correlation, wrap step vs the
-source's natural step, a like-for-like level delta, and a recommended crossfade
-(5–60 ms music, 50–500 ms texture, at most a quarter of the loop). Labels and ranking
-are heuristics for choosing what to audition.
+preference for 4/8/16/32 bars (`barMultiple` restricts lengths to multiples of N
+bars). Because a misread tempo or drifting beat grid can hide a real repeat, music
+mode also compares the track with itself on 100 ms units with chroma (coarse 0.5 s
+steps, then single-unit refinement) and keeps the best grid-free seeds alongside the
+grid seeds. Each music length is then re-measured as the source's repeat spacing:
+the lag within ±0.6 beat whose onset envelope, over ±2 bars around the start, best
+correlates with the envelope one loop length later (quarter-frame steps; kept only
+when it beats the seed length by 0.03 and reaches 0.2). `lengthSeconds` instead fixes
+the length exactly: every seed uses it and alignment only slides both points
+together. Texture mode uses 100 ms units smoothed over ±3 units, with no grid. Both
+penalize seams inside fades, suppress near-duplicate candidates, and then refine each
+survivor to the sample. The end is aligned to the start by waveform correlation
+(±30 ms music, ±60 ms texture; skipped for a requested length), then both points
+slide together by up to 1 ms to minimize the wrap step. Each candidate reports exact
+final frames, `lengthSource` (`beat-grid`, `repeat-spacing`, `requested`,
+`texture-units`), the grid length, `rhythmCorrelation`, the implied tempo for whole
+bars, start/end shifts already applied, a similarity score and `close`/`partial`/
+`weak` label (music needs seam correlation plus either context similarity or rhythm
+and harmony agreement), seam correlation, wrap step vs the source's natural step, a
+like-for-like level delta, and a recommended crossfade (5–60 ms music, 50–500 ms
+texture, at most a quarter of the loop). Music ranking weighs context similarity,
+rhythm agreement and seam correlation. Labels and ranking are heuristics for choosing
+what to audition.
 
 The seam preview (`audio_listen` with `loopSeam`, and the editor's Play seam) renders
 the last `contextSeconds` of the loop, the crossfaded wrap, and its opening exactly as
