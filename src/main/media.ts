@@ -85,10 +85,14 @@ export class MediaLibrary {
       return bytes;
     });
   }
-  /** 16-bit PCM WAV of the decoded asset; a loop render keeps its loop region as a smpl chunk. */
-  pcmWav(asset: Asset) {
+  /**
+   * 16-bit PCM WAV of the decoded asset; a loop render keeps its loop region as a smpl
+   * chunk unless `loopChunk` is false (the Vorbis helper accepts only the canonical
+   * 44-byte header).
+   */
+  pcmWav(asset: Asset, loopChunk = true) {
     return this.withAudio(asset, async audio => {
-      const channels = audio.channels.length, frames = audio.channels[0].length, region = loopRegion(asset);
+      const channels = audio.channels.length, frames = audio.channels[0].length, region = loopChunk ? loopRegion(asset) : null;
       const smpl = region ? smplChunk(audio.sampleRate, region.startFrame, region.endFrame) : Buffer.alloc(0), data = 44 + smpl.length;
       const bytes = Buffer.alloc(data + frames * channels * 2);
       bytes.write('RIFF', 0); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVE', 8);

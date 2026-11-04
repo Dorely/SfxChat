@@ -35,7 +35,7 @@ export class Exporter {
       // Version 2 loop renders carry their smpl chunk; version 1 renders predate it.
       return { bytes, format: asset.format, conversion: null, smpl: asset.edit?.version === 2 && asset.format === 'wav' };
     }
-    const wav = await this.media.pcmWav(asset);
+    const wav = await this.media.pcmWav(asset, format === 'wav');
     const bytes = format === 'wav' ? wav : await new Promise<Buffer>((resolve, reject) => {
       const child = spawn(this.encoder, ['encode'], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
       const chunks: Buffer[] = []; let length = 0; let error = '';
