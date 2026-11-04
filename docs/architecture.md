@@ -157,12 +157,18 @@ Older JSON asset records without `edit` remain readable without a schema migrati
 Float32 conversion can reduce precision of imported 32-bit integer/64-bit float WAV;
 MP3 always requires decoding. Originals remain byte-identical for export.
 
-`trim_asset` also renders loop outputs. `loop: true` wrap-crossfades the selection's
-tail into its head over `crossfadeMs` (0–5000 ms) and shortens the output by the
-crossfade length, so wrapped playback continues at consecutive source frames; fades
-are rejected with a loop, and `TrimEdit.loop` records `crossfadeFrames` and
-`outputFrames`. The interval fields keep naming the source selection, and records
-without `loop` stay readable.
+`trim_asset` also renders loop outputs. `loop: true` keeps the selection's exact
+length, so the loop period equals the source spacing between `start` and `end`. The
+seam crossfade (`crossfadeMs`, 0–5000 ms) blends the loop's last frames into the
+source frames just before `start` (`crossfadeSource: 'before-start'`); a loop that
+starts closer to the file start than the crossfade instead fades its first frames in
+from the frames just after `end` (`'after-end'`). Either way the wrap lands on
+consecutive source frames. `loopCrossfadeSource`/`loopSample` in `audio.ts` define
+this once for the render and the seam preview (`renderSeam`). Fades are rejected with
+a loop. `TrimEdit` version 2 records `crossfadeFrames`, `crossfadeSource`,
+`outputFrames` and the loop region; version 1 loop records describe the superseded
+render that dropped the crossfade length (shortening the period by it). The interval
+fields keep naming the source selection, and records without `loop` stay readable.
 
 ### Musical analysis and loop finding
 

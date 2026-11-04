@@ -14,7 +14,7 @@ export const trimSchema = z.object({
   fadeInMs: z.number().finite().min(0).max(10000).optional(),
   fadeOutMs: z.number().finite().min(0).max(10000).optional(),
   name: z.string().trim().min(1).max(200).optional(),
-  loop: z.boolean().optional().describe('Render a seamless-loop variant of the selection instead of a plain cut: the tail crossfades into the head and the output is shortened by the crossfade length. Cannot be combined with fades.'),
+  loop: z.boolean().optional().describe('Render a seamless-loop variant of the selection instead of a plain cut: the output keeps the exact selection length, and the seam crossfade blends the loop end into the audio just before the start (or the opening with the audio after the end when the loop starts at the file start). Cannot be combined with fades.'),
   crossfadeMs: z.number().finite().min(0).max(5000).optional().describe('Loop seam crossfade length in milliseconds (0-5000, default 0). A small value such as 5-20 ms usually removes the click at the seam; only used when loop is true.')
 }).strict();
 export const analysisSchema = z.object({

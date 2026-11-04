@@ -56,7 +56,9 @@ nearest sample frames, and creates a new WAV derivative with its source and exac
 record preserved. A user request to trim authorizes this local edit; no generation
 or paid provider call is needed. Default fades are zero; use explicit small fades
 only when useful for a cut, and explain that they change the edge samples. A loop
-render takes no fades; its seam is the crossfade. Preserve
+render takes no fades and keeps the exact [start,end) length; its seam crossfade
+blends the loop end into the audio just before the start, so do not lengthen the
+end to compensate. Preserve
 quiet attacks and decay tails unless removal was requested. Report the retained
 interval and new asset; use set_playground to compare source and trim when helpful.
 Further refinement can use prompt-based regeneration. Sound effects are generated

@@ -332,7 +332,7 @@ export class WorkbenchService {
     this.requireOpen();
     const seam = await this.media.loopSeam(asset, loopSeamSchema.parse(raw));
     const clip = await renderClip({ channels: seam.channels, sampleRate: seam.sampleRate, decoder: 'loop seam' }, {});
-    return { ...clip, seam: { startFrame: seam.startFrame, endFrame: seam.endFrame, crossfadeFrames: seam.crossfadeFrames, seamAtSeconds: seam.seamFrame / seam.sampleRate, duration: seam.channels[0].length / seam.sampleRate } };
+    return { ...clip, seam: { startFrame: seam.startFrame, endFrame: seam.endFrame, crossfadeFrames: seam.crossfadeFrames, crossfadeSource: seam.crossfadeSource, seamAtSeconds: seam.seamFrame / seam.sampleRate, crossfadeStartSeconds: seam.crossfadeStartFrame / seam.sampleRate, duration: seam.channels[0].length / seam.sampleRate } };
   }
   async previewSeam(id: string, raw: LoopSeamInput, projectId: string) {
     this.requireOpen();
@@ -529,9 +529,9 @@ export class WorkbenchService {
             ]);
             result = {
               attachmentId,
-              clip: { duration: clip.seam.duration, seamAtSeconds: clip.seam.seamAtSeconds, sampleRate: clip.sampleRate, channels: 1, encoding: 'wav16', bytes: clip.bytes.length },
-              loop: { startFrame: clip.seam.startFrame, endFrame: clip.seam.endFrame, crossfadeFrames: clip.seam.crossfadeFrames },
-              note: `The attached WAV is what a loop render (trim_asset loop:true with this crossfadeMs) plays across its wrap: the end of the loop, the crossfade starting ${clip.seam.seamAtSeconds.toFixed(3)} s into the clip, then the loop's opening, downmixed to mono 16-bit PCM. Listening is an observation at the provider model's fidelity; the user audition decides.`
+              clip: { duration: clip.seam.duration, seamAtSeconds: clip.seam.seamAtSeconds, crossfadeStartSeconds: clip.seam.crossfadeStartSeconds, sampleRate: clip.sampleRate, channels: 1, encoding: 'wav16', bytes: clip.bytes.length },
+              loop: { startFrame: clip.seam.startFrame, endFrame: clip.seam.endFrame, crossfadeFrames: clip.seam.crossfadeFrames, crossfadeSource: clip.seam.crossfadeSource },
+              note: `The attached WAV is what a loop render (trim_asset loop:true with this crossfadeMs) plays across its wrap: the end of the loop, the wrap ${clip.seam.seamAtSeconds.toFixed(3)} s into the clip, then the loop's opening. The crossfade (${clip.seam.crossfadeStartSeconds.toFixed(3)} s in) blends ${clip.seam.crossfadeSource === 'after-end' ? 'the opening with the audio that follows the loop end' : 'the end into the audio that precedes the loop start'}, so the loop keeps its exact length. Downmixed to mono 16-bit PCM. downmixed to mono 16-bit PCM. Listening is an observation at the provider model's fidelity; the user audition decides.`
             };
             attachments.push({ label: `loop seam of “${asset.name}”`, kind: 'audio', mime: 'audio/wav', base64: clip.bytes.toString('base64') });
             break;

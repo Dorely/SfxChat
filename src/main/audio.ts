@@ -344,9 +344,41 @@ export async function renderClip(audio: DecodedAudio, input: { startSeconds?: nu
   return { bytes, startFrame, endFrame, sampleRate: audio.sampleRate };
 }
 
+/**
+ * Where a loop's seam crossfade takes its blend material without shortening the
+ * loop: the last frames fade into the audio just before the loop start
+ * ('before-start'), or, when the loop starts too close to the file start, the
+ * first frames fade in from the audio just after the loop end ('after-end').
+ * Either way the wrap lands on consecutive source frames and the loop keeps its
+ * exact length, so its period matches the source's repeat spacing.
+ */
+export function loopCrossfadeSource(startFrame: number, endFrame: number, totalFrames: number, crossfadeFrames: number): 'before-start' | 'after-end' | null {
+  if (!crossfadeFrames) return null;
+  if (startFrame >= crossfadeFrames) return 'before-start';
+  if (endFrame + crossfadeFrames <= totalFrames) return 'after-end';
+  throw new Error('The loop crossfade needs that much audio before the loop start or after its end. Shorten the crossfade or move the loop away from the file edges.');
+}
+
+/**
+ * Sample at loop position i (0 ≤ i < endFrame - startFrame) as the loop render
+ * plays it. `at(frame)` reads one source channel by absolute frame.
+ */
+export function loopSample(at: (frame: number) => number, i: number, startFrame: number, endFrame: number, crossfadeFrames: number, source: 'before-start' | 'after-end' | null): number {
+  const length = endFrame - startFrame, value = at(startFrame + i);
+  if (source === 'before-start' && i >= length - crossfadeFrames) {
+    const k = i - (length - crossfadeFrames), mix = (k + 1) / crossfadeFrames;
+    return value * (1 - mix) + at(startFrame - crossfadeFrames + k) * mix;
+  }
+  if (source === 'after-end' && i < crossfadeFrames) {
+    const mix = i / crossfadeFrames;
+    return value * mix + at(endFrame + i) * (1 - mix);
+  }
+  return value;
+}
+
 export async function renderTrim(audio: DecodedAudio, asset: Asset, input: TrimInput): Promise<{ bytes: Buffer; edit: TrimEdit }> {
   const { startFrame, endFrame } = interval(audio, input.startSeconds, input.endSeconds);
-  const frames = endFrame - startFrame, channels = audio.channels.length;
+  const frames = endFrame - startFrame, channels = audio.channels.length, total = audio.channels[0].length;
   const loop = input.loop === true;
   const crossfadeFrames = loop ? Math.round((input.crossfadeMs ?? 0) * audio.sampleRate / 1000) : 0;
   const fadeInFrames = Math.round((input.fadeInMs ?? 0) * audio.sampleRate / 1000);
@@ -354,9 +386,8 @@ export async function renderTrim(audio: DecodedAudio, asset: Asset, input: TrimI
   if (loop && (fadeInFrames || fadeOutFrames)) throw new Error('A looping trim cannot also take fades; the seam must stay continuous.');
   if (!loop && fadeInFrames + fadeOutFrames > frames) throw new Error('Combined fades cannot exceed the selection duration.');
   if (crossfadeFrames >= frames) throw new Error('The loop crossfade must be shorter than the selection.');
-  // A looped output drops the crossfade length so the wrapped end lands on the
-  // crossfaded start: playback continues at consecutive source frames.
-  const outputFrames = loop ? frames - crossfadeFrames : frames;
+  const crossfadeSource = loop ? loopCrossfadeSource(startFrame, endFrame, total, crossfadeFrames) : null;
+  const outputFrames = frames;
   const bytes = Buffer.alloc(56 + outputFrames * channels * 4);
   bytes.write('RIFF', 0); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVEfmt ', 8);
   bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(3, 20); bytes.writeUInt16LE(channels, 22);
@@ -369,18 +400,15 @@ export async function renderTrim(audio: DecodedAudio, asset: Asset, input: TrimI
       const gainIn = !loop && fadeInFrames && i < fadeInFrames ? (fadeInFrames === 1 ? 0 : i / (fadeInFrames - 1)) : 1;
       const gainOut = !loop && fadeOutFrames && outputFrames - i <= fadeOutFrames ? (fadeOutFrames === 1 ? 0 : (outputFrames - 1 - i) / (fadeOutFrames - 1)) : 1;
       for (let c = 0; c < channels; c++) {
-        let value = audio.channels[c][startFrame + i];
-        if (loop && crossfadeFrames && i < crossfadeFrames) {
-          const mix = i / crossfadeFrames;
-          value = value * mix + audio.channels[c][startFrame + frames - crossfadeFrames + i] * (1 - mix);
-        }
+        const source = audio.channels[c];
+        const value = loop ? loopSample(frame => source[frame], i, startFrame, endFrame, crossfadeFrames, crossfadeSource) : source[startFrame + i];
         bytes.writeFloatLE(value * gainIn * gainOut, 56 + (i * channels + c) * 4);
       }
     }
     await yieldWork();
   }
-  return { bytes, edit: { kind: 'trim', version: 1, sourceHash: asset.hash, sampleRate: audio.sampleRate,
+  return { bytes, edit: { kind: 'trim', version: 2, sourceHash: asset.hash, sampleRate: audio.sampleRate,
     startFrame, endFrame, fadeInFrames: loop ? 0 : fadeInFrames, fadeOutFrames: loop ? 0 : fadeOutFrames,
     requested: { ...input }, decoder: audio.decoder, outputEncoding: 'float32-wav',
-    ...(loop ? { loop: { crossfadeFrames, outputFrames } } : {}) } };
+    ...(loop ? { loop: { crossfadeFrames, crossfadeSource, outputFrames, loopStartFrame: 0, loopEndFrame: outputFrames } } : {}) } };
 }

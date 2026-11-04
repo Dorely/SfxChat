@@ -1,5 +1,6 @@
 import { BAND_COUNT, beatFrame, chromaMean, keyLabel, musicalSummary, type MusicFeatures } from './music-analysis';
 import { yieldWork, type FrameSource } from './dsp';
+import { loopCrossfadeSource, loopSample } from './audio';
 import type { Asset, LoopCandidate, LoopSearchInput, LoopSearchResult, LoopSeamInput } from '../shared/types';
 
 /**
@@ -279,23 +280,31 @@ async function refine(source: FrameSource, f: MusicFeatures, units: Units, pair:
 
 /**
  * Renders exactly what a loop render (trim_asset loop:true) plays across its wrap:
- * the last contextSeconds of the loop, the crossfaded seam, then its opening.
+ * the last contextSeconds of the loop, the wrap, then its opening, with the seam
+ * crossfade where the render places it.
  */
-export async function renderSeam(source: FrameSource, input: LoopSeamInput): Promise<{ channels: Float32Array[]; sampleRate: number; seamFrame: number; startFrame: number; endFrame: number; crossfadeFrames: number }> {
+export async function renderSeam(source: FrameSource, input: LoopSeamInput): Promise<{ channels: Float32Array[]; sampleRate: number; seamFrame: number; crossfadeStartFrame: number; startFrame: number; endFrame: number; crossfadeFrames: number; crossfadeSource: 'before-start' | 'after-end' | null }> {
   const rate = source.sampleRate, total = source.frames;
   const start = Math.round(input.startSeconds * rate), end = Math.round(input.endSeconds * rate);
   if (!(start >= 0 && end > start && end <= total)) throw new Error(`Choose an ordered loop within 0–${(total / rate).toFixed(3)} seconds.`);
   const crossfade = Math.round((input.crossfadeMs ?? 0) * rate / 1000);
   if (crossfade >= end - start) throw new Error('The loop crossfade must be shorter than the loop.');
-  const context = Math.max(1, Math.min(Math.round((input.contextSeconds ?? 2) * rate), end - start - crossfade));
-  const tail = await source.read(end - context, end), head = await source.read(start, start + context);
-  const frames = context - crossfade + context;
-  const channels = tail.map((t, c) => {
-    const out = new Float32Array(frames), h = head[c];
-    out.set(t.subarray(0, context - crossfade));
-    for (let i = 0; i < crossfade; i++) { const mix = i / crossfade; out[context - crossfade + i] = h[i] * mix + t[context - crossfade + i] * (1 - mix); }
-    out.set(h.subarray(crossfade), context);
+  const crossfadeSource = loopCrossfadeSource(start, end, total, crossfade);
+  const context = Math.max(1, crossfade, Math.min(Math.round((input.contextSeconds ?? 2) * rate), end - start));
+  // The loop's last and first `context` frames, plus the crossfade material beside them.
+  const read = async (from: number, to: number) => ({ from, to, data: to > from ? await source.read(from, to) : [] });
+  const windows = [
+    await read(end - context, end), await read(start, start + context),
+    await read(crossfadeSource === 'before-start' ? start - crossfade : 0, crossfadeSource === 'before-start' ? start : 0),
+    await read(crossfadeSource === 'after-end' ? end : 0, crossfadeSource === 'after-end' ? end + crossfade : 0)
+  ];
+  const channels = Array.from({ length: source.channels }, (_, c) => {
+    const at = (frame: number) => { const w = windows.find(w => frame >= w.from && frame < w.to)!; return w.data[c][frame - w.from]; };
+    const out = new Float32Array(2 * context);
+    for (let i = 0; i < context; i++) out[i] = loopSample(at, end - start - context + i, start, end, crossfade, crossfadeSource);
+    for (let i = 0; i < context; i++) out[context + i] = loopSample(at, i, start, end, crossfade, crossfadeSource);
     return out;
   });
-  return { channels, sampleRate: rate, seamFrame: context - crossfade, startFrame: start, endFrame: end, crossfadeFrames: crossfade };
+  const crossfadeStartFrame = crossfadeSource === 'before-start' ? context - crossfade : context;
+  return { channels, sampleRate: rate, seamFrame: context, crossfadeStartFrame, startFrame: start, endFrame: end, crossfadeFrames: crossfade, crossfadeSource };
 }

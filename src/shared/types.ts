@@ -36,10 +36,12 @@ export interface TrimInput {
   loop?: boolean; crossfadeMs?: number;
 }
 export interface TrimEdit {
-  kind: 'trim'; version: 1; sourceHash: string; sampleRate: number;
+  /** 1: loop renders were shortened by the crossfade (superseded); 2: loops keep their exact length. */
+  kind: 'trim'; version: 1 | 2; sourceHash: string; sampleRate: number;
   startFrame: number; endFrame: number; fadeInFrames: number; fadeOutFrames: number;
   requested: TrimInput; decoder: string; outputEncoding: 'float32-wav';
-  loop?: { crossfadeFrames: number; outputFrames: number };
+  /** Version 2 adds where the crossfade blend comes from and the loop region within the output. */
+  loop?: { crossfadeFrames: number; outputFrames: number; crossfadeSource?: 'before-start' | 'after-end' | null; loopStartFrame?: number; loopEndFrame?: number };
 }
 export interface AudioAnalysisInput { startSeconds?: number; endSeconds?: number; bins?: number; events?: boolean; seamProbe?: { startSeconds?: number; endSeconds?: number }; musical?: boolean }
 export interface EventInterval {

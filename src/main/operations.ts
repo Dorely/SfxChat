@@ -141,7 +141,7 @@ export class Operations {
         if (a.input.loopSeam) {
           if (a.input.startSeconds !== undefined || a.input.endSeconds !== undefined) throw new WorkbenchError('INVALID_ARGUMENTS', 'Pass either loopSeam or startSeconds/endSeconds, not both.');
           const { bytes, sampleRate, seam } = await s.seamClip(asset, a.input.loopSeam);
-          return { clip: { duration: seam.duration, seamAtSeconds: seam.seamAtSeconds, sampleRate, channels: 1 }, loop: { startFrame: seam.startFrame, endFrame: seam.endFrame, crossfadeFrames: seam.crossfadeFrames }, media: { type: 'audio', mimeType: 'audio/wav', data: bytes.toString('base64') } };
+          return { clip: { duration: seam.duration, seamAtSeconds: seam.seamAtSeconds, crossfadeStartSeconds: seam.crossfadeStartSeconds, sampleRate, channels: 1 }, loop: { startFrame: seam.startFrame, endFrame: seam.endFrame, crossfadeFrames: seam.crossfadeFrames, crossfadeSource: seam.crossfadeSource }, media: { type: 'audio', mimeType: 'audio/wav', data: bytes.toString('base64') } };
         }
         const { bytes, ...clip } = asset.format === 'mid' ? await s.midiClip(a.id, a.input, a.projectId) : await s.media.clip(asset, a.input);
         return { clip, media: { type: 'audio', mimeType: 'audio/wav', data: bytes.toString('base64') } };
