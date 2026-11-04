@@ -34,8 +34,13 @@ feedback instead of overwriting it. review_history retains prior saved revisions
 per-cue decision and feedback attribution remains separate from general asset reviews.
 Playback status proves only player state, never hearing or human approval.
 
-Export exact originals, PCM WAV, or Ogg Vorbis through the workbench. Use new absolute
-destinations. Selected-cue packs retain unresolved cues, notes, prompts, hashes,
+Export exact originals, PCM WAV, or Ogg Vorbis through the workbench to absolute
+destinations; missing parent folders are created. export_asset refuses an existing
+file unless overwrite:true, which replaces the file and its .json manifest together
+(never a directory); overwrite only what the user asked to replace. A cue pack needs
+a new directory. Loop renders' manifests add `loop`: the loop frames, intro seconds,
+and Godot import guidance (WAV carries the points; Ogg needs Loop Offset set in
+Godot). Selected-cue packs retain unresolved cues, notes, prompts, hashes,
 conversion details, and lineage in their manifest. Preview gain is not applied.
 Conversion shares the 64 MiB source/decoded-sample bounds of editing. Vorbis quality
 is 5 and currently supports mono/stereo at 8–192 kHz; use original/WAV for additional

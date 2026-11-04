@@ -40,11 +40,19 @@ grid and re-measures every length as the source's actual repeat spacing, so a mi
 tempo does not set the loop period; returned times already include those adjustments.
 Optional limits: mode, a search region, a length range in seconds or bars,
 barMultiple (4 or 8 for phrase-length loops), lengthSeconds for an exact length you
-already know, allowIntro:false to require starting at the region start, and count. When audio_listen is available, pass loopSeam {startSeconds, endSeconds,
+already know, allowIntro:false to require starting at the region start, tempoHint,
+and count. Short whole-bar loops often rank first; for a game track that should
+repeat its main section, set minSeconds near that section's length (for example the
+spacing where the music repeats) rather than settling for a 4-bar loop. Candidate
+fields say where each length came from (lengthSource, gridLengthSeconds,
+rhythmCorrelation) and what alignment already moved the points (seam.startShiftFrames,
+seam.endShiftFrames). Texture-mode crossfades are kept within half the gap between
+sharp attacks near the seam. When audio_listen is available, pass loopSeam {startSeconds, endSeconds,
 crossfadeMs} to attach exactly what the loop render plays across its wrap; the
 note gives the seam's position in the clip. Present the top few candidates in plain
 words (length, intro, match label), save the one the user picks with trim_asset
-loop:true and its recommended crossfadeMs, and ask the user to audition it. Scores
+loop:true and its recommended crossfadeMs (add introStartSeconds:0 when the song
+before the loop should play once, as in game music), and ask the user to audition it. Scores
 rank what to audition; they are not musical judgment.
 
 Designing or adjusting a loop by hand follows the same ladder: a coarse overview plus a
