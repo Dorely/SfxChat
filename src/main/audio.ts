@@ -376,10 +376,30 @@ export function loopSample(at: (frame: number) => number, i: number, startFrame:
   return value;
 }
 
+/**
+ * RIFF `smpl` chunk with one forward loop over [loopStart, loopEnd) frames. dwEnd is
+ * written exclusive, as Godot's WAV importer reads it (playback wraps when the
+ * position reaches dwEnd); the RIFF text calls dwEnd the last sample, so strictly
+ * spec-following tools play one extra sample per pass.
+ */
+export function smplChunk(sampleRate: number, loopStart: number, loopEnd: number): Buffer {
+  const chunk = Buffer.alloc(8 + 36 + 24);
+  chunk.write('smpl', 0); chunk.writeUInt32LE(36 + 24, 4);
+  chunk.writeUInt32LE(Math.round(1e9 / sampleRate), 16); // sample period (ns)
+  chunk.writeUInt32LE(60, 20); // MIDI unity note
+  chunk.writeUInt32LE(1, 36); // one sample loop
+  chunk.writeUInt32LE(0, 48); // loop type: forward
+  chunk.writeUInt32LE(loopStart, 52); chunk.writeUInt32LE(loopEnd, 56);
+  return chunk;
+}
+
 export async function renderTrim(audio: DecodedAudio, asset: Asset, input: TrimInput): Promise<{ bytes: Buffer; edit: TrimEdit }> {
   const { startFrame, endFrame } = interval(audio, input.startSeconds, input.endSeconds);
   const frames = endFrame - startFrame, channels = audio.channels.length, total = audio.channels[0].length;
   const loop = input.loop === true;
+  if (input.introStartSeconds !== undefined && !loop) throw new Error('introStartSeconds keeps an intro before a loop; it needs loop:true.');
+  const introStartFrame = loop && input.introStartSeconds !== undefined ? Math.round(input.introStartSeconds * audio.sampleRate) : startFrame;
+  if (introStartFrame < 0 || introStartFrame > startFrame) throw new Error('introStartSeconds must lie between 0 and the loop start.');
   const crossfadeFrames = loop ? Math.round((input.crossfadeMs ?? 0) * audio.sampleRate / 1000) : 0;
   const fadeInFrames = Math.round((input.fadeInMs ?? 0) * audio.sampleRate / 1000);
   const fadeOutFrames = Math.round((input.fadeOutMs ?? 0) * audio.sampleRate / 1000);
@@ -387,22 +407,25 @@ export async function renderTrim(audio: DecodedAudio, asset: Asset, input: TrimI
   if (!loop && fadeInFrames + fadeOutFrames > frames) throw new Error('Combined fades cannot exceed the selection duration.');
   if (crossfadeFrames >= frames) throw new Error('The loop crossfade must be shorter than the selection.');
   const crossfadeSource = loop ? loopCrossfadeSource(startFrame, endFrame, total, crossfadeFrames) : null;
-  const outputFrames = frames;
-  const bytes = Buffer.alloc(56 + outputFrames * channels * 4);
+  // A loop render plays [introStart, start) once, then repeats [start, end).
+  const intro = startFrame - introStartFrame, outputFrames = intro + frames;
+  const smpl = loop ? smplChunk(audio.sampleRate, intro, outputFrames) : Buffer.alloc(0), data = 56 + smpl.length;
+  const bytes = Buffer.alloc(data + outputFrames * channels * 4);
   bytes.write('RIFF', 0); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVEfmt ', 8);
   bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(3, 20); bytes.writeUInt16LE(channels, 22);
   bytes.writeUInt32LE(audio.sampleRate, 24); bytes.writeUInt32LE(audio.sampleRate * channels * 4, 28);
   bytes.writeUInt16LE(channels * 4, 32); bytes.writeUInt16LE(32, 34);
   bytes.write('fact', 36); bytes.writeUInt32LE(4, 40); bytes.writeUInt32LE(outputFrames, 44);
-  bytes.write('data', 48); bytes.writeUInt32LE(outputFrames * channels * 4, 52);
+  smpl.copy(bytes, 48);
+  bytes.write('data', data - 8); bytes.writeUInt32LE(outputFrames * channels * 4, data - 4);
   for (let block = 0; block < outputFrames; block += 32768) {
     for (let i = block; i < Math.min(outputFrames, block + 32768); i++) {
       const gainIn = !loop && fadeInFrames && i < fadeInFrames ? (fadeInFrames === 1 ? 0 : i / (fadeInFrames - 1)) : 1;
       const gainOut = !loop && fadeOutFrames && outputFrames - i <= fadeOutFrames ? (fadeOutFrames === 1 ? 0 : (outputFrames - 1 - i) / (fadeOutFrames - 1)) : 1;
       for (let c = 0; c < channels; c++) {
         const source = audio.channels[c];
-        const value = loop ? loopSample(frame => source[frame], i, startFrame, endFrame, crossfadeFrames, crossfadeSource) : source[startFrame + i];
-        bytes.writeFloatLE(value * gainIn * gainOut, 56 + (i * channels + c) * 4);
+        const value = !loop ? source[startFrame + i] : i < intro ? source[introStartFrame + i] : loopSample(frame => source[frame], i - intro, startFrame, endFrame, crossfadeFrames, crossfadeSource);
+        bytes.writeFloatLE(value * gainIn * gainOut, data + (i * channels + c) * 4);
       }
     }
     await yieldWork();
@@ -410,5 +433,5 @@ export async function renderTrim(audio: DecodedAudio, asset: Asset, input: TrimI
   return { bytes, edit: { kind: 'trim', version: 2, sourceHash: asset.hash, sampleRate: audio.sampleRate,
     startFrame, endFrame, fadeInFrames: loop ? 0 : fadeInFrames, fadeOutFrames: loop ? 0 : fadeOutFrames,
     requested: { ...input }, decoder: audio.decoder, outputEncoding: 'float32-wav',
-    ...(loop ? { loop: { crossfadeFrames, crossfadeSource, outputFrames, loopStartFrame: 0, loopEndFrame: outputFrames } } : {}) } };
+    ...(loop ? { loop: { crossfadeFrames, crossfadeSource, outputFrames, introStartFrame, loopStartFrame: intro, loopEndFrame: outputFrames } } : {}) } };
 }

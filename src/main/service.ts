@@ -370,7 +370,7 @@ export class WorkbenchService {
           this.store.insertAsset(asset);
           this.store.addToPlayground(conversationId, [asset.id]);
           this.store.addMessage(conversationId, 'tool', rendered.edit.loop
-            ? `Looped “${source.name}” from ${rendered.edit.startFrame / rendered.edit.sampleRate}–${rendered.edit.endFrame / rendered.edit.sampleRate}s with a ${rendered.edit.loop.crossfadeFrames}-frame seam crossfade as “${asset.name}”. Original preserved.`
+            ? `Looped “${source.name}” from ${rendered.edit.startFrame / rendered.edit.sampleRate}–${rendered.edit.endFrame / rendered.edit.sampleRate}s with a ${rendered.edit.loop.crossfadeFrames}-frame seam crossfade${rendered.edit.loop.loopStartFrame ? `, after a ${(rendered.edit.loop.loopStartFrame / rendered.edit.sampleRate).toFixed(3)} s intro (loop points embedded as a WAV smpl chunk)` : ''} as “${asset.name}”. Original preserved.`
             : `Trimmed “${source.name}” to ${rendered.edit.startFrame / rendered.edit.sampleRate}–${rendered.edit.endFrame / rendered.edit.sampleRate}s as “${asset.name}”. Original preserved.`);
           // Registration and durable tool result commit together: replay cannot create a second derivative.
           if (callId) this.store.finishTool(callId, JSON.stringify(asset));
@@ -531,7 +531,7 @@ export class WorkbenchService {
               attachmentId,
               clip: { duration: clip.seam.duration, seamAtSeconds: clip.seam.seamAtSeconds, crossfadeStartSeconds: clip.seam.crossfadeStartSeconds, sampleRate: clip.sampleRate, channels: 1, encoding: 'wav16', bytes: clip.bytes.length },
               loop: { startFrame: clip.seam.startFrame, endFrame: clip.seam.endFrame, crossfadeFrames: clip.seam.crossfadeFrames, crossfadeSource: clip.seam.crossfadeSource },
-              note: `The attached WAV is what a loop render (trim_asset loop:true with this crossfadeMs) plays across its wrap: the end of the loop, the wrap ${clip.seam.seamAtSeconds.toFixed(3)} s into the clip, then the loop's opening. The crossfade (${clip.seam.crossfadeStartSeconds.toFixed(3)} s in) blends ${clip.seam.crossfadeSource === 'after-end' ? 'the opening with the audio that follows the loop end' : 'the end into the audio that precedes the loop start'}, so the loop keeps its exact length. Downmixed to mono 16-bit PCM. downmixed to mono 16-bit PCM. Listening is an observation at the provider model's fidelity; the user audition decides.`
+              note: `The attached WAV is what a loop render (trim_asset loop:true with this crossfadeMs) plays across its wrap: the end of the loop, the wrap ${clip.seam.seamAtSeconds.toFixed(3)} s into the clip, then the loop's opening. The crossfade (${clip.seam.crossfadeStartSeconds.toFixed(3)} s in) blends ${clip.seam.crossfadeSource === 'after-end' ? 'the opening with the audio that follows the loop end' : 'the end into the audio that precedes the loop start'}, so the loop keeps its exact length. Downmixed to mono 16-bit PCM. Listening is an observation at the provider model's fidelity; the user audition decides.`
             };
             attachments.push({ label: `loop seam of “${asset.name}”`, kind: 'audio', mime: 'audio/wav', base64: clip.bytes.toString('base64') });
             break;

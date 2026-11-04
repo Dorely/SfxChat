@@ -15,7 +15,8 @@ export const trimSchema = z.object({
   fadeOutMs: z.number().finite().min(0).max(10000).optional(),
   name: z.string().trim().min(1).max(200).optional(),
   loop: z.boolean().optional().describe('Render a seamless-loop variant of the selection instead of a plain cut: the output keeps the exact selection length, and the seam crossfade blends the loop end into the audio just before the start (or the opening with the audio after the end when the loop starts at the file start). Cannot be combined with fades.'),
-  crossfadeMs: z.number().finite().min(0).max(5000).optional().describe('Loop seam crossfade length in milliseconds (0-5000, default 0). A small value such as 5-20 ms usually removes the click at the seam; only used when loop is true.')
+  crossfadeMs: z.number().finite().min(0).max(5000).optional().describe('Loop seam crossfade length in milliseconds (0-5000, default 0). A small value such as 5-20 ms usually removes the click at the seam; only used when loop is true.'),
+  introStartSeconds: z.number().finite().min(0).optional().describe('Loop render only: also keep the source from this time up to startSeconds as an intro that plays once before the loop (0 keeps everything before the loop). The WAV carries the loop region in a smpl chunk, which Godot imports as a forward loop by default.')
 }).strict();
 const tempoHintSchema = z.number().finite().min(40).max(300).optional().describe('Musical analysis: the tempo you expect in BPM, for example the tempo requested from the music provider. It centers the tempo prior so half, double or two-thirds readings lose; the audio still decides the exact value, and providers often miss requested tempos.');
 export const analysisSchema = z.object({

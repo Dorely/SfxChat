@@ -170,6 +170,18 @@ a loop. `TrimEdit` version 2 records `crossfadeFrames`, `crossfadeSource`,
 render that dropped the crossfade length (shortening the period by it). The interval
 fields keep naming the source selection, and records without `loop` stay readable.
 
+`introStartSeconds` (loop only, between 0 and `start`) also keeps the source from
+there up to `start` as an intro that plays once: the output is `[introStart, end)`
+with the loop region `[start − introStart, outputFrames)`. Every loop render embeds
+that region as a RIFF `smpl` chunk with one forward loop whose `dwEnd` is exclusive,
+which is how Godot's WAV importer reads it (Loop Mode "Detect From WAV", the
+default); spec-literal tools that treat `dwEnd` as inclusive play one extra frame per
+pass. `loopRegion` (media) reads the region from the edit record (version 1 loops
+repeat the whole file), PCM16 WAV exports carry the chunk too, and export manifests
+add `loop` with the frames, intro seconds and Godot guidance. Ogg Vorbis exports
+carry no loop metadata Godot reads, so the manifest gives the Loop Offset to set in
+Godot's Import dock.
+
 ### Musical analysis and loop finding
 
 `dsp.ts` holds the shared FFT, Hann window, RBJ biquads, BS.1770 K-weighting and a

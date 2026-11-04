@@ -4,10 +4,27 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import type { Asset } from '../shared/types';
 import { WorkbenchError, type ReviewBoard } from '../shared/workbench';
-import type { MediaLibrary } from './media';
+import { loopRegion, type MediaLibrary } from './media';
 import type { Store } from './store';
 
 type Format = 'original' | 'wav' | 'ogg';
+
+/**
+ * Where an exported loop render repeats, and how a game engine picks that up. The
+ * loop always ends at the file end; any intro before it plays once.
+ */
+function loopRecord(asset: Asset, embedded: boolean) {
+  const region = loopRegion(asset);
+  if (!region) return {};
+  const startSeconds = region.startFrame / region.sampleRate;
+  return { loop: {
+    startFrame: region.startFrame, endFrame: region.endFrame, sampleRate: region.sampleRate, startSeconds, introSeconds: startSeconds,
+    embedded: embedded ? 'smpl chunk: one forward loop, dwEnd exclusive (the first frame after the loop)' : null,
+    godot: embedded
+      ? 'Import with Loop Mode "Detect From WAV" (the default) to loop these exact frames.'
+      : `Godot reads no loop metadata from this file: in the Import dock, enable Loop and set Loop Offset to ${startSeconds.toFixed(6)} s (the loop runs to the file end).`
+  } };
+}
 const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 export class Exporter {
   constructor(private media: MediaLibrary, private store: Store, private encoder: string) {}
@@ -15,7 +32,8 @@ export class Exporter {
     if (format === 'original') {
       const bytes = await readFile(this.media.path(asset));
       if (hash(bytes) !== asset.hash) throw new WorkbenchError('INTEGRITY_ERROR', 'Original file integrity check failed.');
-      return { bytes, format: asset.format, conversion: null };
+      // Version 2 loop renders carry their smpl chunk; version 1 renders predate it.
+      return { bytes, format: asset.format, conversion: null, smpl: asset.edit?.version === 2 && asset.format === 'wav' };
     }
     const wav = await this.media.pcmWav(asset);
     const bytes = format === 'wav' ? wav : await new Promise<Buffer>((resolve, reject) => {
@@ -28,7 +46,7 @@ export class Exporter {
       child.on('close', code => { clearTimeout(timer); code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error(error || 'Vorbis encoding failed.')); });
       child.stdin.on('error', () => {}); child.stdin.end(wav);
     });
-    return { bytes, format, conversion: { encoding: format === 'wav' ? 'pcm-s16le' : 'vorbis', quality: format === 'ogg' ? 5 : null, encoder: format === 'ogg' ? 'libvorbis-1.3.7/libogg-1.3.6' : 'SfxChat wav16 v1', sampleRate: wav.readUInt32LE(24), channels: wav.readUInt16LE(22), previewGainApplied: false } };
+    return { bytes, format, smpl: format === 'wav', conversion: { encoding: format === 'wav' ? 'pcm-s16le' : 'vorbis', quality: format === 'ogg' ? 5 : null, encoder: format === 'ogg' ? 'libvorbis-1.3.7/libogg-1.3.6' : 'SfxChat wav16 v1', sampleRate: wav.readUInt32LE(24), channels: wav.readUInt16LE(22), previewGainApplied: false } };
   }
   private async absent(path: string) {
     if (!isAbsolute(path)) throw new WorkbenchError('INVALID_PATH', 'Export destination must be absolute.');
@@ -38,7 +56,7 @@ export class Exporter {
   private record(asset: Asset, path: string, rendered: Awaited<ReturnType<Exporter['render']>>) {
     const ancestors: Asset[] = []; let current = asset; const visited = new Set([asset.id]);
     while (current.parentId && !visited.has(current.parentId)) { current = this.store.asset(current.parentId, asset.projectId); visited.add(current.id); ancestors.push(current); }
-    return { path, hash: hash(rendered.bytes), bytes: rendered.bytes.length, format: rendered.format, conversion: rendered.conversion, source: asset, ancestors };
+    return { path, hash: hash(rendered.bytes), bytes: rendered.bytes.length, format: rendered.format, conversion: rendered.conversion, ...loopRecord(asset, rendered.smpl), source: asset, ancestors };
   }
   async asset(asset: Asset, destination: string, format: Format) {
     const manifestPath = destination + '.json'; await this.absent(destination); await this.absent(manifestPath);

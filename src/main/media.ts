@@ -3,7 +3,7 @@ import { join, extname, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { parseBuffer } from 'music-metadata';
 import type { Asset, AssetKind, AudioAnalysis, AudioAnalysisInput, AnyGenerationInput, LoopSearchInput, LoopSeamInput, SpectrogramInput, TrimInput } from '../shared/types';
-import { analyzeAudio, decodeAudio, interval, renderClip, renderTrim, MAX_AUDIO_BYTES, type ClipRender, type DecodedAudio } from './audio';
+import { analyzeAudio, decodeAudio, interval, renderClip, renderTrim, smplChunk, MAX_AUDIO_BYTES, type ClipRender, type DecodedAudio } from './audio';
 import { renderSpectrogram, type SpectrogramRender } from './spectrogram';
 import { midiFileDurationSeconds } from './midi';
 import { analyzeWav, WavReader } from './wav-reader';
@@ -85,18 +85,21 @@ export class MediaLibrary {
       return bytes;
     });
   }
+  /** 16-bit PCM WAV of the decoded asset; a loop render keeps its loop region as a smpl chunk. */
   pcmWav(asset: Asset) {
     return this.withAudio(asset, async audio => {
-      const channels = audio.channels.length, frames = audio.channels[0].length;
-      const bytes = Buffer.alloc(44 + frames * channels * 2);
+      const channels = audio.channels.length, frames = audio.channels[0].length, region = loopRegion(asset);
+      const smpl = region ? smplChunk(audio.sampleRate, region.startFrame, region.endFrame) : Buffer.alloc(0), data = 44 + smpl.length;
+      const bytes = Buffer.alloc(data + frames * channels * 2);
       bytes.write('RIFF', 0); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVE', 8);
       bytes.write('fmt ', 12); bytes.writeUInt32LE(16, 16); bytes.writeUInt16LE(1, 20); bytes.writeUInt16LE(channels, 22);
       bytes.writeUInt32LE(audio.sampleRate, 24); bytes.writeUInt32LE(audio.sampleRate * channels * 2, 28);
-      bytes.writeUInt16LE(channels * 2, 32); bytes.writeUInt16LE(16, 34); bytes.write('data', 36); bytes.writeUInt32LE(bytes.length - 44, 40);
+      bytes.writeUInt16LE(channels * 2, 32); bytes.writeUInt16LE(16, 34); smpl.copy(bytes, 36);
+      bytes.write('data', data - 8); bytes.writeUInt32LE(frames * channels * 2, data - 4);
       for (let offset = 0; offset < frames; offset += 32768) {
         for (let frame = offset; frame < Math.min(frames, offset + 32768); frame++) for (let ch = 0; ch < channels; ch++) {
           const sample = Math.max(-1, Math.min(1, audio.channels[ch][frame]));
-          bytes.writeInt16LE(Math.round(sample * (sample < 0 ? 32768 : 32767)), 44 + (frame * channels + ch) * 2);
+          bytes.writeInt16LE(Math.round(sample * (sample < 0 ? 32768 : 32767)), data + (frame * channels + ch) * 2);
         }
         await new Promise<void>(resolve => setImmediate(resolve));
       }
@@ -167,6 +170,13 @@ export class MediaLibrary {
     return this.save(bytes, extension.slice(1) as 'mp3' | 'wav', { projectId, name: basename(path, extension), source: 'imported', kind });
   }
 
+}
+
+/** The repeating region of a loop render in output frames; version 1 loops repeat the whole file. */
+export function loopRegion(asset: Pick<Asset, 'edit'>): { startFrame: number; endFrame: number; sampleRate: number } | null {
+  const loop = asset.edit?.loop;
+  if (!loop) return null;
+  return { startFrame: loop.loopStartFrame ?? 0, endFrame: loop.loopEndFrame ?? loop.outputFrames, sampleRate: asset.edit!.sampleRate };
 }
 
 export function generatedFields(input: AnyGenerationInput, kind: AssetKind, projectId: string): Partial<Asset> & { projectId: string } {

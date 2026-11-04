@@ -34,14 +34,16 @@ export interface TrimInput {
   startSeconds: number; endSeconds: number; fadeInMs?: number; fadeOutMs?: number; name?: string;
   /** Render a wrap-crossfaded loop instead of a plain cut; fades are not allowed with it. */
   loop?: boolean; crossfadeMs?: number;
+  /** Loop render only: keep the source from here up to startSeconds as an intro that plays once. */
+  introStartSeconds?: number;
 }
 export interface TrimEdit {
   /** 1: loop renders were shortened by the crossfade (superseded); 2: loops keep their exact length. */
   kind: 'trim'; version: 1 | 2; sourceHash: string; sampleRate: number;
   startFrame: number; endFrame: number; fadeInFrames: number; fadeOutFrames: number;
   requested: TrimInput; decoder: string; outputEncoding: 'float32-wav';
-  /** Version 2 adds where the crossfade blend comes from and the loop region within the output. */
-  loop?: { crossfadeFrames: number; outputFrames: number; crossfadeSource?: 'before-start' | 'after-end' | null; loopStartFrame?: number; loopEndFrame?: number };
+  /** Version 2 adds the crossfade source, the kept intro's source frame, and the loop region [loopStartFrame, loopEndFrame) within the output. */
+  loop?: { crossfadeFrames: number; outputFrames: number; crossfadeSource?: 'before-start' | 'after-end' | null; introStartFrame?: number; loopStartFrame?: number; loopEndFrame?: number };
 }
 export interface AudioAnalysisInput { startSeconds?: number; endSeconds?: number; bins?: number; events?: boolean; seamProbe?: { startSeconds?: number; endSeconds?: number }; musical?: boolean; tempoHint?: number; keyHint?: string }
 export interface EventInterval {

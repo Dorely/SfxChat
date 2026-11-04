@@ -64,7 +64,10 @@ or paid provider call is needed. Default fades are zero; use explicit small fade
 only when useful for a cut, and explain that they change the edge samples. A loop
 render takes no fades and keeps the exact [start,end) length; its seam crossfade
 blends the loop end into the audio just before the start, so do not lengthen the
-end to compensate. Preserve
+end to compensate. introStartSeconds (usually 0) keeps the song before the loop as an
+intro that plays once; every loop WAV embeds its loop region in a smpl chunk, which
+Godot imports as a forward loop by default. For Ogg exports the manifest gives the
+Loop Offset to set in Godot's Import dock instead. Preserve
 quiet attacks and decay tails unless removal was requested. Report the retained
 interval and new asset; use set_playground to compare source and trim when helpful.
 Further refinement can use prompt-based regeneration. Sound effects are generated
