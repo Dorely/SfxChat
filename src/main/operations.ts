@@ -61,8 +61,8 @@ export const operationDefinitions = {
   review_wait: { schema: obj({ ...board, afterRevision: z.number().int().min(0).optional(), until: z.enum(['change', 'completed']).default('change'), from: z.enum(['user', 'any']).default('user'), wait: z.number().int().min(0).max(1800).default(50) }), description: 'Block until the user acts on a review: a saved draft, a cue decision or note, Done (completion), or reopening (from any includes agents). until completed waits for the review to be completed. Returns the saved revisions after afterRevision (default: now) as events with origin, kind and changed cue keys, the review as it is now, a cursor to pass as afterRevision next time, and timedOut. wait is seconds (default 50, under common client tool timeouts; raise it only when your client allows longer calls). Completion does not imply all cues were accepted. For one streaming connection run sfxchat watch-review.' },
   review_open: { schema: obj(board), description: 'Show and focus this review in SfxChat without autoplay.' },
   playback_status: { schema: obj(session), description: 'Read actual renderer playback status. Does not imply listening approval.' },
-  export_asset: { schema: obj({ ...project, id: idSchema, ...exportFields }), description: 'Export an original, PCM WAV or Ogg Vorbis plus provenance; refuses existing files.' },
-  export_review: { schema: obj({ ...board, expectedRevision: z.number().int().positive(), ...exportFields }), description: 'Export selected cues and a manifest of choices, unresolved cues, feedback and provenance into a new directory.' }
+  export_asset: { schema: obj({ ...project, id: idSchema, ...exportFields, overwrite: z.boolean().default(false).describe('Replace an existing file and its .json manifest (never a directory). Default false refuses existing files.') }), description: 'Export an original, PCM WAV or Ogg Vorbis plus a .json provenance manifest, creating missing parent folders. Loop renders record their loop points and Godot import guidance. Refuses existing files unless overwrite is true.' },
+  export_review: { schema: obj({ ...board, expectedRevision: z.number().int().positive(), ...exportFields }), description: 'Export selected cues and a manifest of choices, unresolved cues, feedback and provenance into a new directory (missing parent folders are created).' }
 };
 export type OperationName = keyof typeof operationDefinitions;
 export type OperationArgs<N extends OperationName> = z.infer<(typeof operationDefinitions)[N]['schema']>;
@@ -175,7 +175,7 @@ export class Operations {
       }
       case 'review_open': review(); return this.ui.send({ action: 'open', projectId: a.projectId, sessionId: store.ensureConversation(a.projectId), reviewId: a.reviewId });
       case 'playback_status': return this.ui.state(a.sessionId);
-      case 'export_asset': return this.exporter.asset(store.asset(a.id, a.projectId), a.destination, a.format);
+      case 'export_asset': return this.exporter.asset(store.asset(a.id, a.projectId), a.destination, a.format, a.overwrite);
       case 'export_review': { const r = review(); if (r.revision !== a.expectedRevision) throw new WorkbenchError('REVISION_CONFLICT', 'Read the current review before exporting.'); return this.exporter.review(r, a.destination, a.format); }
     }
   }

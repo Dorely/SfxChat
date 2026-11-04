@@ -222,15 +222,20 @@ Playback status is renderer state, never evidence of hearing or approval. Model
 listening requires an audio-capable harness; the human's audition remains separate.
 
 The asset inspector offers original, PCM WAV, and Ogg Vorbis export. Cue packs export
-selected candidates under stable cue-key filenames. Destinations must be absolute
-and new. Originals are hash checked. WAV is 16-bit PCM; Vorbis uses quality 5,
+selected candidates under stable cue-key filenames. Destinations must be absolute;
+missing parent folders are created. A cue pack directory must be new; a single-asset
+export refuses an existing file unless `overwrite: true`, which writes temporary files
+and renames them over the file and its sidecar (never over a directory). The native
+save dialog passes `overwrite` after the OS confirms replacing. Originals are hash checked. WAV is 16-bit PCM; Vorbis uses quality 5,
 libvorbis 1.3.7 and libogg 1.3.6. Conversion retains sample rate and channel count,
 clips float values outside full scale for PCM16, and never applies preview gain.
 Conversion uses the existing 64 MiB source/decoded-float bounds. Vorbis currently
 supports mono/stereo, 8–192 kHz; other channel counts can use original or WAV.
 
 Individual exports include a JSON sidecar with source record, ancestry, original
-and exported hashes, prompt/settings and conversion details. Packs include
+and exported hashes, prompt/settings and conversion details; loop renders add `loop`
+(frames, intro seconds, whether a WAV `smpl` chunk carries the points, and Godot
+import guidance). Packs include
 `manifest.json`, the saved review with unresolved/rejected cues and notes, and all
 selected-file records. A failed pack leaves `incomplete.json` and reports
 `EXPORT_INCOMPLETE`; integrate only complete packs. Original audio and its provenance

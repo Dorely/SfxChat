@@ -1,6 +1,6 @@
-import { access, mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
-import { isAbsolute, join, basename } from 'node:path';
-import { createHash } from 'node:crypto';
+import { access, mkdir, readFile, rename, stat, writeFile, unlink } from 'node:fs/promises';
+import { isAbsolute, join, basename, dirname } from 'node:path';
+import { createHash, randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import type { Asset } from '../shared/types';
 import { WorkbenchError, type ReviewBoard } from '../shared/workbench';
@@ -53,17 +53,33 @@ export class Exporter {
     try { await access(path); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return; throw e; }
     throw new WorkbenchError('DESTINATION_EXISTS', `Destination already exists: ${path}`);
   }
+  /** An overwrite may replace an existing file, never a directory. */
+  private async replaceable(path: string) {
+    if (!isAbsolute(path)) throw new WorkbenchError('INVALID_PATH', 'Export destination must be absolute.');
+    try { if ((await stat(path)).isDirectory()) throw new WorkbenchError('DESTINATION_EXISTS', `Destination is a directory: ${path}`); }
+    catch (e) { if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e; }
+  }
   private record(asset: Asset, path: string, rendered: Awaited<ReturnType<Exporter['render']>>) {
     const ancestors: Asset[] = []; let current = asset; const visited = new Set([asset.id]);
     while (current.parentId && !visited.has(current.parentId)) { current = this.store.asset(current.parentId, asset.projectId); visited.add(current.id); ancestors.push(current); }
     return { path, hash: hash(rendered.bytes), bytes: rendered.bytes.length, format: rendered.format, conversion: rendered.conversion, ...loopRecord(asset, rendered.smpl), source: asset, ancestors };
   }
-  async asset(asset: Asset, destination: string, format: Format) {
-    const manifestPath = destination + '.json'; await this.absent(destination); await this.absent(manifestPath);
+  async asset(asset: Asset, destination: string, format: Format, overwrite = false) {
+    const manifestPath = destination + '.json', check = (path: string) => overwrite ? this.replaceable(path) : this.absent(path);
+    await check(destination); await check(manifestPath);
     const rendered = await this.render(asset, format), record = this.record(asset, destination, rendered);
+    const manifest = JSON.stringify({ version: 1, ...record }, null, 2) + '\n';
+    await mkdir(dirname(destination), { recursive: true });
+    if (overwrite) {
+      // Complete both temporary files first, then rename each over its target.
+      const suffix = `.sfxchat-${randomBytes(4).toString('hex')}.tmp`, temps = [destination + suffix, manifestPath + suffix];
+      try { await writeFile(temps[0], rendered.bytes, { flag: 'wx' }); await writeFile(temps[1], manifest, { flag: 'wx' }); await rename(temps[0], destination); await rename(temps[1], manifestPath); }
+      catch (e) { await Promise.all(temps.map(path => unlink(path).catch(() => {}))); throw e; }
+      return { ...record, manifestPath };
+    }
     // Exclusive creates handle races after preflight. Only remove files we created ourselves.
     await writeFile(destination, rendered.bytes, { flag: 'wx' });
-    try { await writeFile(manifestPath, JSON.stringify({ version: 1, ...record }, null, 2) + '\n', { flag: 'wx' }); }
+    try { await writeFile(manifestPath, manifest, { flag: 'wx' }); }
     catch (e) { await unlink(destination); throw e; }
     return { ...record, manifestPath };
   }
@@ -72,6 +88,7 @@ export class Exporter {
     const selected = board.cues.filter(c => c.decision === 'selected').map(cue => ({ cue, asset: this.store.asset(cue.selectedAssetId!, board.projectId) }));
     // Verify all sources and names before creating the output directory; render serially to keep memory bounded.
     for (const { cue, asset } of selected) { if (/^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i.test(cue.key)) throw new WorkbenchError('INVALID_PATH', 'Cue key is a reserved Windows filename.'); const bytes = await readFile(this.media.path(asset)); if (hash(bytes) !== asset.hash) throw new WorkbenchError('INTEGRITY_ERROR', `Integrity check failed: ${asset.id}`); }
+    await mkdir(dirname(destination), { recursive: true });
     await mkdir(destination);
     const files: unknown[] = [];
     try {
