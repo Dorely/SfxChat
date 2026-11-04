@@ -30,11 +30,25 @@ Fixes from agent feedback on looping a song. Local DSP only; no provider calls.
 - Not checked: Godot itself was not run, so the import of the `smpl` chunk rests on
   Godot's documented "Detect From WAV" behavior and its importer reading `dwEnd` as
   exclusive. PCM16 `pcmWav` exports were checked by code review, not by a harness.
-- `npm run typecheck` and `npm run build` passed after the final edits.
-- Browser check not run: `npm run dev:browser` refused to start because the
-  installed SfxChat was running and owns the library, and it was left open. The loop
-  editor's keep-intro option and the export changes have no UI evidence yet. No audio
-  was heard.
+- `npm run typecheck` and `npm run build` passed after the final edits, including the
+  Ogg fix.
+- Browser check through `npm run dev:browser`, after the user had the installed
+  SfxChat closed; the host was stopped afterwards and no audio was played or heard:
+  - On `battle_wild_full` (126 BPM estimate) the Loop editor found 4-bar candidates,
+    showed the keep-intro option and its hint, and saved candidate 1 with the intro as
+    "UI check intro loop (battle_wild_full)" (75.1 s; edit `loopStartFrame` 3239975,
+    `loopEndFrame` 3605661). The activity line reported the intro and smpl chunk.
+    That asset stays in the user's library.
+  - `export_asset` through the real operation into a missing nested folder: the
+    original float32 WAV and the PCM16 WAV both had `smpl` start 3239975 and end
+    3605661 (the file end), and their manifests gave the loop and Godot note.
+  - The first Ogg export failed with "Expected canonical PCM WAV input": the Vorbis
+    helper rejects the smpl chunk. After the fix (the encoder gets a WAV without the
+    chunk) and a rebuild, the Ogg export succeeded (`OggS` header) and its manifest
+    gave the Loop Offset 67.499479 s.
+  - A repeat export returned `DESTINATION_EXISTS`; `overwrite: true` replaced the file
+    with no temporary files left; a directory target was refused.
+  - Not covered: the native save dialog's overwrite path (desktop-only) and Godot.
 
 # ElevenLabs latest-model defaults (2026-11-01)
 
