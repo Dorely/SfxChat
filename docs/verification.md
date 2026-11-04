@@ -50,6 +50,26 @@ Fixes from agent feedback on looping a song. Local DSP only; no provider calls.
     with no temporary files left; a directory target was refused.
   - Not covered: the native save dialog's overwrite path (desktop-only) and Godot.
 
+Install and skill refresh (same day, at the user's request):
+
+- The skill's editing and workflow references gained export overwrite/folder rules
+  and loop-search details (minSeconds for a track's main repeat, candidate length
+  fields, texture crossfade cap, introStartSeconds for game music).
+- `npm run package` built `release/SfxChat Setup 0.2.0.exe`. With the user's
+  authorization, 11 `sfxchat-runtime.exe` MCP servers held by open Claude Code
+  sessions were ended so the installer could replace the runtime; no SfxChat window
+  was open. The silent NSIS install exited 0, and the installed `app.asar` and
+  `sfxchat-runtime.exe` SHA-256 hashes matched the packaged ones (`app.asar`
+  `EC6BDBAEC31F3E54258DED379E82A5BA18CE2AAF5BFB235891C7C3352A0F8BF9`).
+- `sfxchat skill install --scope user --target claude --mcp` first refused with
+  `INSTALL_CONFLICT` on `editing.md`. Every installed skill file matched a committed
+  repo version (no local customization; only `editing.md` and `workflow.md` were
+  stale), so it was rerun with `--force`, which backed up the three replaced files.
+  All 17 installed skill files then matched HEAD, a dry run reported 19 entries
+  up to date, and the installed CLI `status` returned `ready:true` (starting the
+  installed app). Open Claude Code sessions need an MCP reconnect or restart to see
+  the new tool schemas.
+
 # ElevenLabs latest-model defaults (2026-11-01)
 
 Effects, music, and voice default to `latest`; exact IDs stay selectable as pins.
