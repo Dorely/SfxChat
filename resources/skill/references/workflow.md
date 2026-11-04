@@ -42,8 +42,11 @@ a new directory. Loop renders' manifests add `loop`: the loop frames, intro seco
 and Godot import guidance (WAV carries the points; Ogg needs Loop Offset set in
 Godot). Selected-cue packs retain unresolved cues, notes, prompts, hashes,
 conversion details, and lineage in their manifest. Preview gain is not applied.
-Conversion shares the 64 MiB source/decoded-sample bounds of editing. Vorbis quality
-is 5 and currently supports mono/stereo at 8–192 kHz; use original/WAV for additional
+`inspect_asset` returns `filePath`, the stored original; read it for outside tools but never
+modify, move or delete it, and use export_asset for copies.
+Conversion shares the 64 MiB source/decoded-sample bounds of editing. Vorbis quality is
+`oggQuality` 0–10 (oggenc -q scale, default 5; pass e.g. 6 when the game uses it). It
+currently supports mono/stereo at 8–192 kHz; use original/WAV for additional
 channels. A partial export is explicitly incomplete and must not be integrated as a
 finished pack. Keep the manifest with the files and validate the selected sounds in
 their actual application context.

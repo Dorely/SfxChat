@@ -167,7 +167,7 @@ export const commandSchemas = {
   previewMidi: z.tuple([midiCompositionSchema]),
   saveMidiEdit: z.tuple([idSchema, idSchema.nullable(), midiCompositionSchema, z.string().trim().min(1).max(200).optional()]),
   soundfontInfo: z.tuple([]),
-  importAudio: z.tuple([idSchema, assetKindSchema.optional()]), exportAsset: z.tuple([idSchema, z.enum(['original', 'wav', 'ogg']).optional()]), searchAssets: z.tuple([z.string()]),
+  importAudio: z.tuple([idSchema, assetKindSchema.optional()]), exportAsset: z.tuple([idSchema, z.enum(['original', 'wav', 'ogg']).optional(), z.number().finite().min(0).max(10).optional()]), searchAssets: z.tuple([z.string()]),
   startLogin: z.tuple([]), cancelLogin: z.tuple([]), logout: z.tuple([]),
   saveModel: z.tuple([z.union([z.literal('backend default'), z.string().trim().regex(/^[a-zA-Z0-9._-]+$/)])]),
   saveChatProvider: z.tuple([z.object({ id: z.string().trim().min(1).max(80).optional(), label: z.string().trim().min(1).max(80), baseUrl: z.string().trim().min(1).max(500), kind: providerKindSchema, apiKey: z.string().max(500).optional() }).strict()]),

@@ -320,12 +320,12 @@ void acquireInstanceLock().then(acquired => {
         const result = await dialog.showOpenDialog(window!, { title: 'Import audio', filters: [{ name: 'Audio or MIDI', extensions: ['wav', 'mp3', 'mid', 'midi'] }], properties: ['openFile', 'multiSelections'] });
         if (!result.canceled) await operations!.call('import_audio', { ...context(id), paths: result.filePaths, kind: kind ?? 'effect' }, 'user');
       },
-      exportAsset: async (id, format = 'original') => {
+      exportAsset: async (id, format = 'original', oggQuality = 5) => {
         const asset = store.asset(id, store.activeProjectId());
         const extension = format === 'original' ? asset.format : format;
         const result = await dialog.showSaveDialog(window!, { title: 'Export audio', defaultPath: `${asset.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')}.${extension}`, filters: [{ name: format === 'original' ? 'Original audio' : format === 'wav' ? 'PCM WAV' : 'Ogg Vorbis', extensions: [extension] }] });
         // The native save dialog already confirmed replacing an existing file.
-        if (!result.canceled && result.filePath) await operations!.call('export_asset', { projectId: asset.projectId, id, destination: result.filePath, format, overwrite: true }, 'user');
+        if (!result.canceled && result.filePath) await operations!.call('export_asset', { projectId: asset.projectId, id, destination: result.filePath, format, oggQuality, overwrite: true }, 'user');
       },
       startLogin: () => auth!.startLogin(), cancelLogin: () => auth!.cancelLogin(), logout: () => auth!.logout(),
       saveModel: value => { const resolved = resolveChatModel(value); store.setSetting('chat-model', resolved); registry.setActive(`codex:${resolved}`, registry.activeSelection().effort || 'medium'); },

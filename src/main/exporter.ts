@@ -28,7 +28,7 @@ function loopRecord(asset: Asset, embedded: boolean) {
 const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 export class Exporter {
   constructor(private media: MediaLibrary, private store: Store, private encoder: string) {}
-  private async render(asset: Asset, format: Format) {
+  private async render(asset: Asset, format: Format, oggQuality = 5) {
     if (format === 'original') {
       const bytes = await readFile(this.media.path(asset));
       if (hash(bytes) !== asset.hash) throw new WorkbenchError('INTEGRITY_ERROR', 'Original file integrity check failed.');
@@ -37,7 +37,7 @@ export class Exporter {
     }
     const wav = await this.media.pcmWav(asset, format === 'wav');
     const bytes = format === 'wav' ? wav : await new Promise<Buffer>((resolve, reject) => {
-      const child = spawn(this.encoder, ['encode'], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+      const child = spawn(this.encoder, ['encode', String(oggQuality)], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
       const chunks: Buffer[] = []; let length = 0; let error = '';
       const timer = setTimeout(() => { child.kill(); reject(new Error('Audio encoding timed out.')); }, 120000);
       child.stdout.on('data', (chunk: Buffer) => { length += chunk.length; if (length > 64 * 1024 * 1024) { child.kill(); reject(new Error('Encoded audio exceeds 64 MiB.')); } else chunks.push(chunk); });
@@ -46,7 +46,7 @@ export class Exporter {
       child.on('close', code => { clearTimeout(timer); code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error(error || 'Vorbis encoding failed.')); });
       child.stdin.on('error', () => {}); child.stdin.end(wav);
     });
-    return { bytes, format, smpl: format === 'wav', conversion: { encoding: format === 'wav' ? 'pcm-s16le' : 'vorbis', quality: format === 'ogg' ? 5 : null, encoder: format === 'ogg' ? 'libvorbis-1.3.7/libogg-1.3.6' : 'SfxChat wav16 v1', sampleRate: wav.readUInt32LE(24), channels: wav.readUInt16LE(22), previewGainApplied: false } };
+    return { bytes, format, smpl: format === 'wav', conversion: { encoding: format === 'wav' ? 'pcm-s16le' : 'vorbis', quality: format === 'ogg' ? oggQuality : null, encoder: format === 'ogg' ? 'libvorbis-1.3.7/libogg-1.3.6' : 'SfxChat wav16 v1', sampleRate: wav.readUInt32LE(24), channels: wav.readUInt16LE(22), previewGainApplied: false } };
   }
   private async absent(path: string) {
     if (!isAbsolute(path)) throw new WorkbenchError('INVALID_PATH', 'Export destination must be absolute.');
@@ -64,10 +64,10 @@ export class Exporter {
     while (current.parentId && !visited.has(current.parentId)) { current = this.store.asset(current.parentId, asset.projectId); visited.add(current.id); ancestors.push(current); }
     return { path, hash: hash(rendered.bytes), bytes: rendered.bytes.length, format: rendered.format, conversion: rendered.conversion, ...loopRecord(asset, rendered.smpl), source: asset, ancestors };
   }
-  async asset(asset: Asset, destination: string, format: Format, overwrite = false) {
+  async asset(asset: Asset, destination: string, format: Format, overwrite = false, oggQuality = 5) {
     const manifestPath = destination + '.json', check = (path: string) => overwrite ? this.replaceable(path) : this.absent(path);
     await check(destination); await check(manifestPath);
-    const rendered = await this.render(asset, format), record = this.record(asset, destination, rendered);
+    const rendered = await this.render(asset, format, oggQuality), record = this.record(asset, destination, rendered);
     const manifest = JSON.stringify({ version: 1, ...record }, null, 2) + '\n';
     await mkdir(dirname(destination), { recursive: true });
     if (overwrite) {
@@ -83,7 +83,7 @@ export class Exporter {
     catch (e) { await unlink(destination); throw e; }
     return { ...record, manifestPath };
   }
-  async review(board: ReviewBoard, destination: string, format: Format) {
+  async review(board: ReviewBoard, destination: string, format: Format, oggQuality = 5) {
     await this.absent(destination);
     const selected = board.cues.filter(c => c.decision === 'selected').map(cue => ({ cue, asset: this.store.asset(cue.selectedAssetId!, board.projectId) }));
     // Verify all sources and names before creating the output directory; render serially to keep memory bounded.
@@ -95,7 +95,7 @@ export class Exporter {
       for (const { cue, asset } of selected) {
         const filename = `${cue.key}.${format === 'original' ? asset.format : format}`;
         if (/^(con|prn|aux|nul|com[0-9]|lpt[0-9])\./i.test(filename)) throw new WorkbenchError('INVALID_PATH', 'Cue key is a reserved Windows filename.');
-        const rendered = await this.render(asset, format);
+        const rendered = await this.render(asset, format, oggQuality);
         await writeFile(join(destination, filename), rendered.bytes, { flag: 'wx' });
         files.push({ cueKey: cue.key, ...this.record(asset, basename(filename), rendered) });
       }

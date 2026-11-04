@@ -58,10 +58,10 @@ export function connectBrowserApi() {
     const snapshot: Snapshot = await api.snapshot();
     result(await api.operation('import_audio', { projectId: snapshot.activeProjectId, sessionId, kind, paths: paths.split('\n').map(p => p.trim()).filter(Boolean) }));
   };
-  api.exportAsset = async (id, format = 'original') => {
+  api.exportAsset = async (id, format = 'original', oggQuality = 5) => {
     const destination = await hostPathDialog('Export audio', 'New absolute export filename'); if (!destination) return;
     const snapshot: Snapshot = await api.snapshot();
-    result(await api.operation('export_asset', { projectId: snapshot.activeProjectId, id, destination, format }));
+    result(await api.operation('export_asset', { projectId: snapshot.activeProjectId, id, destination, format, oggQuality }));
   };
   window.addEventListener('pagehide', () => events.close(), { once: true });
   return api;

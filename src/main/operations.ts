@@ -16,7 +16,7 @@ const board = { ...project, reviewId: idSchema };
 const wait = { timeoutMs: z.number().int().min(0).max(30000).default(10000) };
 const generation = { ...session, requestId: z.string().uuid().describe('Keep this ID to recover the same request without purchasing another batch.') };
 const obj = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
-const exportFields = { destination: z.string().min(1), format: z.enum(['original', 'wav', 'ogg']).default('original') };
+const exportFields = { destination: z.string().min(1), format: z.enum(['original', 'wav', 'ogg']).default('original'), oggQuality: z.number().finite().min(0).max(10).default(5).describe('Ogg Vorbis VBR quality on the usual 0-10 scale (oggenc -q); default 5, higher is larger and more transparent. Ignored for other formats.') };
 export const operationDefinitions = {
   ...arrangementOperationDefinitions,
   status: { schema: obj({}), description: 'App readiness and provider status, without secrets.' },
@@ -42,7 +42,7 @@ export const operationDefinitions = {
   jobs_wait: { schema: obj({ ...session, jobIds: z.array(idSchema).min(1), ...wait }), description: 'Bounded wait for specified jobs; timeout does not cancel generation.' },
   cancel_job: { schema: obj({ ...session, id: idSchema }), description: 'Cancel queued work or stop a running request with uncertain provider outcome.' },
   search_assets: { schema: obj({ ...project, query: z.string().default('') }), description: 'Search assets, prompts, traits and feedback in a project.' },
-  inspect_asset: { schema: obj({ ...project, id: idSchema }), description: 'Read immutable provenance and current asset metadata.' },
+  inspect_asset: { schema: obj({ ...project, id: idSchema }), description: 'Read immutable provenance and current asset metadata, plus filePath: the stored original file. Read it, never modify, move or delete it; use export_asset for copies.' },
   update_asset: { schema: obj({ ...session, id: idSchema, patch: patchSchema }), description: 'Name, tag, organize, and review an asset without changing its bytes.' },
   import_audio: { schema: obj({ ...session, paths: z.array(z.string().min(1)).min(1).max(128), kind: assetKindSchema.default('effect') }), description: 'Import WAV/MP3 files using absolute paths into this project/session.' },
   set_playground: { schema: obj({ ...project, assetIds: z.array(idSchema) }), description: 'Arrange the project’s shared comparison board.' },
@@ -128,7 +128,7 @@ export class Operations {
       case 'jobs_wait': { await this.waitUntil(() => getJobs().every((j: { status: string }) => !['queued', 'running'].includes(j.status)), a.timeoutMs); return { jobs: getJobs() }; }
       case 'cancel_job': { if (!sessionJobs().some(j => j.id === a.id)) throw new WorkbenchError('NOT_FOUND', 'Job not found in session.'); s.cancelJob(a.id); return store.job(a.id); }
       case 'search_assets': return store.search(a.query, a.projectId);
-      case 'inspect_asset': return store.asset(a.id, a.projectId);
+      case 'inspect_asset': { const asset = store.asset(a.id, a.projectId); return { ...asset, filePath: s.media.path(asset) }; }
       case 'update_asset': s.updateAsset(a.id, a.patch, a.sessionId); return store.asset(a.id, a.projectId);
       case 'import_audio': { if (a.paths.some((path: string) => !isAbsolute(path))) throw new WorkbenchError('INVALID_PATH', 'Import paths must be absolute.'); return s.importFiles(a.sessionId, a.paths, a.kind); }
       case 'set_playground': store.setProjectPlayground(a.projectId, a.assetIds); return { assetIds: store.playground(a.projectId)[a.projectId] };
@@ -175,8 +175,8 @@ export class Operations {
       }
       case 'review_open': review(); return this.ui.send({ action: 'open', projectId: a.projectId, sessionId: store.ensureConversation(a.projectId), reviewId: a.reviewId });
       case 'playback_status': return this.ui.state(a.sessionId);
-      case 'export_asset': return this.exporter.asset(store.asset(a.id, a.projectId), a.destination, a.format, a.overwrite);
-      case 'export_review': { const r = review(); if (r.revision !== a.expectedRevision) throw new WorkbenchError('REVISION_CONFLICT', 'Read the current review before exporting.'); return this.exporter.review(r, a.destination, a.format); }
+      case 'export_asset': return this.exporter.asset(store.asset(a.id, a.projectId), a.destination, a.format, a.overwrite, a.oggQuality);
+      case 'export_review': { const r = review(); if (r.revision !== a.expectedRevision) throw new WorkbenchError('REVISION_CONFLICT', 'Read the current review before exporting.'); return this.exporter.review(r, a.destination, a.format, a.oggQuality); }
     }
   }
   private async waitUntil(done: () => boolean, timeout: number) {

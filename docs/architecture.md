@@ -681,7 +681,7 @@ Playback status is not an observation about audio content or listener decisions.
 
 Exporter verifies source integrity and creates exclusive new files/directories. PCM16
 conversion uses the serialized decoded-media owner and existing source/decoded bounds;
-Vorbis runs the bundled helper with a timeout and output cap, quality 5 and mono/stereo
+Vorbis runs the bundled helper with a timeout and output cap, `oggQuality` 0–10 (default 5, recorded in the sidecar) and mono/stereo
 8–192 kHz bounds. Conversion preserves rate/count and excludes preview gain. Original
 export preserves bytes. Single assets get sidecars; packs get saved decisions (including
 unresolved cues), feedback, source/ancestor records, hashes and conversion settings.

@@ -35,7 +35,7 @@ export function createApi({ call, onChanged, onUiCommand, mediaUrl, hostMode }: 
   midiNotes: id => call('midiNotes', id), previewMidi: composition => call('previewMidi', composition),
   saveMidiEdit: (conversationId, id, composition, name) => call('saveMidiEdit', conversationId, id, composition, name),
   soundfontInfo: () => call('soundfontInfo'),
-  importAudio: (id, kind) => call('importAudio', id, kind), exportAsset: (id, format) => call('exportAsset', id, format), searchAssets: query => call('searchAssets', query),
+  importAudio: (id, kind) => call('importAudio', id, kind), exportAsset: (id, format, oggQuality) => call('exportAsset', id, format, oggQuality), searchAssets: query => call('searchAssets', query),
   startLogin: () => call('startLogin'), cancelLogin: () => call('cancelLogin'), logout: () => call('logout'),
   saveModel: model => call('saveModel', model),
   saveChatProvider: input => call('saveChatProvider', input), deleteChatProvider: id => call('deleteChatProvider', id),

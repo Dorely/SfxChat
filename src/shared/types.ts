@@ -266,7 +266,7 @@ export interface SfxApi {
   soundfontInfo(): Promise<SoundfontSummary>;
   setPlayground(conversationId: string, assetIds: string[]): Promise<void>;
   importAudio(conversationId: string, kind?: AssetKind): Promise<void>;
-  exportAsset(id: string, format?: 'original' | 'wav' | 'ogg'): Promise<void>;
+  exportAsset(id: string, format?: 'original' | 'wav' | 'ogg', oggQuality?: number): Promise<void>;
   searchAssets(query: string): Promise<Asset[]>;
   startLogin(): Promise<void>;
   cancelLogin(): Promise<void>;

@@ -228,7 +228,7 @@ selected candidates under stable cue-key filenames. Destinations must be absolut
 missing parent folders are created. A cue pack directory must be new; a single-asset
 export refuses an existing file unless `overwrite: true`, which writes temporary files
 and renames them over the file and its sidecar (never over a directory). The native
-save dialog passes `overwrite` after the OS confirms replacing. Originals are hash checked. WAV is 16-bit PCM; Vorbis uses quality 5,
+save dialog passes `overwrite` after the OS confirms replacing. Originals are hash checked. WAV is 16-bit PCM; Vorbis uses `oggQuality` 0–10 (oggenc `-q` scale, default 5; the app offers a quality menu),
 libvorbis 1.3.7 and libogg 1.3.6. Conversion retains sample rate and channel count,
 clips float values outside full scale for PCM16, and never applies preview gain.
 Conversion uses the existing 64 MiB source/decoded-float bounds. Vorbis currently

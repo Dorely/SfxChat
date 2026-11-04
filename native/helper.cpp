@@ -17,7 +17,8 @@ static int fail(const char* message) { fprintf(stderr, "%s\n", message); return 
 static bool page(ogg_page* p) {
     return fwrite(p->header, 1, p->header_len, stdout) == (size_t)p->header_len && fwrite(p->body, 1, p->body_len, stdout) == (size_t)p->body_len;
 }
-static int encode() {
+static int encode(double quality) {
+    if (!(quality >= 0 && quality <= 10)) return fail("Vorbis quality must be between 0 and 10.");
     unsigned char h[44];
     if (fread(h, 1, 44, stdin) != 44 || memcmp(h,"RIFF",4) || memcmp(h+8,"WAVEfmt ",8) || memcmp(h+36,"data",4)) return fail("Expected canonical PCM WAV input.");
     auto u16 = [&](int p) { return unsigned(h[p]) | (unsigned(h[p+1]) << 8); };
@@ -25,8 +26,10 @@ static int encode() {
     unsigned channels = u16(22), rate = u32(24), remaining = u32(40);
     if (u16(20)!=1 || u16(34)!=16 || channels<1 || channels>2 || rate<8000 || rate>192000 || remaining>64*1024*1024 || remaining%(channels*2)) return fail("Vorbis export supports mono/stereo PCM, 8-192 kHz, up to 64 MiB. Use original or WAV for other channel counts.");
     vorbis_info info; vorbis_info_init(&info);
-    if (vorbis_encode_init_vbr(&info,channels,rate,0.5f)) { vorbis_info_clear(&info); return fail("Vorbis initialization failed."); }
-    vorbis_comment comment; vorbis_comment_init(&comment); vorbis_comment_add_tag(&comment,"ENCODER","SfxChat libvorbis 1.3.7 quality 5");
+    // libvorbis takes VBR quality on a 0-1 scale; the familiar -q 0-10 scale is ten times it.
+    if (vorbis_encode_init_vbr(&info,channels,rate,(float)(quality/10))) { vorbis_info_clear(&info); return fail("Vorbis initialization failed."); }
+    char tag[64]; snprintf(tag,sizeof tag,"SfxChat libvorbis 1.3.7 quality %g",quality);
+    vorbis_comment comment; vorbis_comment_init(&comment); vorbis_comment_add_tag(&comment,"ENCODER",tag);
     vorbis_dsp_state dsp; vorbis_analysis_init(&dsp,&info);
     vorbis_block block; vorbis_block_init(&dsp,&block);
     ogg_stream_state stream; ogg_stream_init(&stream,1);
@@ -205,7 +208,8 @@ static int renderMidi(const wchar_t* midi,const wchar_t* soundfont,const wchar_t
 }
 int wmain(int argc,wchar_t** argv) {
     _setmode(_fileno(stdin),_O_BINARY); _setmode(_fileno(stdout),_O_BINARY);
-    if(argc==2 && !wcscmp(argv[1],L"encode")) return encode();
+    if(argc==2 && !wcscmp(argv[1],L"encode")) return encode(5);
+    if(argc==3 && !wcscmp(argv[1],L"encode")) return encode(_wtof(argv[2]));
     if(argc==6 && !wcscmp(argv[1],L"render-midi")) return renderMidi(argv[2],argv[3],argv[4],_wtof(argv[5]),0.5);
     if(argc==7 && !wcscmp(argv[1],L"render-midi")) return renderMidi(argv[2],argv[3],argv[4],_wtof(argv[5]),_wtof(argv[6]));
     if(argc==2 && !wcscmp(argv[1],L"protect")) return protect(false);
@@ -213,5 +217,5 @@ int wmain(int argc,wchar_t** argv) {
     if(argc==3 && !wcscmp(argv[1],L"secure-directory")) return secureDirectory(argv[2]);
     if(argc==3 && !wcscmp(argv[1],L"path-add")) return updatePath(argv[2],false);
     if(argc==3 && !wcscmp(argv[1],L"path-remove")) return updatePath(argv[2],true);
-    return fail("Expected encode, render-midi MIDI BANK OUT SECONDS [GAIN], protect, unprotect, or secure-directory PATH.");
+    return fail("Expected encode [QUALITY 0-10], render-midi MIDI BANK OUT SECONDS [GAIN], protect, unprotect, or secure-directory PATH.");
 }
