@@ -1487,3 +1487,13 @@ automatically by an older snapshot.
   returning to the Playground, review-card loop toggles, and Ogg import through the app's
   import dialog were not exercised in the browser. Nothing was saved from the trim
   editor. The development host and browser tab were closed after checks.
+
+- `npm run package` built `release/SfxChat Setup 0.2.0.exe`. With the user's
+  authorization the installed app (5 processes) and 9 `sfxchat-runtime.exe` servers were
+  ended first. The silent NSIS install exited 0; installed `app.asar`,
+  `sfxchat-runtime.exe` and `sfxchat-helper.exe` matched `release/win-unpacked` by
+  SHA-256 (`app.asar` begins `CA48761D7A4322E2`). The Claude user skill refresh first
+  refused with `INSTALL_CONFLICT`; only `editing.md` and `workflow.md` differed, both
+  matching earlier committed versions, so it was rerun with `--force`. Both now match
+  HEAD, a dry run reports 19 entries up to date, and the installed CLI `status` returned
+  `ready:true`. Open Claude Code sessions need an MCP reconnect for the new schemas.
