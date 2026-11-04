@@ -23,6 +23,8 @@ const LOW_ONSET_HZ = 200;
 const PERIODICITY_FLOOR = 0.08;
 const PERIODICITY_SPAN = 0.25;
 const PITCH_NAMES = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+/** Spread (in octaves) of the tempo prior around a caller's hint; wide enough for a few percent of drift. */
+const HINT_PRIOR_OCTAVES = 0.15;
 // Krumhansl-Kessler key profiles (C major / C minor), tonic first.
 const MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
 const MINOR_PROFILE = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
@@ -38,16 +40,19 @@ export interface MusicFeatures {
   rmsDb: Float32Array;
   loudness: { integratedLufs: number | null; samplePeak: number };
   tempo: { bpm: number; confidence: number; periodicity: number; steady: boolean; residualMs: number } | null;
+  /** Expected tempo the caller supplied; it centers the tempo prior, so half/double/two-thirds readings lose. */
+  tempoHint: number | null;
   /** Tracked beat times in seconds, and the estimated bar phase within them. */
   beats: Float64Array;
   beatsPerBar: number; downbeatPhase: number; downbeatConfidence: number;
-  key: { tonic: number; mode: 'major' | 'minor'; correlation: number; confidence: number; ranked: { tonic: number; mode: 'major' | 'minor'; correlation: number }[] } | null;
+  key: { tonic: number; mode: 'major' | 'minor'; correlation: number; confidence: number; ranked: { tonic: number; mode: 'major' | 'minor'; correlation: number }[]; all: { tonic: number; mode: 'major' | 'minor'; correlation: number }[] } | null;
 }
 
 export const keyLabel = (tonic: number, mode: 'major' | 'minor') => `${PITCH_NAMES[tonic]} ${mode}`;
 export const frameTime = (features: Pick<MusicFeatures, 'hop' | 'rate'>, frame: number) => frame * features.hop / features.rate;
 
-export async function computeMusicFeatures(source: FrameSource, signal?: AbortSignal): Promise<MusicFeatures> {
+export async function computeMusicFeatures(source: FrameSource, options: { signal?: AbortSignal; tempoHint?: number } = {}): Promise<MusicFeatures> {
+  const { signal } = options, tempoHint = options.tempoHint ?? null;
   const duration = source.frames / source.sampleRate;
   if (duration > MAX_ANALYSIS_SECONDS) throw new Error(`Musical analysis supports up to ${MAX_ANALYSIS_SECONDS / 60} minutes of audio.`);
   const factor = Math.max(1, Math.floor(source.sampleRate / TARGET_RATE));
@@ -87,7 +92,7 @@ export async function computeMusicFeatures(source: FrameSource, signal?: AbortSi
   const stft = await spectralFeatures(mono, rate, signal);
   const frameRate = rate / HOP;
   const base = { version: MUSIC_ANALYSIS_VERSION, sourceRate: source.sampleRate, channels: source.channels, frames: source.frames, duration, decoder: source.decoder, rate, hop: HOP, frameRate, loudness, ...stft };
-  const period = estimatePeriod(stft.onset, frameRate);
+  const period = estimatePeriod(stft.onset, frameRate, tempoHint);
   let tempo: MusicFeatures['tempo'] = null;
   let beats: Float64Array = new Float64Array(0);
   if (period) {
@@ -102,7 +107,7 @@ export async function computeMusicFeatures(source: FrameSource, signal?: AbortSi
     } else beats = new Float64Array(0);
   }
   const downbeat = tempo ? estimateDownbeat({ ...base, beats } as MusicFeatures, 4) : { phase: 0, confidence: 0 };
-  return { ...base, tempo, beats, beatsPerBar: 4, downbeatPhase: downbeat.phase, downbeatConfidence: downbeat.confidence, key: estimateKey(stft.chroma, stft.count) };
+  return { ...base, tempo, tempoHint, beats, beatsPerBar: 4, downbeatPhase: downbeat.phase, downbeatConfidence: downbeat.confidence, key: estimateKey(stft.chroma, stft.count) };
 }
 
 function gatedLoudness(sub: number[]): number | null {
@@ -182,8 +187,12 @@ function normalizeOnset(flux: Float32Array): Float32Array {
   return out;
 }
 
-/** Autocorrelation tempo with a log-normal prior around 120 BPM (one-octave deviation). */
-function estimatePeriod(onset: Float32Array, frameRate: number): { lag: number; periodicity: number; confidence: number } | null {
+/**
+ * Autocorrelation tempo with a log-normal prior around 120 BPM (one-octave
+ * deviation), or narrowly around a caller's hint. The hint picks among the
+ * envelope's own periodicity peaks; it never invents a tempo the audio lacks.
+ */
+function estimatePeriod(onset: Float32Array, frameRate: number, hint: number | null): { lag: number; periodicity: number; confidence: number } | null {
   const minLag = Math.floor(60 * frameRate / MAX_BPM), maxLag = Math.ceil(60 * frameRate / MIN_BPM);
   if (onset.length < maxLag * 4) return null;
   const acf = new Float64Array(maxLag + 2);
@@ -199,7 +208,7 @@ function estimatePeriod(onset: Float32Array, frameRate: number): { lag: number; 
   for (let lag = minLag - 1; lag <= maxLag + 1; lag++) acf[lag] = (acf[lag] - mean * mean) / variance;
   let best = -1, bestScore = -Infinity;
   for (let lag = minLag; lag <= maxLag; lag++) {
-    const bpm = 60 * frameRate / lag, prior = Math.exp(-0.5 * Math.log2(bpm / 120) ** 2);
+    const bpm = 60 * frameRate / lag, prior = Math.exp(-0.5 * (Math.log2(bpm / (hint ?? 120)) / (hint ? HINT_PRIOR_OCTAVES : 1)) ** 2);
     const score = acf[lag] * prior;
     if (score > bestScore) { bestScore = score; best = lag; }
   }
@@ -296,13 +305,29 @@ function estimateKey(chroma: Float32Array, count: number): MusicFeatures['key'] 
   }
   ranked.sort((a, b) => b.correlation - a.correlation);
   const [best, second] = ranked;
-  return { ...best, confidence: clamp01((best.correlation - 0.4) / 0.4) * clamp01((best.correlation - second.correlation) / 0.1), ranked: ranked.slice(0, 4) };
+  return { ...best, confidence: clamp01((best.correlation - 0.4) / 0.4) * clamp01((best.correlation - second.correlation) / 0.1), ranked: ranked.slice(0, 4), all: ranked };
+}
+
+/** How the caller's expected key ranks against the measured chroma; it never replaces the estimate. */
+function keyHintFit(all: { tonic: number; mode: 'major' | 'minor'; correlation: number }[], hinted: { tonic: number; mode: 'major' | 'minor' }) {
+  const rank = all.findIndex(k => k.tonic === hinted.tonic && k.mode === hinted.mode);
+  return { label: keyLabel(hinted.tonic, hinted.mode), correlation: all[rank].correlation, rank: rank + 1, ofKeys: all.length, matchesEstimate: rank === 0 };
 }
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
 
 /** Agent/UI view of the cached features, with beat and bar lists bounded to an interval. */
-export function musicalSummary(features: MusicFeatures, startSeconds = 0, endSeconds = features.duration): MusicalAnalysis {
+/** Parses "A minor", "Am", "F# major" or "Bb" (major when no mode is given). */
+export function parseKey(label: string): { tonic: number; mode: 'major' | 'minor' } | null {
+  const match = /^\s*([A-Ga-g])\s*([#b♯♭]?)\s*(major|minor|maj|min|m)?\s*$/i.exec(label);
+  if (!match) return null;
+  const base = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[match[1].toUpperCase() as 'C'];
+  const accidental = match[2] === '#' || match[2] === '♯' ? 1 : match[2] === 'b' || match[2] === '♭' ? -1 : 0;
+  const mode = match[3] && /^(minor|min|m)$/i.test(match[3]) && match[3] !== 'M' ? 'minor' : 'major';
+  return { tonic: (base + accidental + 12) % 12, mode };
+}
+
+export function musicalSummary(features: MusicFeatures, startSeconds = 0, endSeconds = features.duration, keyHint?: string): MusicalAnalysis {
   const beats: number[] = [], bars: { number: number; seconds: number }[] = [];
   let truncated = false;
   features.beats.forEach((seconds, index) => {
@@ -313,12 +338,14 @@ export function musicalSummary(features: MusicFeatures, startSeconds = 0, endSec
       if (number >= 1) { if (bars.length < 256) bars.push({ number, seconds }); else truncated = true; }
     }
   });
-  const key = features.key;
+  const key = features.key, hinted = keyHint === undefined ? null : parseKey(keyHint);
+  if (keyHint !== undefined && !hinted) throw new Error('keyHint must name a key such as "A minor", "Am" or "F# major".');
+  const tempoHint = features.tempoHint;
   return {
     version: MUSIC_ANALYSIS_VERSION,
-    tempo: features.tempo ? { bpm: features.tempo.bpm, confidence: features.tempo.confidence, steady: features.tempo.steady, beatResidualMs: features.tempo.residualMs } : null,
+    tempo: features.tempo ? { bpm: features.tempo.bpm, confidence: features.tempo.confidence, steady: features.tempo.steady, beatResidualMs: features.tempo.residualMs, ...(tempoHint ? { hint: tempoHint, hintDeviationPercent: (features.tempo.bpm / tempoHint - 1) * 100 } : {}) } : null,
     meter: { beatsPerBar: features.beatsPerBar, assumed: true, downbeatConfidence: features.downbeatConfidence },
-    key: key ? { label: keyLabel(key.tonic, key.mode), tonic: PITCH_NAMES[key.tonic], mode: key.mode, correlation: key.correlation, confidence: key.confidence, alternatives: key.ranked.slice(1).map(k => ({ label: keyLabel(k.tonic, k.mode), correlation: k.correlation })) } : null,
+    key: key ? { label: keyLabel(key.tonic, key.mode), tonic: PITCH_NAMES[key.tonic], mode: key.mode, correlation: key.correlation, confidence: key.confidence, alternatives: key.ranked.slice(1).map(k => ({ label: keyLabel(k.tonic, k.mode), correlation: k.correlation })), ...(hinted ? { hint: keyHintFit(key.all, hinted) } : {}) } : null,
     loudness: { integratedLufs: features.loudness.integratedLufs, samplePeakDbfs: features.loudness.samplePeak > 0 ? 20 * Math.log10(features.loudness.samplePeak) : null },
     beats, bars, truncated,
     note: 'Whole-file estimates from a mono analysis signal: tempo from onset autocorrelation and dynamic-programming beat tracking (it may read at half or double the felt tempo); bars assume 4 beats with a statistically estimated downbeat; key from Krumhansl-Kessler profile correlation with summed chroma (no tuning correction; relative major/minor is often ambiguous); loudness is ITU-R BS.1770 gated integrated loudness and sample (not true) peak. Beat and bar lists cover only the requested interval. Confidence values are heuristics, not probabilities, and none of this is listening evidence.'

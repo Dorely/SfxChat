@@ -43,7 +43,7 @@ export interface TrimEdit {
   /** Version 2 adds where the crossfade blend comes from and the loop region within the output. */
   loop?: { crossfadeFrames: number; outputFrames: number; crossfadeSource?: 'before-start' | 'after-end' | null; loopStartFrame?: number; loopEndFrame?: number };
 }
-export interface AudioAnalysisInput { startSeconds?: number; endSeconds?: number; bins?: number; events?: boolean; seamProbe?: { startSeconds?: number; endSeconds?: number }; musical?: boolean }
+export interface AudioAnalysisInput { startSeconds?: number; endSeconds?: number; bins?: number; events?: boolean; seamProbe?: { startSeconds?: number; endSeconds?: number }; musical?: boolean; tempoHint?: number; keyHint?: string }
 export interface EventInterval {
   startFrame: number; endFrame: number; startSeconds: number; endSeconds: number;
   peak: number; rms: number;
@@ -68,9 +68,9 @@ export interface AudioAnalysis {
 }
 export interface MusicalAnalysis {
   version: 1;
-  tempo: { bpm: number; confidence: number; steady: boolean; beatResidualMs: number } | null;
+  tempo: { bpm: number; confidence: number; steady: boolean; beatResidualMs: number; hint?: number; hintDeviationPercent?: number } | null;
   meter: { beatsPerBar: number; assumed: true; downbeatConfidence: number };
-  key: { label: string; tonic: string; mode: 'major' | 'minor'; correlation: number; confidence: number; alternatives: { label: string; correlation: number }[] } | null;
+  key: { label: string; tonic: string; mode: 'major' | 'minor'; correlation: number; confidence: number; alternatives: { label: string; correlation: number }[]; hint?: { label: string; correlation: number; rank: number; ofKeys: number; matchesEstimate: boolean } } | null;
   loudness: { integratedLufs: number | null; samplePeakDbfs: number | null };
   beats: number[]; bars: { number: number; seconds: number }[]; truncated: boolean;
   note: string;
@@ -81,6 +81,8 @@ export interface LoopSearchInput {
   startSeconds?: number; endSeconds?: number;
   minSeconds?: number; maxSeconds?: number;
   minBars?: number; maxBars?: number;
+  /** Expected tempo (BPM); centers the tempo estimate's prior. */
+  tempoHint?: number;
   /** Music mode: only lengths that are whole multiples of this many bars (e.g. 4 or 8). */
   barMultiple?: number;
   /** Exact loop length; replaces the min/max limits and keeps the length unchanged through refinement. */

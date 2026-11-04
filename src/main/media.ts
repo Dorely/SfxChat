@@ -14,8 +14,8 @@ import { findLoopPoints, renderSeam } from './loop-finder';
 export class MediaLibrary {
   private audioQueue: Promise<unknown> = Promise.resolve();
   private decoded: { hash: string; audio: DecodedAudio } | null = null;
-  /** Musical features by source hash, most recent last; originals are immutable. */
-  private features: { hash: string; features: MusicFeatures }[] = [];
+  /** Musical features by source hash and tempo hint, most recent last; originals are immutable. */
+  private features: { hash: string; tempoHint: number | null; features: MusicFeatures }[] = [];
   /** `root` holds immutable originals; `chatRoot` holds durable chat attachment media. */
   constructor(readonly root: string, readonly chatRoot: string) {}
   private enqueue<T>(job: () => Promise<T>): Promise<T> {
@@ -46,17 +46,17 @@ export class MediaLibrary {
       close: () => reader.close()
     };
   }
-  private async musicFeatures(asset: Asset, source: FrameSource): Promise<MusicFeatures> {
-    const cached = this.features.find(entry => entry.hash === asset.hash);
+  private async musicFeatures(asset: Asset, source: FrameSource, tempoHint?: number): Promise<MusicFeatures> {
+    const cached = this.features.find(entry => entry.hash === asset.hash && entry.tempoHint === (tempoHint ?? null));
     if (cached) return cached.features;
-    const features = await computeMusicFeatures(source);
-    this.features = [...this.features.slice(-3), { hash: asset.hash, features }];
+    const features = await computeMusicFeatures(source, { tempoHint });
+    this.features = [...this.features.slice(-3), { hash: asset.hash, tempoHint: tempoHint ?? null, features }];
     return features;
   }
-  private withMusic<T>(asset: Asset, operation: (source: FrameSource, features: MusicFeatures) => Promise<T>): Promise<T> {
+  private withMusic<T>(asset: Asset, tempoHint: number | undefined, operation: (source: FrameSource, features: MusicFeatures) => Promise<T>): Promise<T> {
     return this.enqueue(async () => {
       const { source, close } = await this.openSource(asset);
-      try { return await operation(source, await this.musicFeatures(asset, source)); } finally { await close(); }
+      try { return await operation(source, await this.musicFeatures(asset, source, tempoHint)); } finally { await close(); }
     });
   }
   analyze(asset: Asset, input: AudioAnalysisInput): Promise<AudioAnalysis> {
@@ -64,11 +64,11 @@ export class MediaLibrary {
       const result = asset.format === 'wav' ? await analyzeWav(this.path(asset), asset, input) : await analyzeAudio(await this.loadDecoded(asset), asset, input);
       if (!input.musical) return result;
       const { source, close } = await this.openSource(asset);
-      try { return { ...result, musical: musicalSummary(await this.musicFeatures(asset, source), result.startSeconds, result.endSeconds) }; } finally { await close(); }
+      try { return { ...result, musical: musicalSummary(await this.musicFeatures(asset, source, input.tempoHint), result.startSeconds, result.endSeconds, input.keyHint) }; } finally { await close(); }
     });
   }
   findLoops(asset: Asset, input: LoopSearchInput) {
-    return this.withMusic(asset, (source, features) => findLoopPoints(source, features, asset, input));
+    return this.withMusic(asset, input.tempoHint, (source, features) => findLoopPoints(source, features, asset, input));
   }
   /** Float channels across a loop's wrap exactly as a loop render plays it. */
   loopSeam(asset: Asset, input: LoopSeamInput) {

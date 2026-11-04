@@ -17,6 +17,7 @@ export const trimSchema = z.object({
   loop: z.boolean().optional().describe('Render a seamless-loop variant of the selection instead of a plain cut: the output keeps the exact selection length, and the seam crossfade blends the loop end into the audio just before the start (or the opening with the audio after the end when the loop starts at the file start). Cannot be combined with fades.'),
   crossfadeMs: z.number().finite().min(0).max(5000).optional().describe('Loop seam crossfade length in milliseconds (0-5000, default 0). A small value such as 5-20 ms usually removes the click at the seam; only used when loop is true.')
 }).strict();
+const tempoHintSchema = z.number().finite().min(40).max(300).optional().describe('Musical analysis: the tempo you expect in BPM, for example the tempo requested from the music provider. It centers the tempo prior so half, double or two-thirds readings lose; the audio still decides the exact value, and providers often miss requested tempos.');
 export const analysisSchema = z.object({
   startSeconds: z.number().finite().min(0).optional(), endSeconds: z.number().finite().positive().optional(),
   bins: z.number().int().min(1).max(512).optional(),
@@ -25,7 +26,9 @@ export const analysisSchema = z.object({
     startSeconds: z.number().finite().min(0).optional(),
     endSeconds: z.number().finite().positive().optional()
   }).strict().optional().describe('Measure the loop seam where endSeconds wraps back to startSeconds: splice discontinuity, head/tail RMS, start/end correlation, and a suggested frame offset. Omit both fields to probe the whole asset as a loop.'),
-  musical: z.boolean().optional().describe('Also estimate tempo, beat and bar grid, key and integrated loudness (LUFS) for the whole file, with beats/bars listed for the requested interval. Estimates with heuristic confidence, not listening evidence. Works on full-length tracks.')
+  musical: z.boolean().optional().describe('Also estimate tempo, beat and bar grid, key and integrated loudness (LUFS) for the whole file, with beats/bars listed for the requested interval. Estimates with heuristic confidence, not listening evidence. Works on full-length tracks.'),
+  tempoHint: tempoHintSchema,
+  keyHint: z.string().trim().min(1).max(20).optional().describe('Musical analysis: the key you expect, such as "A minor". Reported as how well it fits the measured harmony (rank among 24 keys); it does not replace the estimate.')
 }).strict();
 export const loopSearchSchema = z.object({
   mode: z.enum(['auto', 'music', 'texture']).optional().describe('music: whole-bar loops on the detected beat grid; texture: grid-free loops for ambience, drones and noise beds; auto (default) uses music when a steady beat is found.'),
@@ -35,6 +38,7 @@ export const loopSearchSchema = z.object({
   maxSeconds: z.number().finite().positive().max(900).optional(),
   minBars: z.number().int().min(1).max(256).optional().describe('Music mode: fewest bars (default 4 unless minSeconds is given).'),
   maxBars: z.number().int().min(1).max(256).optional(),
+  tempoHint: tempoHintSchema,
   barMultiple: z.number().int().min(1).max(64).optional().describe('Music mode: only offer lengths that are whole multiples of this many bars, for example 4 or 8 for phrase-length loops.'),
   lengthSeconds: z.number().finite().positive().max(900).optional().describe('Exact loop length in seconds, for example a repeat spacing you measured. Candidates differ only in where the loop starts; the length is not re-measured. Do not combine with min/max limits.'),
   allowIntro: z.boolean().optional().describe('true (default) lets the loop start after an intro that plays once; false requires the loop to start at the region start.'),

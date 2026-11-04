@@ -183,7 +183,11 @@ prior around 120 BPM), a beat grid (Ellis 2007 dynamic programming), a bar phase
 (4 beats per bar assumed; the phase with the most low-band onsets and harmonic change),
 key (Krumhansl–Kessler profile correlation on mean chroma) and integrated loudness
 (BS.1770 K-weighting with absolute/relative gating) plus sample peak. Each estimate
-carries a confidence. Tempo may read at half or double the felt tempo. `analyze_audio`
+carries a confidence. Tempo may read at half, double or two-thirds of the felt tempo;
+`tempoHint` (analysis and loop search) recenters the prior narrowly (0.15 octave) on
+an expected BPM, so it picks among the envelope's own periodicity peaks without
+setting the exact value, and features are cached per hash and hint. `keyHint` only
+reports the expected key's correlation and rank among the 24 keys. `analyze_audio`
 with `musical:true` adds this summary, with beat and bar lists bounded to the
 requested interval. None of it is listening evidence.
 

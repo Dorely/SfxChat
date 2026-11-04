@@ -26,8 +26,11 @@ be distinguished from measurements and user feedback, ask for a timing hint.
 
 For music, analyze_audio with musical:true adds tempo, beat and bar grid, key, and
 integrated loudness estimates, each with a confidence. Treat them as estimates:
-tempo can read at half or double the felt tempo, and a low-confidence downbeat
-means bar numbers may be offset. Do not present them as heard facts.
+tempo can read at half, double or two-thirds of the felt tempo, and a low-confidence
+downbeat means bar numbers may be offset. Pass tempoHint with the tempo you expect
+(for example the one you asked the provider for) to resolve that ambiguity; the audio
+still sets the exact value, and providers often miss requested tempos. keyHint only
+reports how well an expected key fits. Do not present them as heard facts.
 
 To loop a track, start with find_loop_points. It ranks candidates (whole bars on
 the beat grid for music, texture and level continuity for ambience) with exact
