@@ -244,7 +244,6 @@ export async function findLoopPoints(source: FrameSource, f: MusicFeatures, asse
         if (length < minSeconds || length > maxSeconds) continue;
         const pair = scorePair(units, i, j, near, far);
         if (!pair) continue;
-        pair.score += [4, 8, 16, 32].includes(bars) ? 0.02 : [2, 12, 24].includes(bars) ? 0.01 : 0;
         pairs.push(pair);
       }
     }
@@ -288,7 +287,7 @@ export async function findLoopPoints(source: FrameSource, f: MusicFeatures, asse
     version: 1, assetId: asset.id, sourceHash: asset.hash, mode, sampleRate: source.sampleRate, duration: f.duration,
     tempo: summary.tempo, key: f.key ? keyLabel(f.key.tonic, f.key.mode) : null, beatsPerBar: mode === 'music' ? bpb : null,
     candidates: top,
-    note: `${mode === 'music' ? `Music mode: candidates come from bars of an estimated ${summary.tempo?.bpm.toFixed(1)} BPM grid (4 beats per bar assumed${f.downbeatConfidence < 0.15 ? '; downbeat uncertain, so bar numbers may be offset' : ''}) and from a grid-free comparison of the track with itself, so a misread tempo cannot hide a real repeat. Each length is re-measured as the source's repeat spacing within ±${SPACING_SEARCH_BEATS} beat (lengthSource, rhythmCorrelation) unless lengthSeconds fixes it; bars for grid-free candidates are approximate.` : 'Texture mode: no reliable beat grid, so candidates use 100 ms units and texture/level continuity only; recommended crossfades stay within half the typical gap between sharp onsets near the seam.'} startSeconds/endSeconds/frames are final: startShiftFrames/endShiftFrames report adjustments already applied, so pass the times to trim_asset unchanged. score compares harmony/timbre/level around the jump with the music around the loop start; seam values come from sample-level waveform alignment (correlation of matching context windows, wrap step vs the source's own step). Frames are exact; ranking is heuristic. Audition the seam (audio_listen loopSeam, or Play seam in the editor) and let the user decide. Save with trim_asset loop:true and the recommended crossfadeMs.`
+    note: `${mode === 'music' ? `Music mode: candidates come from bars of an estimated ${summary.tempo?.bpm.toFixed(1)} BPM grid (4 beats per bar assumed${f.downbeatConfidence < 0.15 ? '; downbeat uncertain, so bar numbers may be offset' : ''}) and from a grid-free comparison of the track with itself, so a misread tempo cannot hide a real repeat. Each length is re-measured as the source's repeat spacing within ±${SPACING_SEARCH_BEATS} beat (lengthSource, rhythmCorrelation) unless lengthSeconds fixes it; bars for grid-free candidates are approximate. Ranking favors phrase lengths (multiples of 4 or 8 bars) over odd bar counts. match rates how strongly the music repeats (rhythm and harmony one loop length later); seamMatch separately rates how cleanly the waveform joins.` : 'Texture mode: no reliable beat grid, so candidates use 100 ms units and texture/level continuity only; recommended crossfades stay within half the typical gap between sharp onsets near the seam. match rates texture similarity; seamMatch rates the level step at the wrap.'} startSeconds/endSeconds/frames are final: startShiftFrames/endShiftFrames report adjustments already applied, so pass the times to trim_asset unchanged. score compares harmony/timbre/level around the jump with the music around the loop start; seam values come from sample-level waveform alignment (correlation of matching context windows, wrap step vs the source's own step). Frames are exact; ranking is heuristic. Audition the seam (audio_listen loopSeam, or Play seam in the editor) and let the user decide. Save with trim_asset loop:true and the recommended crossfadeMs.`
   };
 }
 
@@ -304,10 +303,23 @@ function distinctCandidates(candidates: LoopCandidate[], limit: number, toleranc
 
 // Noise-like textures never correlate sample-for-sample, so texture ranking and
 // labels lean on spectral context and level; the long crossfade hides the waveform.
-// Music ranking adds rhythm agreement one loop length later, the strongest sign of a true repeat.
+// Music ranking adds rhythm agreement one loop length later, the strongest sign of a true repeat,
+// and a phrase prior: songs repeat in sections of 4 or 8 bars, so an odd or fractional bar count
+// that merely scores well ranks below a phrase-length repeat.
 const rankValue = (c: LoopCandidate, mode: 'music' | 'texture') => mode === 'music'
-  ? (c.rhythmCorrelation === null ? 0.75 * c.score : 0.55 * c.score + 0.2 * Math.max(0, c.rhythmCorrelation)) + 0.25 * Math.max(0, c.seam.correlation)
+  ? (c.rhythmCorrelation === null ? 0.75 * c.score : 0.55 * c.score + 0.2 * Math.max(0, c.rhythmCorrelation)) + 0.25 * Math.max(0, c.seam.correlation) + phrasePrior(c)
   : 0.9 * c.score + 0.1 * Math.max(0, c.seam.correlation) - 0.02 * Math.abs(c.seam.levelDeltaDb);
+/**
+ * Bonus for phrase lengths. A requested length is the caller's choice. A length set by the
+ * measured repeat spacing counts its nearest whole bar count, since that spacing moves the
+ * end by at most a beat.
+ */
+function phrasePrior(c: LoopCandidate) {
+  if (c.bars === null || c.lengthSource === 'requested') return 0;
+  const whole = Math.round(c.bars);
+  if (whole < 1 || (Math.abs(c.bars - whole) > 0.3 && c.lengthSource !== 'repeat-spacing')) return -0.03;
+  return whole % 8 === 0 ? 0.04 : whole % 4 === 0 ? 0.03 : whole % 2 === 0 ? 0 : -0.03;
+}
 
 interface LengthPlan { endSeconds: number; source: LoopCandidate['lengthSource']; rhythm: number | null }
 
@@ -414,12 +426,18 @@ async function refine(source: FrameSource, f: MusicFeatures, pair: Seed, mode: '
   const gap = mode === 'texture' ? onsetGap(f, [[endSeconds - 2, endSeconds], [startSeconds - 2, startSeconds]]) : null;
   const onsetCap = gap === null ? Infinity : Math.max(20, Math.floor(gap * 500));
   const recommendedCrossfadeMs = Math.max(0, Math.min(crossfade, onsetCap, Math.floor(lengthSeconds * 250)));
+  // The match label is musical repeat evidence: rhythm plus harmony agreeing one loop
+  // length later (steady drums alone correlate everywhere), or overall context similarity.
+  // Waveform continuity is rated separately as seamMatch, since a crossfade can fix a
+  // rough join but not a passage that does not repeat.
+  const rhythm = plan.rhythm ?? 0, harmony = pair.harmony ?? 0;
   const match = mode === 'music'
-    // Context similarity, or rhythm plus harmony agreeing one loop length later (steady drums
-    // alone correlate everywhere), with waveform continuity at the seam.
-    ? ((pair.score >= 0.85 || ((plan.rhythm ?? 0) >= 0.8 && (pair.harmony ?? 0) >= 0.9)) && correlation >= 0.8 ? 'close'
-      : (pair.score >= 0.72 || ((plan.rhythm ?? 0) >= 0.6 && (pair.harmony ?? 0) >= 0.8)) && correlation >= 0.4 ? 'partial' : 'weak')
-    : (pair.score >= 0.85 && Math.abs(levelDeltaDb) <= 1.5 ? 'close' : pair.score >= 0.72 && Math.abs(levelDeltaDb) <= 3 ? 'partial' : 'weak');
+    ? (pair.score >= 0.85 || (rhythm >= 0.75 && harmony >= 0.88) ? 'close' : pair.score >= 0.72 || (rhythm >= 0.5 && harmony >= 0.75) ? 'partial' : 'weak')
+    : (pair.score >= 0.85 ? 'close' : pair.score >= 0.72 ? 'partial' : 'weak');
+  // Noise never correlates sample-for-sample, so a texture seam is rated by its level step.
+  const seamMatch = mode === 'music'
+    ? (correlation >= 0.8 ? 'smooth' : correlation >= 0.4 ? 'fair' : 'rough')
+    : (Math.abs(levelDeltaDb) <= 1.5 ? 'smooth' : Math.abs(levelDeltaDb) <= 3 ? 'fair' : 'rough');
   const bpb = f.beatsPerBar;
   const beatSpan = pair.beats ? (pair.beats.j - pair.beats.i) / bpb : null;
   const bars = beatSpan === null ? null : Math.round(beatSpan * 100) / 100, wholeBars = bars !== null && Number.isInteger(bars);
@@ -427,18 +445,18 @@ async function refine(source: FrameSource, f: MusicFeatures, pair: Seed, mode: '
   const endBar = startBar !== null && wholeBars ? startBar + bars! : null;
   const impliedBpm = wholeBars ? bars! * bpb * 60 / lengthSeconds : null;
   const intro = startSeconds, outro = f.duration - endSeconds;
-  const words = { close: 'close match', partial: 'partial match', weak: 'weak match' }[match];
+  const words = `repeat ${{ close: 'close', partial: 'partial', weak: 'weak' }[match]}, seam ${seamMatch}`;
   const gridLength = pair.origin === 'grid' ? pair.end - pair.start : null, gridDelta = gridLength === null ? 0 : (lengthSeconds - gridLength) * 1000;
   const lengthNote = plan.source === 'requested' ? ', requested length' : plan.source !== 'repeat-spacing' ? '' : gridLength === null ? ', length from where the music repeats' : `, length set by the measured repeat (${gridDelta >= 0 ? '+' : ''}${gridDelta.toFixed(0)} ms vs the beat grid)`;
   const barSpan = startBar !== null && endBar !== null ? `Bars ${startBar}–${endBar - 1}` : startBar !== null ? `From bar ${startBar}` : pair.beats ? `Beats ${pair.beats.i + 1}–${pair.beats.j}` : `${startSeconds.toFixed(2)}–${endSeconds.toFixed(2)} s`;
   const summary = mode === 'music'
-    ? `${barSpan} (${wholeBars ? '' : '≈'}${bars} bar${bars === 1 ? '' : 's'}, ${lengthSeconds.toFixed(2)} s${lengthNote})${intro > 0.05 ? ` after a ${intro.toFixed(1)} s intro` : ' from the start'}; seam ${words}.`
-    : `${lengthSeconds.toFixed(2)} s texture loop${intro > 0.05 ? ` from ${intro.toFixed(1)} s` : ' from the start'}${lengthNote}; seam ${words}.`;
+    ? `${barSpan} (${wholeBars ? '' : '≈'}${bars} bar${bars === 1 ? '' : 's'}, ${lengthSeconds.toFixed(2)} s${lengthNote})${intro > 0.05 ? ` after a ${intro.toFixed(1)} s intro` : ' from the start'}; ${words}.`
+    : `${lengthSeconds.toFixed(2)} s texture loop${intro > 0.05 ? ` from ${intro.toFixed(1)} s` : ' from the start'}${lengthNote}; ${words}.`;
   return {
     rank: 0, startSeconds, endSeconds, startFrame: start, endFrame: end, lengthSeconds,
     lengthSource: plan.source, gridLengthSeconds: gridLength, rhythmCorrelation: plan.rhythm, impliedBpm,
     bars, startBar, endBar, introSeconds: intro, outroSeconds: Math.max(0, outro),
-    score: Math.max(0, Math.min(1, pair.score)), match,
+    score: Math.max(0, Math.min(1, pair.score)), match, seamMatch,
     similarity: { harmony: pair.harmony, timbre: pair.timbre, level: pair.level, contextUnits: pair.context },
     seam: { correlation, step: wrapStep, naturalStep, levelDeltaDb, startShiftFrames: start - plannedStart, endShiftFrames: end - plannedEnd },
     recommendedCrossfadeMs, summary

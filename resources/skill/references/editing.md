@@ -49,8 +49,10 @@ rhythmCorrelation) and what alignment already moved the points (seam.startShiftF
 seam.endShiftFrames). Texture-mode crossfades are kept within half the gap between
 sharp attacks near the seam. When audio_listen is available, pass loopSeam {startSeconds, endSeconds,
 crossfadeMs} to attach exactly what the loop render plays across its wrap; the
-note gives the seam's position in the clip. Present the top few candidates in plain
-words (length, intro, match label), save the one the user picks with trim_asset
+note gives the seam's position in the clip. Ranking favors phrase lengths (multiples of 4 or 8 bars). match says how strongly
+the music repeats one loop length later; seamMatch separately says how cleanly the
+waveform joins, which the crossfade can smooth. Present the top few candidates in plain
+words (length, intro, repeat and seam labels), save the one the user picks with trim_asset
 loop:true and its recommended crossfadeMs (add introStartSeconds:0 when the song
 before the loop should play once, as in game music), and ask the user to audition it. Scores
 rank what to audition; they are not musical judgment.

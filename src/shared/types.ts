@@ -107,7 +107,11 @@ export interface LoopCandidate {
   /** Bars spanned on the beat grid (fractional only for a requested length). */
   bars: number | null; startBar: number | null; endBar: number | null;
   introSeconds: number; outroSeconds: number;
-  score: number; match: 'close' | 'partial' | 'weak';
+  score: number;
+  /** How strongly the music (rhythm and harmony; texture and level for textures) repeats one loop length later. */
+  match: 'close' | 'partial' | 'weak';
+  /** How cleanly the waveform joins at the wrap, rated apart from the repeat; the crossfade can smooth a rough seam. */
+  seamMatch: 'smooth' | 'fair' | 'rough';
   similarity: { harmony: number | null; timbre: number; level: number; contextUnits: number };
   /** Frames the start moved from its grid position and the end from the planned end (start + set length); already included in startFrame/endFrame. */
   seam: { correlation: number; step: number; naturalStep: number; levelDeltaDb: number; startShiftFrames: number; endShiftFrames: number };

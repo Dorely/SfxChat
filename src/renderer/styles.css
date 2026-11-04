@@ -121,6 +121,10 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .loop-match-close { color: var(--accent-ink); background: var(--accent); }
 .loop-match-partial { color: var(--text); background: var(--surface-3); }
 .loop-match-weak { color: var(--quiet); border: 1px solid var(--line); }
+.loop-labels { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.loop-seam { padding: 1px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+.loop-seam-smooth { border-color: var(--accent-line); color: var(--accent); }
+.loop-seam-rough { border-color: var(--danger-line); color: var(--danger); }
 @media (max-width: 620px) { .trim-editor { width: 100%; }.trim-fields, .loop-options { grid-template-columns: 1fr; }.loop-options .loop-intro-option { grid-column: auto; }.loop-options > button { justify-self: stretch; }.editor-modes { flex-direction: column; }.trim-zoom-controls { flex-wrap: wrap; }.trim-editor-footer { flex-wrap: wrap; }.trim-editor-footer button { flex: 1; } }
 .chat-context { margin: 10px 12px 0; color: var(--muted); font: 12px var(--font-mono); }
 .context-label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; }

@@ -224,14 +224,17 @@ survivor to the sample. The end is aligned to the start by waveform correlation
 slide together by up to 1 ms to minimize the wrap step. Each candidate reports exact
 final frames, `lengthSource` (`beat-grid`, `repeat-spacing`, `requested`,
 `texture-units`), the grid length, `rhythmCorrelation`, the implied tempo for whole
-bars, start/end shifts already applied, a similarity score and `close`/`partial`/
-`weak` label (music needs seam correlation plus either context similarity or rhythm
-and harmony agreement), seam correlation, wrap step vs the source's natural step, a
+bars, start/end shifts already applied, a similarity score, a `close`/`partial`/
+`weak` repeat label (`match`: context similarity, or rhythm and harmony agreement one
+loop length later; texture similarity for textures), a separate `smooth`/`fair`/`rough`
+`seamMatch` (seam correlation for music, the level step for textures), seam correlation, wrap step vs the source's natural step, a
 like-for-like level delta, and a recommended crossfade (5–60 ms music, 50–500 ms
 texture, at most a quarter of the loop). Texture crossfades also stay within half
 the median gap between sharp attacks (still-rising jumps of 4 dB or more) in the two
 seconds before the start and end, so a long blend never doubles separate hits. Music ranking weighs context similarity,
-rhythm agreement and seam correlation. Labels and ranking are heuristics for choosing
+rhythm agreement and seam correlation, plus a phrase prior: whole bar counts that are
+multiples of 8 (+0.04) or 4 (+0.03) rank above other even counts, and odd or
+fractional counts lose 0.03 (a repeat-spacing length counts its nearest whole bar). Labels and ranking are heuristics for choosing
 what to audition.
 
 The seam preview (`audio_listen` with `loopSeam`, and the editor's Play seam) renders
