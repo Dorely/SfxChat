@@ -570,7 +570,9 @@ model and voice at admission rather than following later UI changes. Existing qu
 
 Reviews have an active/completed lifecycle. Done saves the draft and completes the
 review in one revision-checked transaction, even with unresolved cues. Completed
-reviews move to Archived selectors and are read-only until explicitly reopened;
+reviews move to Archived selectors and are read-only until explicitly reopened.
+Pressing Done leaves the review and returns to the Playground, whose launcher lists
+the reviews still open (the Archived filter reaches finished ones);
 audition, local Loop, inspection, and export remain available. Completion means the
 session ended, not that every cue was accepted. Completion time and user/agent
 attribution accompany status in reads and exports. Completion/reopen revisions
@@ -625,20 +627,23 @@ changes. Older snapshots cannot replace a successful save response. Failed saves
 draft and display the error. Other edits can still be saved explicitly, and manual
 review navigation or exporting requires saving or discarding remaining edits first.
 
-Review candidate and reference cards show elapsed/total time, a seek bar, and a playhead
-over the waveform or MIDI roll. The renderer tracks position from the WebAudio context
-clock and decoded buffer duration; seeking during playback replaces the source at the
-chosen offset while retaining preview gain and Loop. Stop and natural completion reset
-progress. AuditionPlayer publishes a renderer-local external store; each review card
-subscribes only to its own active asset. Clock ticks do not update App or rebuild cue
+Every sound card (library, Playground, inspector and review) shows elapsed/total time
+and a playhead over the waveform or MIDI roll. The waveform is the seek bar: click or
+drag (the seek lands on release) or use the arrow keys when focused. Play/Pause keeps
+the position; the separate Stop button and natural completion return to the start.
+The renderer tracks position from the WebAudio context clock and decoded buffer
+duration; seeking replaces the source at the chosen offset while retaining preview
+gain and Loop, and a seek while paused stays paused. AuditionPlayer publishes a
+renderer-local external store keyed by the owning control; each card subscribes only
+to its own key. Clock ticks do not update App or rebuild cue
 controls. RendererPort receives lifecycle status only, rather than per-frame reports.
 Loading feedback and cancellation are local to the requested sound, without locking
 review edits or other Play buttons. Superseded loads abort their fetch and cannot start
 audio after Stop, navigation, or another Play. Asset pickers populate the full library
 only while focused; idle controls retain only their current option. Shared audio cards
 decode waveforms near the viewport and cache up to 256 small peak arrays; they abort
-unmounted fetches. Memoized waveforms/note rolls do not rebuild on clock ticks. Ordinary audio cards reuse the same
-transport presentation with their native media position.
+unmounted fetches. Memoized waveforms/note rolls do not rebuild on clock ticks. The trim editor's
+seam and loop previews play their rendered blobs through the same player.
 
 `review_create` saves first, then uses RendererPort to open the new sheet by default.
 `open:false` supports draft preparation; the manual launcher uses it because it owns
@@ -649,10 +654,16 @@ without duplicating a sheet. Review updates do not switch the visible sheet.
 
 RendererPort acknowledges UI commands and reports actual player state. Open commands
 never autoplay. Conflicting simultaneous switches return UI_BUSY. The renderer's
-AuditionPlayer owns one WebAudio context and a single source with preview gain.
-Only a user click starts playback. Review Loop checkboxes mirror the native card
-controls, default off, and live only in renderer interaction state. Changing Loop
-stops current review playback; Play applies the new choice. No timed scheduling,
+AuditionPlayer owns one WebAudio context and a single source with preview gain for
+every card and preview. Only a user click starts playback. Loop checkboxes default
+off and live only in renderer interaction state. Loop and preview gain change live
+without restarting: the source's `loop`, `loopStart` and `loopEnd` update in place.
+A loop render's recorded region (`edit.loop.loopStartFrame`/`loopEndFrame`) is the
+looped part, so an intro plays once and only the loop repeats, matching an engine
+that honors the smpl chunk; other sounds loop whole. The trim editor's loop preview
+repeats the same way, with the kept intro first. Playback reports `paused` as well
+as `playing`, `stopped` and `error`. Saving review edits or decisions does not stop
+playback. No timed scheduling,
 automatic retrigger, or programmatic play/stop operation remains. Explicit stop and
 view/session/project/review changes clear active sources; visibility and native
 hide/minimize events also stop. Other native audio players stop the review player.

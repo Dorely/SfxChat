@@ -28,7 +28,7 @@ export interface ReviewBoard extends ReviewContent {
 export interface ReviewEvent { revision: number; origin: 'user' | 'agent'; at: string; kind: 'created' | 'saved' | 'completed' | 'reopened'; status: 'active' | 'completed'; cues: string[] }
 /** What review_wait returns: revisions after the cursor, the review as it is now, and whether the wait ran out. */
 export interface ReviewWait { review: ReviewBoard; events: ReviewEvent[]; cursor: number; timedOut: boolean }
-export interface PlaybackState { status: 'stopped' | 'playing' | 'error'; assetId?: string; reviewId?: string; error?: string; updatedAt: string }
+export interface PlaybackState { status: 'stopped' | 'playing' | 'paused' | 'error'; assetId?: string; reviewId?: string; error?: string; updatedAt: string }
 export interface UiCommand { id: string; action: 'open' | 'stop'; projectId: string; sessionId: string; reviewId?: string }
 export interface OperationResponse { ok: boolean; result?: unknown; error?: { code: string; message: string; details?: unknown } }
 export class WorkbenchError extends Error {

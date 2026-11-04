@@ -214,9 +214,11 @@ also saves edits independently of a decision. Failed saves retain the draft and
 surface revision conflicts for reconciliation.
 
 `review_open` never autoplays. CLI/MCP and assistant tools have no playback start
-or stop controls. Users click Play/Stop in a review card; Loop is an optional user
-checkbox, off on opening a review. A single WebAudio source plays the clip, with
-no timed retrigger scheduler or overlapping repeats. View, session/project/review
+or stop controls. Users click Play/Pause and Stop in a review card; Loop is an
+optional user checkbox, off on opening a review, that changes live. A looped loop
+render plays its intro once, then repeats its recorded loop region. A single WebAudio
+source plays the clip, with no timed retrigger scheduler or overlapping repeats.
+`playback_status` reports `playing`, `paused`, `stopped` or `error`. View, session/project/review
 changes, visibility loss, native hide/minimize, and explicit stop end playback.
 Playback status is renderer state, never evidence of hearing or approval. Model
 listening requires an audio-capable harness; the human's audition remains separate.

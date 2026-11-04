@@ -140,7 +140,7 @@ export const commandSchemas = {
   operation: z.tuple([z.string().min(1).max(80), z.unknown()]),
   installIntegration: z.tuple([installationSchema]), chooseDirectory: z.tuple([]), uiReady: z.tuple([]),
   uiAcknowledge: z.tuple([idSchema, z.string().max(2000).optional()]),
-  playbackReport: z.tuple([idSchema, z.object({ status: z.enum(['stopped','playing','error']), assetId: idSchema.optional(), reviewId: idSchema.optional(), error: z.string().max(2000).optional(), updatedAt: z.string() }).strict()]),
+  playbackReport: z.tuple([idSchema, z.object({ status: z.enum(['stopped','playing','paused','error']), assetId: idSchema.optional(), reviewId: idSchema.optional(), error: z.string().max(2000).optional(), updatedAt: z.string() }).strict()]),
   snapshot: z.tuple([]), createConversation: z.tuple([]), renameConversation: z.tuple([idSchema, titleSchema]),
   createProject: z.tuple([projectNameSchema]), renameProject: z.tuple([idSchema, projectNameSchema]), setActiveProject: z.tuple([idSchema]),
   chatContext: z.tuple([idSchema, z.string()]),

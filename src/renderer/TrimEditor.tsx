@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Asset, AudioAnalysis, LoopCandidate, LoopSearchResult, MusicalAnalysis, TrimInput } from '../shared/types'
 import Icon from './Icon'
+import { playbackTime, SeekSurface } from './AudioCard'
+import { usePlayback, usePlayer, type AuditionPlayer, type AuditionRequest } from './audition'
 
 type TrimEditorProps = {
   asset: Asset
   onClose: () => void
   onSave: (input: TrimInput) => Promise<Asset | null>
-  onPlay: (key: string, playing: boolean) => void
-  playingKey: string | null
 }
 
 const MAX_BINS = 320
@@ -49,7 +49,16 @@ function AudioFacts({ musical, error }: { musical: MusicalAnalysis | null | unde
   </div>
 }
 
-export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey }: TrimEditorProps) {
+/** A rendered preview on the shared player: play/pause keeps the position, Stop returns to the start, the bar seeks. */
+function PreviewStrip({ player, playerKey, label, length, loopStart, onPlayFrom }: { player: AuditionPlayer; playerKey: string; label: string; length: number; loopStart?: number | null; onPlayFrom(position: number): void }) {
+  const playback = usePlayback(player, playerKey)
+  const duration = playback?.duration || length, position = playback?.position ?? 0
+  return <div className="trim-preview"><span className="field-label">{label}{playback?.status === 'paused' ? ' · paused' : ''}</span>
+    <div className="trim-preview-row"><SeekSurface className="trim-preview-bar" name={label} position={position} duration={duration} active={!!playback} loopStart={loopStart} onSeek={next => player.isCurrent(playerKey) ? player.seek(playerKey, next) : onPlayFrom(next)}><div className="trim-preview-track" /></SeekSurface><span className="card-playback-time">{playbackTime(position)} / {playbackTime(duration)}</span></div>
+  </div>
+}
+
+export default function TrimEditor({ asset, onClose, onSave }: TrimEditorProps) {
   // A MIDI clip is symbolic: it is edited as notes in the MIDI studio, not decoded and trimmed.
   if (asset.format === 'mid') return null
   const [analysis, setAnalysis] = useState<AudioAnalysis | null>(null)
@@ -90,12 +99,13 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
   const musicalRequestRef = useRef(0)
   const loopRequestRef = useRef(0)
   const seamRequestRef = useRef(0)
-  const seamAudioRef = useRef<HTMLAudioElement>(null)
   const seamKey = `seam-preview-${asset.id}`
   const analysisRequestRef = useRef(0)
   const previewRequestRef = useRef(0)
   const spectrogramRequestRef = useRef(0)
-  const previewAudioRef = useRef<HTMLAudioElement>(null)
+  const [repeatLoop, setRepeatLoop] = useState(true)
+  const player = usePlayer()
+  const preview = usePlayback(player, `trim-preview-${asset.id}`), seam = usePlayback(player, `seam-preview-${asset.id}`)
   const modalRef = useRef<HTMLDivElement>(null)
   const previewKey = `trim-preview-${asset.id}`
 
@@ -188,42 +198,17 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
     modalRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
     return () => { if (previous?.isConnected) previous.focus() }
   }, [])
-  useEffect(() => () => { previewRequestRef.current += 1; onPlay(previewKey, false) }, [onPlay, previewKey])
-  useEffect(() => () => { seamRequestRef.current += 1; onPlay(seamKey, false) }, [onPlay, seamKey])
+  const stopPreviews = () => { if (player.isCurrent(previewKey) || player.isCurrent(seamKey)) player.stop() }
+  useEffect(() => () => { previewRequestRef.current += 1; seamRequestRef.current += 1; if (player.isCurrent(previewKey) || player.isCurrent(seamKey)) player.stop() }, [player, previewKey, seamKey])
   useEffect(() => {
-    const audio = seamAudioRef.current
-    if (!audio) return
-    let cancelled = false
-    if (playingKey === seamKey) void audio.play().catch(reason => {
-      if (cancelled) return
-      setError(reason instanceof Error ? reason.message : 'Unable to play the seam.')
-      onPlay(seamKey, false)
-    })
-    else audio.pause()
-    return () => { cancelled = true }
-  }, [playingKey, seamKey, onPlay, seamUrl])
-  useEffect(() => {
-    const audio = previewAudioRef.current
-    if (!audio) return
-    let cancelled = false
-    if (playingKey === previewKey) void audio.play().catch(reason => {
-      if (cancelled) return
-      setError(reason instanceof Error ? reason.message : 'Unable to play the selection.')
-      onPlay(previewKey, false)
-    })
-    else audio.pause()
-    return () => { cancelled = true }
-  }, [playingKey, previewKey, onPlay, previewUrl])
-  useEffect(() => {
-    if (previewUrl || playingKey === previewKey) onPlay(previewKey, false)
-    if (previewUrl) setPreviewUrl(null)
+    stopPreviews()
+    if (previewUrl) { player.forget(previewUrl); setPreviewUrl(null) }
     setPreviewLoading(false)
     previewRequestRef.current += 1
-    if (seamUrl || playingKey === seamKey) onPlay(seamKey, false)
-    if (seamUrl) setSeamUrl(null)
+    if (seamUrl) { player.forget(seamUrl); setSeamUrl(null) }
     setSeamLoading(false)
     seamRequestRef.current += 1
-  }, [start, end, fadeInMs, fadeOutMs, crossfadeMs, mode])
+  }, [start, end, fadeInMs, fadeOutMs, crossfadeMs, keepIntro, mode])
 
   const rate = analysis?.sampleRate ?? 1
   const validFades = fadeInMs <= 10000 && fadeOutMs <= 10000 && Math.round(fadeInMs * rate / 1000) + Math.round(fadeOutMs * rate / 1000) <= Math.round(end * rate) - Math.round(start * rate)
@@ -240,35 +225,30 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
   const commitStartDraft = () => { if (startDraft === seconds(start)) return; const value = Number(startDraft); const next = clamp(Number.isFinite(value) ? value : start, fullStart, Math.max(fullStart, end - 0.001)); setStart(next); setStartDraft(seconds(next)) }
   const commitEndDraft = () => { if (endDraft === seconds(end)) return; const value = Number(endDraft); const next = clamp(Number.isFinite(value) ? value : end, Math.min(fullEnd, start + 0.001), fullEnd); setEnd(next); setEndDraft(seconds(next)) }
 
-  const handlePreview = async () => {
-    const audio = previewAudioRef.current
-    if (playingKey === previewKey) {
-      audio?.pause()
-      if (audio) audio.currentTime = 0
-      onPlay(previewKey, false)
-      return
-    }
+  /** In the rendered loop preview, the kept intro runs from 0 to the loop start; the loop repeats to the file end. */
+  const introSeconds = mode === 'loop' && input.introStartSeconds !== undefined ? input.startSeconds - input.introStartSeconds : 0
+  const previewLength = mode === 'loop' ? input.endSeconds - (input.introStartSeconds ?? input.startSeconds) : input.endSeconds - input.startSeconds
+  const previewRequest = (url: string): AuditionRequest => ({ key: previewKey, url, gainDb: 0, loop: mode === 'loop' && repeatLoop, region: mode === 'loop' ? { startSeconds: introSeconds } : null })
+  const playback = (action: Promise<void>) => void action.catch(reason => setError(reason instanceof Error ? reason.message : 'Unable to play the preview.'))
+  const handlePreview = async (from?: number) => {
+    if (player.isCurrent(previewKey) && from === undefined) { playback(player.toggle(previewRequest(previewUrl ?? ''))); return }
     if (!validSelection || previewLoading) return
-    setError(null); onPlay(seamKey, false)
-    if (previewUrl && audio) {
-      audio.currentTime = 0
-      onPlay(previewKey, true)
-      return
-    }
-    const previewRequest = ++previewRequestRef.current
-    setError(null); setPreviewLoading(true); onPlay(previewKey, false)
+    setError(null)
+    if (previewUrl) { playback(player.play(previewRequest(previewUrl), from ?? 0)); return }
+    const request = ++previewRequestRef.current
+    setPreviewLoading(true); stopPreviews()
     try {
       const bytes = await window.sfx.previewTrim(asset.id, input)
       const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'audio/wav' }))
-      if (previewRequest !== previewRequestRef.current) { URL.revokeObjectURL(url); return }
-      setPreviewUrl(previous => { if (previous) URL.revokeObjectURL(previous); return url })
-      onPlay(previewKey, true)
-    } catch (reason) { if (previewRequest === previewRequestRef.current) setError(reason instanceof Error ? reason.message : 'Unable to render the preview.')
-    } finally { if (previewRequest === previewRequestRef.current) setPreviewLoading(false) }
+      if (request !== previewRequestRef.current) { URL.revokeObjectURL(url); return }
+      setPreviewUrl(previous => { if (previous) { player.forget(previous); URL.revokeObjectURL(previous) } return url })
+      playback(player.play(previewRequest(url), from ?? 0))
+    } catch (reason) { if (request === previewRequestRef.current) setError(reason instanceof Error ? reason.message : 'Unable to render the preview.')
+    } finally { if (request === previewRequestRef.current) setPreviewLoading(false) }
   }
   const switchMode = (next: 'trim' | 'loop') => {
     if (next === mode || saving) return
-    onPlay(previewKey, false); onPlay(seamKey, false)
+    stopPreviews()
     setMode(next)
     setName(current => {
       const base = asset.name || 'Untitled sound'
@@ -294,31 +274,26 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
       if (request === loopRequestRef.current) { setLoops(null); setError(reason instanceof Error ? reason.message : 'Unable to find loop points.') }
     } finally { if (request === loopRequestRef.current) setLoopSearching(false) }
   }
-  const handleSeam = async () => {
-    const audio = seamAudioRef.current
-    if (playingKey === seamKey) {
-      audio?.pause()
-      if (audio) audio.currentTime = 0
-      onPlay(seamKey, false)
-      return
-    }
+  const seamRequest = (url: string): AuditionRequest => ({ key: seamKey, url, gainDb: 0, loop: false })
+  const handleSeam = async (from?: number) => {
+    if (player.isCurrent(seamKey) && from === undefined) { playback(player.toggle(seamRequest(seamUrl ?? ''))); return }
     if (!validSelection || seamLoading) return
-    setError(null); onPlay(previewKey, false)
-    if (seamUrl && audio) { audio.currentTime = 0; onPlay(seamKey, true); return }
+    setError(null)
+    if (seamUrl) { playback(player.play(seamRequest(seamUrl), from ?? 0)); return }
     const request = ++seamRequestRef.current
-    setSeamLoading(true)
+    setSeamLoading(true); stopPreviews()
     try {
       const bytes = await window.sfx.previewSeam(asset.id, { startSeconds: input.startSeconds, endSeconds: input.endSeconds, crossfadeMs: input.crossfadeMs, contextSeconds: 2 })
       const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'audio/wav' }))
       if (request !== seamRequestRef.current) { URL.revokeObjectURL(url); return }
-      setSeamUrl(previous => { if (previous) URL.revokeObjectURL(previous); return url })
-      onPlay(seamKey, true)
+      setSeamUrl(previous => { if (previous) { player.forget(previous); URL.revokeObjectURL(previous) } return url })
+      playback(player.play(seamRequest(url), from ?? 0))
     } catch (reason) { if (request === seamRequestRef.current) setError(reason instanceof Error ? reason.message : 'Unable to render the seam.')
     } finally { if (request === seamRequestRef.current) setSeamLoading(false) }
   }
   const handleSave = async () => {
     if (!validSelection || saving) return
-    setSaving(true); setError(null); onPlay(previewKey, false); onPlay(seamKey, false)
+    setSaving(true); setError(null); stopPreviews()
     try { const created = await onSave(input); if (created) onClose() }
     catch (reason) { setError(reason instanceof Error ? reason.message : mode === 'loop' ? 'Unable to save the loop.' : 'Unable to save the trimmed asset.') }
     finally { setSaving(false) }
@@ -337,7 +312,7 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
   return <div ref={modalRef} className="trim-modal" role="dialog" aria-modal="true" aria-labelledby="trim-editor-title" onKeyDown={event => {
     if (event.key === 'Escape' && !saving) { event.stopPropagation(); onClose() }
     if (event.key === 'Tab') {
-      const items = Array.from(modalRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), audio[controls]') ?? [])
+      const items = Array.from(modalRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), [role=slider][tabindex="0"]') ?? [])
       const first = items[0], last = items.at(-1)
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
       if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
@@ -372,9 +347,9 @@ export default function TrimEditor({ asset, onClose, onSave, onPlay, playingKey 
             {loops && <ol className="loop-candidates">{loops.candidates.map(candidate => <li key={candidate.rank}><button type="button" className={candidate === activeLoop ? 'loop-candidate loop-candidate-active' : 'loop-candidate'} aria-pressed={candidate === activeLoop} onClick={() => chooseLoop(candidate)} disabled={saving}><span className="loop-rank">{candidate.rank}</span><span className="loop-text"><span className="loop-summary">{candidate.summary}</span><span className="loop-details">{seconds(candidate.startSeconds)}–{seconds(candidate.endSeconds)} s · context {Math.round(candidate.score * 100)}% · waveform {Math.round(Math.max(0, candidate.seam.correlation) * 100)}% · level {candidate.seam.levelDeltaDb >= 0 ? '+' : ''}{candidate.seam.levelDeltaDb.toFixed(1)} dB · crossfade {candidate.recommendedCrossfadeMs} ms</span></span><span className={`loop-match loop-match-${candidate.match}`}>{MATCH_WORDS[candidate.match]}</span></button></li>)}</ol>}
           </section>
         </>}
-        <label className="trim-name-field">New asset name<input maxLength={200} value={name} onChange={event => setName(event.target.value)} disabled={saving || !analysis} /></label><p className="field-hint trim-analysis-note">Times use decoded audio. Original preserved.</p>{error && <p className="trim-error" role="alert">{error}</p>}{seamUrl && <div className="trim-preview"><span className="field-label">Seam preview — the loop end flowing into its start</span><audio ref={seamAudioRef} src={seamUrl} controls onPlay={() => onPlay(seamKey, true)} onPause={() => { if (playingKey === seamKey) onPlay(seamKey, false) }} onEnded={() => { if (playingKey === seamKey) onPlay(seamKey, false) }} /></div>}{previewUrl && <div className="trim-preview"><span className="field-label">{mode === 'loop' ? input.introStartSeconds !== undefined ? 'Loop preview — the intro, then one pass of the loop' : 'Loop preview — one pass of the saved loop' : 'Preview'}</span><audio ref={previewAudioRef} src={previewUrl} controls onPlay={() => onPlay(previewKey, true)} onPause={() => { if (playingKey === previewKey) onPlay(previewKey, false) }} onEnded={() => { if (playingKey === previewKey) onPlay(previewKey, false) }} /></div>}
+        <label className="trim-name-field">New asset name<input maxLength={200} value={name} onChange={event => setName(event.target.value)} disabled={saving || !analysis} /></label><p className="field-hint trim-analysis-note">Times use decoded audio. Original preserved.</p>{error && <p className="trim-error" role="alert">{error}</p>}{seamUrl && <PreviewStrip player={player} playerKey={seamKey} label="Seam preview — the loop end flowing into its start" length={0} onPlayFrom={from => void handleSeam(from)} />}{previewUrl && <PreviewStrip player={player} playerKey={previewKey} label={mode === 'loop' ? introSeconds > 0 ? repeatLoop ? 'Loop preview — the intro once, then the loop repeating' : 'Loop preview — the intro, then one pass of the loop' : repeatLoop ? 'Loop preview — the loop repeating' : 'Loop preview — one pass of the saved loop' : 'Preview'} length={previewLength} loopStart={mode === 'loop' ? introSeconds : null} onPlayFrom={from => void handlePreview(from)} />}
       </div>
-      <div className="trim-editor-footer">{mode === 'loop' && <button className="secondary-button" onClick={() => void handleSeam()} disabled={!validSelection || seamLoading || saving}><Icon name={playingKey === seamKey ? 'stop' : 'play'} />{seamLoading ? 'Preparing…' : playingKey === seamKey ? 'Stop seam' : 'Play seam'}</button>}<button className="secondary-button" onClick={handlePreview} disabled={!validSelection || previewLoading || saving}><Icon name={playingKey === previewKey ? 'stop' : 'play'} />{previewLoading ? 'Preparing…' : playingKey === previewKey ? 'Stop' : mode === 'loop' ? 'Play loop' : 'Play selection'}</button><button className="primary-button" onClick={() => void handleSave()} disabled={!validSelection || loading || saving}>{saving ? 'Saving…' : mode === 'loop' ? 'Save loop as new asset' : 'Save as new asset'}</button></div>
+      <div className="trim-editor-footer">{mode === 'loop' && <label className="loop-repeat-option" title="Changes live while the preview plays"><input type="checkbox" checked={repeatLoop} onChange={event => { setRepeatLoop(event.target.checked); player.setLoop(previewKey, event.target.checked) }} />Repeat the loop</label>}{mode === 'loop' && <button className="secondary-button" onClick={() => void handleSeam()} disabled={!validSelection || seamLoading || saving}><Icon name={seam?.status === 'playing' ? 'pause' : 'play'} />{seamLoading ? 'Preparing…' : seam?.status === 'playing' ? 'Pause seam' : seam?.status === 'paused' ? 'Resume seam' : 'Play seam'}</button>}<button className="secondary-button" onClick={() => void handlePreview()} disabled={!validSelection || previewLoading || saving}><Icon name={preview?.status === 'playing' ? 'pause' : 'play'} />{previewLoading ? 'Preparing…' : preview?.status === 'playing' ? 'Pause' : preview?.status === 'paused' ? 'Resume' : mode === 'loop' ? 'Play loop' : 'Play selection'}</button><button className="secondary-button" onClick={stopPreviews} disabled={!preview && !seam} aria-label="Stop the preview and return to the start"><Icon name="stop" />Stop</button><button className="primary-button" onClick={() => void handleSave()} disabled={!validSelection || loading || saving}>{saving ? 'Saving…' : mode === 'loop' ? 'Save loop as new asset' : 'Save as new asset'}</button></div>
     </div>
   </div>
 }

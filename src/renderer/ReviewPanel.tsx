@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import type { Asset, Snapshot } from '../shared/types';
 import type { ReviewBoard, ReviewContent, ReviewCue } from '../shared/workbench';
-import { AudioCardFrame, AudioSeekBar } from './AudioCard';
+import { AudioCardFrame } from './AudioCard';
 import Icon from './Icon';
-import type { AuditionRequest, AuditionPlayer } from './audition';
+import { assetLoopRegion, usePlayback, type AuditionPlayer } from './audition';
 
 export async function workbench<T = unknown>(name: string, args: unknown): Promise<T> {
   const response = await window.sfx.operation(name, args);
@@ -48,18 +48,14 @@ function CardControls({ name, loop, onLoop, gainDb, onGain, locked }: { locked: 
   </div>;
 }
 
+export const reviewKey = (reviewId: string, assetId: string) => `review:${reviewId}:${assetId}`;
 /** Only cards using the active sound subscribe to its clock; the board and app stay still. */
-function ReviewAudioCard({ player, reviewId, ...props }: Omit<ComponentProps<typeof AudioCardFrame>, 'isPlaying' | 'position' | 'duration' | 'seek'> & { player: AuditionPlayer; reviewId: string }) {
-  const playback = useSyncExternalStore(player.subscribe, () => {
-    const current = player.getSnapshot();
-    return current.reviewId === reviewId && current.assetId === props.asset.id ? current : null;
-  });
-  const active = playback?.status === 'playing';
-  const position = active ? playback.position ?? 0 : 0;
-  const duration = active ? playback.duration ?? 0 : props.asset.duration ?? 0;
-  return <AudioCardFrame {...props} isPlaying={active} loading={playback?.loading} position={position} duration={duration} seek={
-    <AudioSeekBar name={props.title || props.asset.name} position={position} duration={duration} disabled={!active} onSeek={value => player.seek(value)} />
-  } />;
+function ReviewAudioCard({ player, reviewId, onPlayFrom, ...props }: Omit<ComponentProps<typeof AudioCardFrame>, 'isPlaying' | 'paused' | 'position' | 'duration' | 'onStop' | 'onSeek'> & { player: AuditionPlayer; reviewId: string; onPlayFrom(position: number): void }) {
+  const key = reviewKey(reviewId, props.asset.id), playback = usePlayback(player, key);
+  const playing = playback?.status === 'playing', paused = playback?.status === 'paused';
+  return <AudioCardFrame {...props} isPlaying={playing} paused={paused} loading={playback?.loading} position={playback?.position ?? 0} duration={playback?.duration || props.asset.duration || 0} loopStart={assetLoopRegion(props.asset)?.startSeconds}
+    onStop={() => { if (player.isCurrent(key)) player.stop(); }}
+    onSeek={position => player.isCurrent(key) ? player.seek(key, position) : onPlayFrom(position)} />;
 }
 
 /** Native pickers only need the full library while focused, not once per cue at rest. */
@@ -71,7 +67,7 @@ function ReviewAssetSelect({ assets, value, excluded, disabled, placeholder, onC
   </select>;
 }
 
-export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect, onSelectAsset, player, onPlay, onStop }: { snapshot: Snapshot; sessionId: string; selectedId: string; onSelect(id: string | null): void; onSelectAsset(id: string): void; player: AuditionPlayer; onPlay(input: AuditionRequest): Promise<void>; onStop(): void; }) {
+export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect, onSelectAsset, player }: { snapshot: Snapshot; sessionId: string; selectedId: string; onSelect(id: string | null): void; onSelectAsset(id: string): void; player: AuditionPlayer }) {
   const boards = snapshot.reviews;
   const assetsById = useMemo(() => new Map(snapshot.assets.map(asset => [asset.id, asset])), [snapshot.assets]);
   const board = boards.find(r => r.id === selectedId);
@@ -121,27 +117,32 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
       ...scope, reviewId: submitted.id, expectedRevision: submitted.revision,
       ...(status === 'completed' ? { content: { title: submitted.title, cues: submitted.cues } } : {})
     });
-    onStop(); replaceDraft(updated, false); setFilter('active');
+    player.stop(); replaceDraft(updated, false); setFilter('active');
+    // Done leaves the finished review; the Playground lists the reviews still open.
+    if (status === 'completed') onSelect(null);
   });
   const decide = (index: number, decision: ReviewCue['decision'], selectedAssetId: string | null = null) => {
     if (busyRef.current) return;
     const next = cueChange(index, { decision, selectedAssetId });
     if (next) void save(next);
   };
-  const stop = () => { setError(''); onStop(); };
-  const play = async (cue: ReviewCue, assetId: string) => {
+  const stop = () => { setError(''); player.stop(); };
+  const request = (cue: ReviewCue, assetId: string) => {
+    const asset = assetsById.get(assetId), candidate = cue.candidates.find(c => c.assetId === assetId);
+    const gainDb = candidate?.gainDb ?? cue.referenceGainDb;
+    if (!Number.isFinite(gainDb) || gainDb < -60 || gainDb > 12) throw new Error('Preview gain must be between -60 and 12 dB.');
+    return { key: reviewKey(selectedId, assetId), sessionId, reviewId: selectedId, assetId, gainDb, loop: !!loops[assetId], region: asset ? assetLoopRegion(asset) : null };
+  };
+  const play = async (cue: ReviewCue, assetId: string, from?: number) => {
     if (!board || busyRef.current) return;
     if (error) setError('');
-    try {
-      const candidate = cue.candidates.find(c => c.assetId === assetId);
-      const gainDb = candidate?.gainDb ?? cue.referenceGainDb;
-      if (!Number.isFinite(gainDb) || gainDb < -60 || gainDb > 12) throw new Error('Preview gain must be between -60 and 12 dB.');
-      await onPlay({ sessionId, reviewId: board.id, assetId, gainDb, loop: !!loops[assetId] });
-    } catch (error) { setError(error instanceof Error ? error.message : 'Playback failed.'); }
+    try { const next = request(cue, assetId); await (from === undefined ? player.toggle(next) : player.play(next, from)); }
+    catch (error) { setError(error instanceof Error ? error.message : 'Playback failed.'); }
   };
-  const isPlaying = (id: string) => { const state = player.getSnapshot(); return (state.status === 'playing' || state.loading) && state.reviewId === selectedId && state.assetId === id; };
-  const loopToggle = (assetId: string, checked: boolean) => { if (isPlaying(assetId)) stop(); setLoops(current => ({ ...current, [assetId]: checked })); };
-  const toggle = (cue: ReviewCue, id: string) => isPlaying(id) ? void stop() : void play(cue, id);
+  // Loop and preview gain change live; neither restarts the sound.
+  const loopToggle = (assetId: string, checked: boolean) => { setLoops(current => ({ ...current, [assetId]: checked })); player.setLoop(reviewKey(selectedId, assetId), checked); };
+  const gainChange = (assetId: string, gainDb: number) => { if (Number.isFinite(gainDb) && gainDb >= -60 && gainDb <= 12) player.setGain(reviewKey(selectedId, assetId), gainDb); };
+  const toggle = (cue: ReviewCue, id: string) => void play(cue, id);
   const move = (index: number, offset: number) => { if (!draft) return; const cues = [...draft.cues]; [cues[index], cues[index + offset]] = [cues[index + offset], cues[index]]; change({ ...draft, cues }); };
   if (!draft) return null;
   return <div className="review-results" aria-label="Playground audition results">
@@ -163,8 +164,8 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
         <div className="review-cue-layout">
           <div className="review-card-grid">
             {reference && <div className="playground-slot review-reference"><div className="slot-label"><span>Current reference</span></div>
-              <ReviewAudioCard player={player} reviewId={selectedId} onSelect={() => onSelectAsset(reference.id)} asset={reference} onToggle={() => toggle(cue, reference.id)} disabled={busy} compact>
-                <CardControls locked={locked} name={reference.name} loop={!!loops[reference.id]} onLoop={checked => loopToggle(reference.id, checked)} gainDb={cue.referenceGainDb} onGain={gainDb => cueChange(index, { referenceGainDb: gainDb })} />
+              <ReviewAudioCard player={player} reviewId={selectedId} onSelect={() => onSelectAsset(reference.id)} asset={reference} onToggle={() => toggle(cue, reference.id)} onPlayFrom={from => void play(cue, reference.id, from)} disabled={busy} compact>
+                <CardControls locked={locked} name={reference.name} loop={!!loops[reference.id]} onLoop={checked => loopToggle(reference.id, checked)} gainDb={cue.referenceGainDb} onGain={gainDb => { gainChange(reference.id, gainDb); cueChange(index, { referenceGainDb: gainDb }); }} />
                 <p className="field-hint">Compare candidates against this sound.</p>
               </ReviewAudioCard>
             </div>}
@@ -173,8 +174,8 @@ export default function ReviewPanel({ snapshot, sessionId, selectedId, onSelect,
               const remove = () => cueChange(index, { candidates: cue.candidates.filter((_, i) => i !== ci), ...(picked ? { decision: 'unreviewed' as const, selectedAssetId: null } : {}) });
               return <div className="playground-slot" key={candidate.assetId}>
                 <div className="slot-label"><span>Candidate {String(ci + 1).padStart(2, '0')}</span><button className="mini-button" aria-label={`Remove candidate ${ci + 1}`} disabled={locked} onClick={remove}><Icon name="close" /></button></div>
-                {asset ? <ReviewAudioCard player={player} reviewId={selectedId} onSelect={() => onSelectAsset(asset.id)} asset={asset} title={candidate.label} selected={picked} review={picked ? 'accepted' : cue.decision === 'rejected' ? 'rejected' : 'unreviewed'} onToggle={() => toggle(cue, asset.id)} disabled={busy} compact>
-                  <CardControls locked={locked} name={asset.name} loop={!!loops[asset.id]} onLoop={checked => loopToggle(asset.id, checked)} gainDb={candidate.gainDb} onGain={gainDb => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, gainDb } : c) })} />
+                {asset ? <ReviewAudioCard player={player} reviewId={selectedId} onSelect={() => onSelectAsset(asset.id)} asset={asset} title={candidate.label} selected={picked} review={picked ? 'accepted' : cue.decision === 'rejected' ? 'rejected' : 'unreviewed'} onToggle={() => toggle(cue, asset.id)} onPlayFrom={from => void play(cue, asset.id, from)} disabled={busy} compact>
+                  <CardControls locked={locked} name={asset.name} loop={!!loops[asset.id]} onLoop={checked => loopToggle(asset.id, checked)} gainDb={candidate.gainDb} onGain={gainDb => { gainChange(asset.id, gainDb); cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, gainDb } : c) }); }} />
                   <button className={`secondary-button review-pick ${picked ? 'review-pick-active' : ''}`} aria-pressed={picked} disabled={locked} onClick={() => decide(index, 'selected', asset.id)}><Icon name="check" /> {picked ? 'Selected for this cue' : 'Select this candidate'}</button>
                   <label className="review-candidate-notes">Candidate notes<textarea disabled={locked} value={candidate.notes} placeholder="What works? What needs changing?" onChange={e => cueChange(index, { candidates: cue.candidates.map((c, i) => i === ci ? { ...c, notes: e.target.value } : c) })} /></label>
                 </ReviewAudioCard> : <p role="alert">Candidate is unavailable. Remove it or reload the review.</p>}

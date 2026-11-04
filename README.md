@@ -83,8 +83,10 @@ and export. The desktop starts on demand; disconnecting a client leaves admitted
 jobs running. Generation request IDs prevent accidental repeat purchases.
 
 Opening a review displays cue-grouped sound cards in the Playground results area.
-Candidate and reference cards show a moving playhead and elapsed/total time, with a
-seek bar available during playback.
+Every sound card shows a moving playhead and elapsed/total time. Click or drag the
+waveform to seek; Play/Pause keeps the position and Stop returns to the start. With
+Loop on, a saved loop plays its intro once and then repeats only the loop; Loop and
+preview gain change without interrupting playback.
 Candidate notes and selection controls sit under each card, with cue feedback and
 manual Loop toggles alongside or below. The Playground header and generation form stay
 in place; **All Playground sounds** returns to the project’s shared results.
@@ -279,7 +281,8 @@ before contacting Codex; the repair does not generate audio again.
 ## Review completion
 
 Reviews support **Done**, an **Archived** list, and explicit **Reopen**. Done saves
-and locks the review while preserving playback and export. CLI/MCP expose attributed
+and locks the review, then returns to the Playground, where the open reviews are
+listed; finished ones stay reachable through Archived with playback and export. CLI/MCP expose attributed
 completion status, completion-aware waits, and review resource notifications; see
 [agent workflow](docs/agent-workbench.md#completing-and-archiving-reviews).
 Libraries upgrade to schema v5 and cannot be opened by older builds.
