@@ -1456,3 +1456,34 @@ automatically by an older snapshot.
   matched an earlier committed skill version, and 18 backups were written. The Codex MCP
   entry now carries `tool_timeout_sec = 1900`; all 38 skill/config entries are
   up-to-date. Reconnect existing MCP clients for the new `review_wait` schema.
+
+## 2026-11-04 — Shared pausable player, loop labels and blends, Ogg import, loop points
+
+- `npm run typecheck` and `npm run build` passed after each step (native helper rebuilt
+  with libvorbisfile). Temporary scratchpad harnesses (deleted afterwards) showed:
+  equal-power blends keep noise at 0.968 of body RMS mid-blend (linear 0.693); a 1.5 dB
+  level ramp takes a 1.37 dB tail step to -0.04 dB; `encode 6` tags the stream "quality
+  6", `encode 11` is refused; `decode` round-trips a 48 kHz tone to float WAV; importing a
+  WAV with a smpl loop gave loopPoint 1.5–2.5 s, an Ogg with LOOPSTART/LOOPLENGTH tags
+  gave 2–5 s, an Ogg Opus file was refused, and the Ogg's PCM16 WAV export carried smpl
+  frames 88200–220500.
+- `npm run dev:browser` on the real profile with the installed app closed (no provider
+  calls), on the Suno guardian take:
+  - Pause held 9.5 s for 2 s and Resume continued from it; Stop returned to 0. Toggling
+    Loop on and off kept playback running. Shift+Right seeked +5 s, and dragging the
+    waveform from about 10% to 50% started playback at 90.5 s of 179.9 s.
+  - The inspector rejected a 30→20 s loop point, saved 10–20 s (source user, card loop
+    marker shown), and looped playback ran 19.5 s → 10.2 s. Ogg export at quality 6 and
+    WAV export recorded the loop (WAV embedded smpl frames 480000–960000; Ogg manifest gives
+    the Godot Loop Offset and notes the early end). `inspect_asset` returned `filePath`.
+    The loop point was cleared afterwards; the exports went to the scratchpad.
+  - Loop finding showed separate repeat and seam labels (top candidates 4-bar phrases).
+    With the intro kept, equal-power shape and level match on, the loop preview started
+    at the intro (87.4 s total, loop marker at 80.5 s) and wrapped 86.8 s → 80.5 s.
+  - Fixed during the check: the page CSP blocked the player's `fetch` of preview blob URLs
+    (`connect-src` now allows `blob:`), and the Ogg quality menu pushed Save out of the
+    inspector footer (the footer now wraps).
+- Gaps: listening quality was not judged (no audio-understanding pass). Review Done
+  returning to the Playground, review-card loop toggles, and Ogg import through the app's
+  import dialog were not exercised in the browser. Nothing was saved from the trim
+  editor. The development host and browser tab were closed after checks.
