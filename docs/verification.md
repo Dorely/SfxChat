@@ -31,8 +31,15 @@ Packaging, native helper, bridge and CLI port; no provider calls or paid generat
   started with `--appimage-extract-and-run`, where the CLI reached its bridge.
 - Gaps: the in-app MIDI preview (helper `render-midi` through the app) and the AppImage
   agent-integration refusal were not exercised; no real Linux desktop, keyring, .deb
-  install, or Ubuntu 22.04 runtime was tested locally. The first CI run and release
-  publication are recorded below once observed.
+  install, or Ubuntu 22.04 runtime was tested locally.
+- CI: commit `38dbb10` (version 0.2.1) passed Build and release run 43632542310 on
+  `windows-latest` and `ubuntu-22.04`, and the release job published
+  [v0.2.1](https://github.com/Dorely/SfxChat/releases/tag/v0.2.1) with
+  `SfxChat-Setup-0.2.1.exe`, `SfxChat-0.2.1-x86_64.AppImage`, and
+  `SfxChat-0.2.1-amd64.deb`. In the downloaded .deb, the helper links only libc/libm
+  and needs at most `GLIBC_2.34` (the Electron binary `GLIBC_2.25`); it reproduced the
+  local encode/decode and MIDI render byte counts, and the runtime reported v24.21.0.
+  The published installer and packages were not installed or launched.
 
 # Optional chat panel (2026-11-14)
 

@@ -20,7 +20,8 @@ Your library stays in place.
   `--appimage-extract-and-run`. Agent CLI/MCP integration needs the .deb, because an
   AppImage's paths change on every launch.
 
-Linux packages are built on Ubuntu 22.04 and need glibc 2.35 or newer. Saving API keys or
+Linux packages are built on Ubuntu 22.04 and need glibc 2.34 or newer (for example
+Ubuntu 22.04, Debian 12, or Fedora 35 and later). Saving API keys or
 a Codex login on Linux needs a running Secret Service keyring such as GNOME Keyring or
 KWallet; without one, SfxChat reports secure storage as unavailable instead of storing
 secrets in plain text.

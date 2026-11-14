@@ -19,7 +19,7 @@ the agent directory to the user PATH, and keeps electron-builder's Chromium sand
 AppArmor handling. An AppImage mounts at a new temporary path on each launch, so agent
 integration installation refuses there and points users to the .deb. The Linux helper
 statically links the C++ runtime and builds FluidSynth without OpenMP, so it needs only
-glibc; CI builds on Ubuntu 22.04 to keep that floor at glibc 2.35.
+glibc; CI builds on Ubuntu 22.04, which keeps the released helper's floor at glibc 2.34.
 
 The [Build and release](../.github/workflows/release.yml) workflow type-checks and
 packages both platforms on every push and pull request. On a push to `main` whose
