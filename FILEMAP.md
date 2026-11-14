@@ -77,7 +77,7 @@ is recorded in [verification](docs/verification.md).
 | --- | --- |
 | [package.json](package.json), [package-lock.json](package-lock.json) | Pinned runtime/development dependencies and build/package commands. |
 | [tsconfig.json](tsconfig.json) | Strict TypeScript configuration. |
-| [electron.vite.config.ts](electron.vite.config.ts), [electron-builder.yml](electron-builder.yml) | Desktop builds, live/offline audio worker build ownership and dev serving, and unsigned Windows NSIS packaging. |
+| [electron.vite.config.ts](electron.vite.config.ts), [electron-builder.yml](electron-builder.yml) | Desktop builds, live/offline audio worker build ownership and dev serving, and unsigned Windows NSIS and Linux AppImage/deb packaging. |
 | [scripts/dev-browser.mjs](scripts/dev-browser.mjs) | Launches the real Electron owner without a window and requests graceful browser-host shutdown. |
 | [src/main/browser-host.ts](src/main/browser-host.ts) | Loopback-only development renderer/RPC/SSE/media transport with origin validation. |
 | [src/shared/api.ts](src/shared/api.ts) | Fixed capability factory shared by isolated preload and browser transport. |
@@ -135,7 +135,7 @@ is recorded in [verification](docs/verification.md).
 | [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Trim/Loop editor: waveform selection, fine-window zoom, fades, spectrogram panel, tempo/key/loudness chips, bar grid, loop-candidate search and brackets, seam preview, exact rendered preview, and derived-asset saving. |
 | [src/renderer/MidiStudio.tsx](src/renderer/MidiStudio.tsx) | MIDI workspace: clip rail, track lanes with sticky headers and key gutters on a shared ruler, note editing and keyboard nudging, transport with playhead audition, and derivative saving. |
 | [src/renderer/ChatContextMeter.tsx](src/renderer/ChatContextMeter.tsx) | Throttled composer context indicator, threshold styling, and estimate details. |
-| [.github/workflows/windows.yml](.github/workflows/windows.yml) | Credential-free Windows typecheck and installer artifact build. |
+| [.github/workflows/release.yml](.github/workflows/release.yml) | Credential-free Windows and Linux typecheck and package builds; publishes a GitHub release for each new `package.json` version pushed to `main`. |
 
 ## Agent workbench
 
@@ -152,7 +152,8 @@ is recorded in [verification](docs/verification.md).
 | [src/shared/workbench.ts](src/shared/workbench.ts) | Review, revision attribution, playback, installation and error contracts. |
 | [src/shared/guidance.ts](src/shared/guidance.ts) | Canonical packaged guidance imports shared by app and CLI. |
 | [src/shared/install.ts](src/shared/install.ts) | Project/user/custom skills and Codex/Claude MCP config installation with conflict/backups. |
-| [src/shared/native.ts](src/shared/native.ts) | Narrow bounded helper transport for DPAPI and directory ACL operations. |
+| [src/shared/native.ts](src/shared/native.ts) | Narrow bounded helper transport for Windows DPAPI and directory ACL operations. |
+| [src/shared/platform.ts](src/shared/platform.ts) | Windows/Linux executable names and the per-user profile location shared by app and CLI. |
 | [src/renderer/AudioCard.tsx](src/renderer/AudioCard.tsx) | Shared sound-card frame, lazy cached waveforms, memoized MIDI roll, seekable waveform with playhead and loop-start marker, Play/Pause and Stop, time readout, and Loop/gain controls on the shared player for libraries, Playground, inspector and cue reviews. |
 | [src/renderer/ReviewPanel.tsx](src/renderer/ReviewPanel.tsx) | Cue-grouped cards, project-wide active/archive launcher, per-card playback subscriptions, lazy library pickers, Done/reopen, references, preview settings, immediate decision saves, notes/drafts, stale revisions and pack export. |
 | [src/renderer/audition.ts](src/renderer/audition.ts) | Shared single-source WebAudio player for every card and preview: pause/resume, stop, seeking, live Loop over a loop render's recorded region and live gain, card-scoped subscriptions, cancellable loading and lifecycle reports. |
@@ -165,7 +166,8 @@ is recorded in [verification](docs/verification.md).
 | [resources/skill/references/elevenlabs-music.md](resources/skill/references/elevenlabs-music.md), [gemini-lyria.md](resources/skill/references/gemini-lyria.md) | Complete supported-provider music guidance, controls and examples. |
 | [resources/skill/references/music-craft.md](resources/skill/references/music-craft.md), [midi-instruments.md](resources/skill/references/midi-instruments.md), [midi-workflow.md](resources/skill/references/midi-workflow.md) | Composing craft, arranging for the General MIDI bank, and the compose_midi workflow, bounds, and evidence limits. |
 | [scripts/build-agent.mjs](scripts/build-agent.mjs) | CLI/runtime/skill packaging, pinned source verification (encoding and synthesis archives) and native helper build. |
-| [native/helper.cpp](native/helper.cpp), [native/CMakeLists.txt](native/CMakeLists.txt) | Windows DPAPI/ACL/PATH, bounded Vorbis encoder and decoder, and offline FluidSynth MIDI rendering, linked against pinned sources. |
+| [native/helper.cpp](native/helper.cpp), [native/CMakeLists.txt](native/CMakeLists.txt) | Bounded Vorbis encoder and decoder and offline FluidSynth MIDI rendering for Windows and Linux, plus Windows-only DPAPI/ACL/PATH, linked against pinned sources. |
 | [installer/agent.nsh](installer/agent.nsh) | User command discovery installation/removal hooks. |
+| [installer/deb-after-install.sh](installer/deb-after-install.sh), [deb-after-remove.sh](installer/deb-after-remove.sh) | Debian package scripts: `/usr/bin/sfxchat` CLI link, Chromium sandbox mode, and AppArmor profile. |
 | [third-party/encoding/](third-party/encoding/) | Unmodified libogg/libvorbis source archives, SHA-256 manifests, official listings and BSD notices. |
 | [third-party/node-LICENSE.txt](third-party/node-LICENSE.txt) | Pinned redistributed Node runtime and dependency license bundle. |

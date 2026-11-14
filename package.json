@@ -1,9 +1,11 @@
 {
   "name": "sfxchat",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A desktop AI sound-effects workbench",
   "author": "Dorely",
   "license": "MIT",
+  "homepage": "https://github.com/Dorely/SfxChat",
+  "desktopName": "SfxChat.desktop",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -11,7 +13,7 @@
     "build": "electron-vite build && node scripts/build-agent.mjs",
     "typecheck": "tsc --noEmit",
     "rebuild": "electron-builder install-app-deps",
-    "package": "npm run build && electron-builder --win nsis --x64 --publish never",
+    "package": "npm run build && electron-builder --x64 --publish never",
     "postinstall": "electron-builder install-app-deps",
     "build:agent": "node scripts/build-agent.mjs",
     "predev": "node scripts/build-agent.mjs"

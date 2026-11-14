@@ -26,7 +26,7 @@ The decoder is unpacked separately for replacement with a compatible rebuilt ver
 Generated audio is governed by the provider's terms and the user's account.
 SfxChat's software license does not assign an MIT license to that audio.
 
-The agent command redistributes Node.js 24.21.0 for Windows x64 under its upstream
+The agent command redistributes Node.js 24.21.0 for Windows x64 and Linux x64 under its upstream
 [license bundle](third-party/node-LICENSE.txt). The CLI includes the MIT-licensed
 MCP TypeScript SDK and Zod, and ISC-licensed @iarna/toml; their notices also remain
 with application dependencies. Bundled skill guidance is SfxChat-authored material

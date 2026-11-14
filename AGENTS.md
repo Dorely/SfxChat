@@ -12,7 +12,8 @@
 - Inspect branch, working tree, index, and remotes before starting. Continue on the current branch.
 - Start new work from a clean commit. When you find uncommitted work, analyze whether it is complete and coherent (code, contracts, docs, and checks agree). If it is and committing is safe, verify it, commit it on its own, and push it before beginning. If it is incomplete or ownership is unclear, ask for direction rather than overwriting or mixing it with new work.
 - Preserve unrelated user changes. Do not discard work, rewrite history, force-push, or create remotes without authorization. Pushing verified commits to the current branch on the existing `origin` is authorized.
-- Finish each feature with a reviewed, focused commit, push it to `origin`, and verify a clean working tree.
+- Finish each feature with a reviewed, focused commit that bumps the version (`npm version patch --no-git-tag-version`, or `minor` for a milestone), push it to `origin`, and verify a clean working tree.
+- That push publishes the release friends install from: the Build and release workflow packages Windows and Linux and publishes `v<version>` when no release has that version. Watch the run to completion and confirm the release lists the Windows installer, AppImage, and .deb. A failed build publishes nothing, so fix it in a follow-up commit that keeps the unpublished version; fix a broken published release with a new version. Documentation- or process-only commits skip the bump and only build. Never delete, retag, or replace a published release.
 
 ## Implementation practices
 
@@ -20,6 +21,7 @@
 - Keep UI interaction state separate from library operations, assistant orchestration, provider transports, and background jobs. Manual UI actions and assistant tools should use the same owning operations.
 - Preserve provider boundaries; do not spread provider-specific payloads or model names through the UI.
 - Implement only what the current milestone needs. The desktop stack is Electron with React/TypeScript; keep privileged operations in the main process and the renderer isolated.
+- Windows x64 and Linux x64 both ship. Keep platform differences in `src/shared/platform.ts`, explicit `windows` branches, or `#ifdef _WIN32` in the helper rather than hard-coded `.exe` names, `%APPDATA%`, or backslash paths. When a change touches the native helper, bridge, CLI, paths, or packaging, build and run it on Linux too (WSL Ubuntu with WSLg works for local checks) and record what was covered.
 - Replace superseded runtime code and documentation coherently. Preserve necessary immutable history and unrelated work.
 - This project deliberately carries no automated tests. Do not add or reintroduce
   unit, integration, or end-to-end suites (for example Vitest, Jest, or Playwright);

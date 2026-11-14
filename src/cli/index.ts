@@ -1,29 +1,38 @@
 import { connect } from 'node:net';
-import { readFile, access } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { readFile, access, stat } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/server';
 import { setTimeout as delay } from 'node:timers/promises';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod';
 import { native } from '../shared/native';
+import { appExecutableName, helperName, profileRoot, windows } from '../shared/platform';
 import { installIntegration, skillText } from '../shared/install';
 import { WorkbenchError, type OperationResponse, type ReviewBoard, type ReviewWait } from '../shared/workbench';
 
-const helper = join(__dirname, 'sfxchat-helper.exe');
-const root = join(process.env.APPDATA || '', 'SfxChat');
+declare const SFXCHAT_VERSION: string;
+const helper = join(__dirname, helperName);
+const bridgeDirectory = join(profileRoot(), 'bridge');
 async function discovery() {
-  const bytes = await native(helper, ['unprotect'], await readFile(join(root, 'bridge', 'endpoint.bin')));
-  const value = JSON.parse(bytes.toString());
-  if (value.version !== 1 || !/^\\\\\.\\pipe\\sfxchat-[a-f0-9]{64}$/.test(value.pipe) || !/^[a-f0-9]{64}$/.test(value.token)) throw new Error('Invalid bridge discovery.');
+  let value;
+  if (windows) value = JSON.parse((await native(helper, ['unprotect'], await readFile(join(bridgeDirectory, 'endpoint.bin')))).toString());
+  else {
+    // Trust Linux discovery only inside a private directory owned by this user.
+    const directory = await stat(bridgeDirectory);
+    if (!directory.isDirectory() || directory.uid !== process.getuid?.() || (directory.mode & 0o077)) throw new Error('Bridge discovery directory is not private.');
+    value = JSON.parse(await readFile(join(bridgeDirectory, 'endpoint.json'), 'utf8'));
+  }
+  const pipe = windows ? /^\\\\\.\\pipe\\sfxchat-[a-f0-9]{64}$/ : /^sfxchat-[a-f0-9]{32}\.sock$/;
+  if (value.version !== 1 || typeof value.pipe !== 'string' || !pipe.test(windows ? value.pipe : basename(value.pipe)) || (!windows && dirname(value.pipe) !== bridgeDirectory) || !/^[a-f0-9]{64}$/.test(value.token)) throw new Error('Invalid bridge discovery.');
   return value as { pipe: string; token: string };
 }
 async function startApp() {
-  const packaged = resolve(__dirname, '../../SfxChat.exe');
+  const packaged = resolve(__dirname, '../..', appExecutableName);
   let command = packaged, args: string[] = [];
   try { await access(packaged); } catch {
     const repository = resolve(__dirname, '../..');
-    command = join(repository, 'node_modules/electron/dist/electron.exe'); args = [repository];
+    command = join(repository, 'node_modules/electron/dist', windows ? 'electron.exe' : 'electron'); args = [repository];
     try { await access(command); } catch { throw new WorkbenchError('APP_NOT_FOUND', 'Install the SfxChat desktop app with its bundled CLI.'); }
   }
   const child = spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true });
@@ -112,7 +121,7 @@ async function main() {
     if (!catalogResult.ok) throw new Error(catalogResult.error?.message);
     const catalog = catalogResult.result as { name: string; description: string; inputSchema: Record<string, unknown> }[];
     serveStdio(({ era }) => {
-      const server = new McpServer({ name: 'sfxchat', version: '0.2.0' }, { capabilities: { resources: { subscribe: true } } });
+      const server = new McpServer({ name: 'sfxchat', version: SFXCHAT_VERSION }, { capabilities: { resources: { subscribe: true } } });
       const watches = new Map<string, AbortController>(), subscribed = new Set<string>();
       let closed = false;
       const uriFor = (r: ReviewBoard) => `sfxchat://projects/${r.projectId}/reviews/${r.id}`;

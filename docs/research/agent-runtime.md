@@ -1,8 +1,9 @@
 # Agent runtime and encoding provenance
 
-Reviewed 2026-10-02. The Windows package adds a pinned console runtime and a small
-native helper; there is no FFmpeg distribution. The helper contains SfxChat-authored
-DPAPI, private-directory ACL, user-PATH registration, and PCM16-to-Vorbis code.
+Reviewed 2026-10-02; Linux added 2026-11-14. The Windows and Linux packages add a
+pinned console runtime and a small native helper; there is no FFmpeg distribution. The
+helper contains SfxChat-authored PCM16-to-Vorbis, Vorbis decoding, and MIDI rendering
+code, plus Windows-only DPAPI, private-directory ACL, and user-PATH registration.
 
 ## Sources and rebuild
 
@@ -14,18 +15,23 @@ Sources: [Xiph Ogg releases](https://downloads.xiph.org/releases/ogg/),
 [Xiph Vorbis releases](https://downloads.xiph.org/releases/vorbis/), and
 [Vorbis project](https://xiph.org/vorbis/).
 
-The bundled Windows x64 Node runtime is 24.21.0, from
-[the official distribution](https://nodejs.org/dist/v24.21.0/win-x64/node.exe),
-SHA-256 `ba4e6d110e8c1592a1ecd390f6b05f3da124b13871a5be62b341a07a853c6c32`,
-checked against [official checksums](https://nodejs.org/dist/v24.21.0/SHASUMS256.txt).
+The bundled Node runtime is 24.21.0 from the official distribution, checked against
+[official checksums](https://nodejs.org/dist/v24.21.0/SHASUMS256.txt): Windows x64 uses
+[`win-x64/node.exe`](https://nodejs.org/dist/v24.21.0/win-x64/node.exe), SHA-256
+`ba4e6d110e8c1592a1ecd390f6b05f3da124b13871a5be62b341a07a853c6c32`; Linux x64 extracts
+`bin/node` from
+[`node-v24.21.0-linux-x64.tar.xz`](https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.xz),
+archive SHA-256 `fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6`.
 Its upstream license bundle is [preserved](../../third-party/node-LICENSE.txt).
 Runtime version and hash are written to the package's `agent/runtime.json`.
 
-Prerequisites for source builds: Windows x64, Node 22.12+ in the 22 line (or the
-pinned Node 24 runtime), npm, and Visual Studio C++ Build Tools with the Windows SDK
-and CMake. CMake may be on PATH, selected by `CMAKE`, or discovered in Visual Studio
-with `vswhere`. The build checks every archive hash before unpacking, statically
-links the codec libraries and CRT, and builds only the helper target. No test target
+Prerequisites for source builds: Windows x64 or Linux x64, Node 22.12+ in the 22 line
+(or the pinned Node 24 runtime), and npm. Windows needs Visual Studio C++ Build Tools
+with the Windows SDK and CMake; CMake may be on PATH, selected by `CMAKE`, or discovered
+in Visual Studio with `vswhere`. Linux needs a C/C++ toolchain, CMake 3.15+ on PATH or
+in `CMAKE`, and `tar` with xz support. The build checks every archive hash before
+unpacking, statically links the codec libraries (and the CRT on Windows, the C++
+runtime on Linux), and builds only the helper target. No test target
 is built or installed. C++ source and CMake configuration are under `native/`.
 
 ```powershell
@@ -36,7 +42,7 @@ npm run package
 ```
 
 `build:agent` bundles the CLI using esbuild, downloads/verifies the pinned runtime
-if absent, copies the canonical skill snapshot, and builds the helper in ignored
+if absent (Linux keeps the verified archive in `out/native-sources`), copies the canonical skill snapshot, and builds the helper in ignored
 `out/native-build`. Extracted dependencies live in ignored `out/native-sources`.
 Delete those generated directories for a clean source rebuild. Release output is
 in `out/agent`, `out/skill`, and `release`; none is source-controlled. Toolchain

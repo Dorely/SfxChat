@@ -1,3 +1,39 @@
+# Windows and Linux release builds (2026-11-14)
+
+Packaging, native helper, bridge and CLI port; no provider calls or paid generation.
+
+- `npm run typecheck` passed on Windows after the final edits (version 0.2.1).
+- Windows: `npm run package` built `release/SfxChat-Setup-0.2.0.exe` from the
+  working tree before the version bump. The rebuilt `sfxchat-helper.exe` printed its
+  usage, encoded a generated 1 s stereo PCM WAV to Ogg (8,409 bytes), decoded it to a
+  352,844-byte float WAV, rendered a one-note SMF through GeneralUser GS to a
+  529,244-byte WAV (1 s plus the 2 s tail), and round-tripped `protect`/`unprotect`.
+  The new `release/win-unpacked` CLI returned `status` `ready:true` and 59 tools from
+  the user's running installed app over its DPAPI discovery and named pipe. The new
+  Windows main process was not launched because that installed instance was open.
+- Linux, in WSL Ubuntu 24.04 (glibc 2.39) with WSLg, using a temporary Node 24.21.0
+  and CMake 3.31.6 under `~/.cache` outside the repository: `npm ci`, `npm run
+  typecheck`, and `npm run package` built `SfxChat-0.2.0-x86_64.AppImage` and
+  `SfxChat-0.2.0-amd64.deb`. The helper links only libc/libm (FluidSynth without
+  OpenMP, static C++ runtime), produced byte counts identical to Windows for the same
+  encode/decode/render inputs, decoded the Windows-encoded Ogg, and rejected a missing
+  MIDI file. The .deb control file, postinst/postrm (`/usr/bin/sfxchat` link,
+  chrome-sandbox, AppArmor), desktop entry, and `/opt/SfxChat/resources/agent` files
+  were inspected; the .deb was not installed (no sudo in this WSL).
+- The packaged `linux-unpacked/SfxChat` opened a window in a fresh `~/.config/SfxChat`
+  profile. The bridge directory was 0700 with a 0600 socket and `endpoint.json`; the
+  bundled CLI returned `status`, 59 tools, and `projects_list`, created a session,
+  imported an Ogg and a MIDI file, and exported the Ogg as Ogg quality 3 (Vorbis,
+  44.1 kHz stereo) and as 16-bit WAV. SIGTERM to the main process exited 0 and removed
+  the socket and discovery. Secure storage reported unavailable, as intended without a
+  Secret Service keyring.
+- The AppImage failed without FUSE 2 with its documented libfuse.so.2 message, and
+  started with `--appimage-extract-and-run`, where the CLI reached its bridge.
+- Gaps: the in-app MIDI preview (helper `render-midi` through the app) and the AppImage
+  agent-integration refusal were not exercised; no real Linux desktop, keyring, .deb
+  install, or Ubuntu 22.04 runtime was tested locally. The first CI run and release
+  publication are recorded below once observed.
+
 # Optional chat panel (2026-11-14)
 
 Renderer-only change; no provider calls or paid generation.

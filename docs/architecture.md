@@ -3,9 +3,29 @@
 ## Runtime and ownership
 
 v0.2 uses Electron, React/TypeScript, electron-vite, and electron-builder with a
-Windows x64 NSIS target. Exact versions live in the lockfile. This document describes
-implementation; [verification](verification.md) records actual checks.
-[VISION](../VISION.md) remains product intent.
+Windows x64 NSIS target and Linux x64 AppImage and .deb targets. Exact versions live in
+the lockfile. This document describes implementation; [verification](verification.md)
+records actual checks. [VISION](../VISION.md) remains product intent.
+
+## Distribution
+
+Each platform packages only for itself: `npm run package` builds the native helper,
+pinned runtime, and the current platform's targets in `release/`. The profile is
+Electron's `appData`/SfxChat (`%APPDATA%` on Windows, `$XDG_CONFIG_HOME` or `~/.config`
+on Linux); `src/shared/platform.ts` gives the CLI the same location and executable
+names. On Linux the desktop executable is `SfxChat`; the .deb installs it under
+`/opt/SfxChat`, links `/usr/bin/sfxchat` to the agent CLI as the Windows installer adds
+the agent directory to the user PATH, and keeps electron-builder's Chromium sandbox and
+AppArmor handling. An AppImage mounts at a new temporary path on each launch, so agent
+integration installation refuses there and points users to the .deb. The Linux helper
+statically links the C++ runtime and builds FluidSynth without OpenMP, so it needs only
+glibc; CI builds on Ubuntu 22.04 to keep that floor at glibc 2.35.
+
+The [Build and release](../.github/workflows/release.yml) workflow type-checks and
+packages both platforms on every push and pull request. On a push to `main` whose
+`package.json` version has no GitHub release, it publishes `v<version>` with the
+installer, AppImage, and .deb once both builds pass. Packages are unsigned and there is
+no auto-update; a published version is never rebuilt or replaced.
 
 The main process owns persistence, media, providers, credentials, jobs, and turns.
 React owns presentation, selection, forms, and audition controls. The sandboxed,
@@ -17,7 +37,7 @@ assistant adapters use these owners too; provider transports remain behind servi
 
 `npm run dev:browser` runs the built renderer over a loopback development host,
 while the same Electron main process owns the real profile, secure storage,
-providers, background jobs, and named-pipe agent bridge. It creates no desktop
+providers, background jobs, and local agent bridge. It creates no desktop
 window. A shared fixed API factory binds either validated IPC or JSON HTTP calls;
 browser responses restore bounded audio byte arrays, SSE delivers changes and
 acknowledged UI commands, and the existing scoped media handler serves originals.
@@ -471,8 +491,9 @@ sits in the chat composer footer and calls the same `setActiveChat` operation; S
 models lists, adds, tests, and removes custom models and endpoints.
 
 `SecureStore` encrypts values with Electron `safeStorage` before atomic writes under
-the profile's `secrets/`. Windows protection is OS-backed; unavailable encryption
-fails explicitly. Plaintext credentials do not enter SQLite, settings reads, tools,
+the profile's `secrets/`. Windows protection is OS-backed (DPAPI). Linux requires a
+Secret Service keyring (GNOME Keyring, KWallet); Electron's `basic_text` fallback counts
+as unavailable. Unavailable encryption fails explicitly. Plaintext credentials do not enter SQLite, settings reads, tools,
 or diagnostics. Key entry is transient. Sibling-app auth caches are never imported.
 
 ElevenLabs resolves its key at dispatch and preserves the SFX HTTP response as MP3.
@@ -585,16 +606,20 @@ generation.
 
 `src/main/operations.ts` defines validated operations with discoverable JSON schemas,
 descriptions, and handlers. CLI and MCP call the same registry over one authenticated
-Windows named pipe. The desktop remains the only database/provider-credential owner.
+local endpoint: a Windows named pipe or a Linux Unix socket. The desktop remains the only database/provider-credential owner.
 External requests provide the project/session IDs their schemas require; project-scoped
 review open selects its project and an available conversation in the UI without playback. Ordinary external operations never consult the visible
 project. The original fixed IPC remains an adapter for dialogs and UI actions, while
 `operation` accepts only registry names and validates their argument schema in main.
 Internal assistant adapters retain durable tool ledgers and modality attachments.
 
-The bridge uses a random 256-bit pipe name and bearer token. Discovery contains the
-endpoint/token/PID, is DPAPI-encrypted for the current user, and lives under a protected
-user/SYSTEM-only directory DACL. Secrets never enter returned discovery diagnostics.
+The bridge uses a random 256-bit bearer token. On Windows the endpoint is a random
+256-bit pipe name, and discovery (endpoint/token/PID) is DPAPI-encrypted for the current
+user under a protected user/SYSTEM-only directory DACL. On Linux the endpoint is a
+randomly named 0600 socket inside the profile's 0700 `bridge/` directory, and discovery
+is a 0600 JSON file beside it; the CLI trusts it only when that directory is owned by the
+user and closed to group and others. Leftover sockets from an unclean exit are removed at
+startup. Secrets never enter returned discovery diagnostics.
 This is a trusted local-user interface, not a sandbox against other processes running
 as that same user. No TCP listener or separate daemon exists. One newline-delimited
 request per connection is capped at 2 MiB; replies are capped at 32 MiB in the client.
@@ -801,10 +826,10 @@ live/manual runs of the app, with the results recorded in [verification](verific
 The previous Playwright suites, their fixtures, the installed-app smoke script, and the
 main-process mock port mode were removed on 2026-09-21 so no dead test infrastructure
 remains. Removing mock mode also removed the `SFXCHAT_TEST_*` environment overrides, so
-a development launch always uses the real `%APPDATA%/SfxChat` profile. Provider behavior
+a development launch always uses the real per-user SfxChat profile. Provider behavior
 established this way is limited to what was actually exercised; compilation, packaging,
 and mock runs never establish provider, login, secure-storage, or platform integration.
-Signing, updates, and other-platform packaging are deferred.
+Signing, updates, and macOS packaging are deferred.
 
 ## Project workspace and deletion
 

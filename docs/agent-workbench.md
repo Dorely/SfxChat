@@ -1,6 +1,6 @@
 # Local agent sound workbench
 
-SfxChat 0.2 includes a Windows x64 console command and stdio MCP server. Both use
+SfxChat 0.2 includes a console command and stdio MCP server for Windows x64 and Linux x64. Both use
 the desktop app's library, credentials, jobs, and audition UI. No separate Node
 installation, API key arguments, daemon, or remote service is required. The desktop
 starts on demand and stays open when clients disconnect; closing it cancels active
@@ -8,7 +8,11 @@ provider transport with the existing uncertain-outcome rules.
 
 ## Install
 
-Install the unsigned Windows installer. Open a new terminal for the user PATH update:
+Install the unsigned Windows installer and open a new terminal for the user PATH update,
+or install the Linux .deb, which links `/usr/bin/sfxchat` to the bundled CLI. The Linux
+AppImage cannot host agent integration because its mount path changes on every launch;
+Settings → Agent integrations reports this instead of writing unusable paths. Examples
+use Windows paths; on Linux pass paths such as `/home/me/game`.
 
 ```powershell
 sfxchat help
@@ -37,8 +41,8 @@ entry without it reports `different` and needs `--force` to update. Project
 registration is therefore machine-local: review before committing it to a team
 repository. Harness trust/restart requirements still apply.
 Moving/uninstalling the app invalidates those paths; rerun integration installation
-at the new location. App uninstall removes only its owned PATH entry, not skills,
-harness configuration, or the audio library.
+at the new location. App uninstall removes only its owned PATH entry (or, for the .deb,
+its `/usr/bin/sfxchat` link), not skills, harness configuration, or the audio library.
 
 ```powershell
 sfxchat skill status --scope project --project C:\work\game --target codex --mcp

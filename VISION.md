@@ -4,7 +4,8 @@ SfxChat is an assistant-led local music and sound-design workstation, with optio
 
 Its assistant should combine sound-design knowledge with skill in prompting AI audio services. Users should be able to describe a need, explore alternatives, audition results, give feedback, refine a sound, and save it into a useful library without manually coordinating disconnected tools.
 
-The desktop remains the distribution target. Development should also run the real
+The desktop remains the distribution target, published as Windows and Linux builds
+that people outside the project can download and install. Development should also run the real
 workbench in a local browser so agents can verify ordinary UI behavior reliably,
 using the same privileged operations, library, and secure credentials. Browser
 verification should be the default; native checks cover desktop-specific behavior.
@@ -64,7 +65,7 @@ Installable skills support project and harness-wide scopes and contain the compl
 sound-design guidance used by the app assistant. One maintained source covers design,
 provider prompting, revisions, analysis, trimming, loops and evidence limits. Agents
 can discover current guidance/capabilities and export originals or converted selected
-cue packs with provenance. Windows/local agents come first; remote services and a
+cue packs with provenance. Local agents on Windows and Linux come first; remote services and a
 remote collaboration are outside this milestone. A local arrangement timeline,
 instruments, effects, routing and automation belong to the workstation. Every
 creative agent operation must also have a manual UI path. Playback is user-controlled.

@@ -1,8 +1,29 @@
 # SfxChat
 
-A Windows desktop workbench for creating, comparing, and organizing sound effects, music, and
-single-speaker voice with a chat assistant. [Public source](https://github.com/Dorely/SfxChat) ·
-[MIT license](LICENSE) · [Third-party notices](THIRD_PARTY_NOTICES.md).
+A desktop workbench for Windows and Linux for creating, comparing, and organizing sound
+effects, music, and single-speaker voice with a chat assistant.
+[Public source](https://github.com/Dorely/SfxChat) · [MIT license](LICENSE) ·
+[Third-party notices](THIRD_PARTY_NOTICES.md).
+
+## Download
+
+Get the newest build from [Releases](https://github.com/Dorely/SfxChat/releases/latest).
+Builds are unsigned and do not update themselves; install a newer release over the old one.
+Your library stays in place.
+
+- **Windows x64:** run `SfxChat-Setup-<version>.exe`. SmartScreen may warn about an
+  unrecognized app; choose **More info → Run anyway**.
+- **Debian/Ubuntu x64:** `sudo apt install ./SfxChat-<version>-amd64.deb`, then open SfxChat
+  from the app menu. This also puts the `sfxchat` agent command on PATH.
+- **Other Linux x64:** `chmod +x SfxChat-<version>-x86_64.AppImage` and run it. AppImages need
+  FUSE 2 (for example the `libfuse2`/`libfuse2t64` package); without it, run the file with
+  `--appimage-extract-and-run`. Agent CLI/MCP integration needs the .deb, because an
+  AppImage's paths change on every launch.
+
+Linux packages are built on Ubuntu 22.04 and need glibc 2.35 or newer. Saving API keys or
+a Codex login on Linux needs a running Secret Service keyring such as GNOME Keyring or
+KWallet; without one, SfxChat reports secure storage as unavailable instead of storing
+secrets in plain text.
 
 ## v0.2
 
@@ -75,13 +96,13 @@ They also include a public-domain Mozart score reconstruction, with a plain base
 and a performance pass for comparing MIDI execution and SoundFont expression.
 
 Remote services, Gemini analysis,
-cloud sync, automatic updates, signed installers, and other platform packages are
+cloud sync, automatic updates, signed installers, and macOS packages are
 deferred. Composition plans, audio reference, inpainting, streaming, and stem separation
 are available from the providers but not exposed by this app.
 
 ## Agent integration
 
-The installer includes `sfxchat` and `sfxchat mcp`. Agents share the desktop library
+The Windows installer and the Linux .deb include `sfxchat` and `sfxchat mcp`. Agents share the desktop library
 and use persistent cue reviews for user audition, selections, feedback,
 and export. The desktop starts on demand; disconnecting a client leaves admitted
 jobs running. Generation request IDs prevent accidental repeat purchases.
@@ -112,12 +133,14 @@ app audio-design guidance and check its version against the running app. See the
 [Chimera migration recipe](docs/chimera-integration.md). Actual verification and
 remaining platform/provider gaps are recorded in [verification](docs/verification.md).
 
-## Development on Windows x64
+## Development on Windows x64 and Linux x64
 
-Use Node.js 22.12+ in the 22 line (or Node 24), npm, Git, and Visual Studio C++
-Build Tools with the Windows SDK and CMake. The agent build downloads a checksum-pinned
-Node 24 runtime for distribution; installed users need no Node installation. See
-[rebuild details](docs/research/agent-runtime.md).
+Use Node.js 22.12+ in the 22 line (or Node 24), npm, and Git. Windows also needs Visual
+Studio C++ Build Tools with the Windows SDK and CMake; Linux needs a C/C++ toolchain
+(`build-essential`), CMake 3.15+, and `xz-utils`. Each platform packages only for itself:
+Windows builds the NSIS installer and Linux builds the AppImage and .deb. The agent build
+downloads a checksum-pinned Node 24 runtime for distribution; installed users need no Node
+installation. See [rebuild details](docs/research/agent-runtime.md).
 
 ```powershell
 npm ci
@@ -141,9 +164,15 @@ Playback is user-controlled; agents have no play/stop tools. Press Ctrl+C in the
 for desktop-specific checks such as native dialogs and installer integration.
 
 Installation rebuilds SQLite for the pinned Electron runtime. Run `npm run rebuild` after
-changing Electron/native dependencies. The unsigned installer is written to
-`release/`; packaging does not publish it. Windows CI runs `npm ci`, the type check, and
-the package build, then retains the installer as a build artifact.
+changing Electron/native dependencies. Unsigned packages are written to `release/`;
+local packaging does not publish them.
+
+The [Build and release](.github/workflows/release.yml) workflow runs `npm ci`, the type
+check, and the package build on Windows and Ubuntu 22.04 for every push and pull request,
+and keeps the packages as build artifacts. When a push to `main` carries a
+`package.json` version that has no GitHub release yet, it publishes release `v<version>`
+with the Windows installer, AppImage, and .deb, after both builds pass. Bump the version
+(`npm version patch --no-git-tag-version`) to publish; pushes without a bump only build.
 
 This project carries no automated tests. Verify changes with `typecheck`, the production
 build, and live/manual runs of the app, and record what was actually checked in
@@ -245,7 +274,7 @@ approval is claimed.
 
 ## Data and recovery
 
-The per-user `%APPDATA%/SfxChat` directory contains `library.sqlite`, `originals/`,
+The per-user profile (`%APPDATA%/SfxChat` on Windows, `~/.config/SfxChat` on Linux) contains `library.sqlite`, `originals/`,
 `chat-media/` (the spectrogram images and listening clips the assistant attached in
 chat, kept for the transcript), and
 encrypted `secrets/`. Do not publish this directory. Uninstalling does not
@@ -266,7 +295,7 @@ new installer in `release/`. Keep the existing library; do not reset its schema
 version or delete it. The displayed app version alone may not distinguish local
 builds made from different commits.
 
-Settings → **Open diagnostic logs** opens `%APPDATA%/SfxChat/logs`. Logs record chat
+Settings → **Open diagnostic logs** opens the profile's `logs` folder. Logs record chat
 requests, tool activity, generation outcomes, and errors with conversation/job IDs,
 HTTP status, provider error details, and request IDs when supplied. Failed chat
 messages include a diagnostic reference that matches the saved record. Logs rotate

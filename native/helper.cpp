@@ -1,11 +1,14 @@
 // SfxChat MIT. Uses unmodified BSD-licensed libogg/libvorbis and LGPL-2.1-licensed FluidSynth; see third-party notices.
+#ifdef _WIN32
 #include <windows.h>
 #include <wincrypt.h>
 #include <aclapi.h>
 #include <sddl.h>
 #include <fcntl.h>
 #include <io.h>
+#endif
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 #include <string>
@@ -103,6 +106,9 @@ static int decode() {
     bool ok = fwrite(h, 1, 44, stdout) == 44 && fwrite(samples.data(), 4, samples.size(), stdout) == samples.size();
     return ok && !fflush(stdout) ? 0 : fail("Output write failed.");
 }
+#ifdef _WIN32
+// Windows-only: DPAPI discovery protection, private directory DACLs and the installer's user PATH entry.
+// Linux relies on a 0700 directory and the package's /usr/bin link instead.
 static int protect(bool decrypt) {
     std::vector<unsigned char> bytes; unsigned char block[4096]; size_t n;
     while((n=fread(block,1,sizeof(block),stdin))) { bytes.insert(bytes.end(),block,block+n); if(bytes.size()>65536) return fail("Discovery data too large."); }
@@ -166,19 +172,39 @@ static int updatePath(const wchar_t* directory, bool remove) {
     }
     RegCloseKey(ownership); RegCloseKey(environment); return error==ERROR_SUCCESS ? 0 : fail("Cannot update user PATH or installation record.");
 }
-// Renders a Standard MIDI File through a SoundFont bank to a 16-bit stereo WAV, offline and faster than realtime.
+#endif
+// Arguments and paths are UTF-16 on Windows and native bytes elsewhere.
+#ifdef _WIN32
+typedef wchar_t pchar;
+#define P(text) L##text
 static std::string utf8(const wchar_t* value) {
     int size=WideCharToMultiByte(CP_UTF8,0,value,-1,nullptr,0,nullptr,nullptr);
     std::string text(size>0?size_t(size-1):0,'\0');
     if(size>0) WideCharToMultiByte(CP_UTF8,0,value,-1,&text[0],size,nullptr,nullptr);
     return text;
 }
+static FILE* openFile(const pchar* path,const pchar* mode) { return _wfopen(path,mode); }
+static void removeFile(const pchar* path) { _wremove(path); }
+static int rewindFile(FILE* file) { return _fseeki64(file,0,SEEK_SET); }
+static bool same(const pchar* a,const char* b) { return utf8(a)==b; }
+static double number(const pchar* text) { return _wtof(text); }
+#else
+typedef char pchar;
+#define P(text) text
+static std::string utf8(const char* value) { return value; }
+static FILE* openFile(const pchar* path,const pchar* mode) { return fopen(path,mode); }
+static void removeFile(const pchar* path) { remove(path); }
+static int rewindFile(FILE* file) { return fseek(file,0,SEEK_SET); }
+static bool same(const pchar* a,const char* b) { return !strcmp(a,b); }
+static double number(const pchar* text) { return atof(text); }
+#endif
+// Renders a Standard MIDI File through a SoundFont bank to a 16-bit stereo WAV, offline and faster than realtime.
 static void put32(unsigned char* p,unsigned v){ p[0]=v&255; p[1]=(v>>8)&255; p[2]=(v>>16)&255; p[3]=(v>>24)&255; }
 static void put16(unsigned char* p,unsigned v){ p[0]=v&255; p[1]=(v>>8)&255; }
 static void quietLog(int,const char*,void*) {}
 // FluidSynth's player reports success for a file it could not open, which would otherwise render silence.
-static bool readableMidi(const wchar_t* path) {
-    FILE* file=_wfopen(path,L"rb");
+static bool readableMidi(const pchar* path) {
+    FILE* file=openFile(path,P("rb"));
     if(!file) return false;
     unsigned char header[14];
     bool ok=fread(header,1,14,file)==14 && !memcmp(header,"MThd",4);
@@ -189,7 +215,7 @@ static void wavHeader(unsigned char* h,unsigned dataBytes) {
     memcpy(h,"RIFF",4); put32(h+4,36+dataBytes); memcpy(h+8,"WAVEfmt ",8); put32(h+16,16); put16(h+20,1); put16(h+22,2);
     put32(h+24,44100); put32(h+28,44100*4); put16(h+32,4); put16(h+34,16); memcpy(h+36,"data",4); put32(h+40,dataBytes);
 }
-static int renderMidi(const wchar_t* midi,const wchar_t* soundfont,const wchar_t* output,double seconds,double gain) {
+static int renderMidi(const pchar* midi,const pchar* soundfont,const pchar* output,double seconds,double gain) {
     if(!(seconds>0.0) || seconds>7200.0) return fail("A positive clip length in seconds is required.");
     fluid_settings_t* settings=new_fluid_settings();
     if(!settings) return fail("Could not create synthesizer settings.");
@@ -214,7 +240,7 @@ static int renderMidi(const wchar_t* midi,const wchar_t* soundfont,const wchar_t
         else if(!player || fluid_player_add(player,utf8(midi).c_str())==FLUID_FAILED) failure="Could not read the MIDI file.";
     }
     if(!failure) {
-        file=_wfopen(output,L"wb");
+        file=openFile(output,P("wb"));
         if(!file) failure="Could not create the WAV output.";
     }
     if(!failure) {
@@ -239,27 +265,38 @@ static int renderMidi(const wchar_t* midi,const wchar_t* soundfont,const wchar_t
     if(file) {
         if(!failure) {
             unsigned char header[44]; wavHeader(header,(unsigned)(total*4));
-            if(_fseeki64(file,0,SEEK_SET) || fwrite(header,1,sizeof(header),file)!=sizeof(header)) failure="Could not finalize the WAV output.";
+            if(rewindFile(file) || fwrite(header,1,sizeof(header),file)!=sizeof(header)) failure="Could not finalize the WAV output.";
         }
         fclose(file);
     }
     if(player) delete_fluid_player(player);
     if(synth) delete_fluid_synth(synth);
     delete_fluid_settings(settings);
-    if(failure) { _wremove(output); return fail(failure); }
+    if(failure) { removeFile(output); return fail(failure); }
     return 0;
 }
+static int run(int argc,pchar** argv) {
+    if(argc==2 && same(argv[1],"encode")) return encode(5);
+    if(argc==3 && same(argv[1],"encode")) return encode(number(argv[2]));
+    if(argc==6 && same(argv[1],"render-midi")) return renderMidi(argv[2],argv[3],argv[4],number(argv[5]),0.5);
+    if(argc==7 && same(argv[1],"render-midi")) return renderMidi(argv[2],argv[3],argv[4],number(argv[5]),number(argv[6]));
+    if(argc==2 && same(argv[1],"decode")) return decode();
+#ifdef _WIN32
+    if(argc==2 && same(argv[1],"protect")) return protect(false);
+    if(argc==2 && same(argv[1],"unprotect")) return protect(true);
+    if(argc==3 && same(argv[1],"secure-directory")) return secureDirectory(argv[2]);
+    if(argc==3 && same(argv[1],"path-add")) return updatePath(argv[2],false);
+    if(argc==3 && same(argv[1],"path-remove")) return updatePath(argv[2],true);
+    return fail("Expected encode [QUALITY 0-10], decode, render-midi MIDI BANK OUT SECONDS [GAIN], protect, unprotect, or secure-directory PATH.");
+#else
+    return fail("Expected encode [QUALITY 0-10], decode, or render-midi MIDI BANK OUT SECONDS [GAIN].");
+#endif
+}
+#ifdef _WIN32
 int wmain(int argc,wchar_t** argv) {
     _setmode(_fileno(stdin),_O_BINARY); _setmode(_fileno(stdout),_O_BINARY);
-    if(argc==2 && !wcscmp(argv[1],L"encode")) return encode(5);
-    if(argc==3 && !wcscmp(argv[1],L"encode")) return encode(_wtof(argv[2]));
-    if(argc==6 && !wcscmp(argv[1],L"render-midi")) return renderMidi(argv[2],argv[3],argv[4],_wtof(argv[5]),0.5);
-    if(argc==7 && !wcscmp(argv[1],L"render-midi")) return renderMidi(argv[2],argv[3],argv[4],_wtof(argv[5]),_wtof(argv[6]));
-    if(argc==2 && !wcscmp(argv[1],L"decode")) return decode();
-    if(argc==2 && !wcscmp(argv[1],L"protect")) return protect(false);
-    if(argc==2 && !wcscmp(argv[1],L"unprotect")) return protect(true);
-    if(argc==3 && !wcscmp(argv[1],L"secure-directory")) return secureDirectory(argv[2]);
-    if(argc==3 && !wcscmp(argv[1],L"path-add")) return updatePath(argv[2],false);
-    if(argc==3 && !wcscmp(argv[1],L"path-remove")) return updatePath(argv[2],true);
-    return fail("Expected encode [QUALITY 0-10], decode, render-midi MIDI BANK OUT SECONDS [GAIN], protect, unprotect, or secure-directory PATH.");
+    return run(argc,argv);
 }
+#else
+int main(int argc,char** argv) { return run(argc,argv); }
+#endif

@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 
 // Electron still owns SQLite, safeStorage and providers; no native UI is created.
-const child = spawn(resolve('node_modules/electron/dist/electron.exe'), [resolve('.')], {
+// The electron package exports its platform's executable path.
+const child = spawn(createRequire(import.meta.url)('electron'), [resolve('.')], {
   env: { ...process.env, SFXCHAT_BROWSER: '1' }, stdio: ['inherit', 'pipe', 'inherit'], windowsHide: true
 });
 let origin, output = '', stopping = false;

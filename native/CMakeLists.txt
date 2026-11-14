@@ -13,12 +13,20 @@ set(OGG_LIBRARY ogg CACHE STRING "" FORCE)
 add_subdirectory("${SOURCES}/libvorbis-1.3.7" vorbis)
 # FluidSynth 2.6.1 renders MIDI through the bundled SoundFont bank. It dropped GLib in 2.6.0; gcem is its only
 # required dependency, resolved from the vendored archive instead of the network. Offline rendering needs no drivers.
+# OpenMP stays off so the Linux helper does not depend on libgomp; MSVC's OpenMP 2.0 never qualified on Windows.
 set(GCEM_INCLUDE_DIR "${SOURCES}/gcem/include" CACHE PATH "" FORCE)
-foreach(feature enable-alsa enable-aufile enable-coreaudio enable-coremidi enable-dbus enable-dsound enable-framework enable-jack enable-ladspa enable-libinstpatch enable-libsndfile enable-midishare enable-network enable-oboe enable-opensles enable-oss enable-pipewire enable-portaudio enable-pulseaudio enable-readline enable-sdl2 enable-sdl3 enable-systemd enable-wasapi enable-waveout enable-winmidi)
+foreach(feature enable-alsa enable-aufile enable-coreaudio enable-coremidi enable-dbus enable-dsound enable-framework enable-jack enable-ladspa enable-libinstpatch enable-libsndfile enable-midishare enable-network enable-openmp enable-oboe enable-opensles enable-oss enable-pipewire enable-portaudio enable-pulseaudio enable-readline enable-sdl2 enable-sdl3 enable-systemd enable-wasapi enable-waveout enable-winmidi)
   set(${feature} OFF CACHE BOOL "" FORCE)
 endforeach()
 add_subdirectory("${SOURCES}/fluidsynth-2.6.1" fluidsynth)
 add_executable(sfxchat-helper helper.cpp)
 target_compile_features(sfxchat-helper PRIVATE cxx_std_17)
-target_link_libraries(sfxchat-helper PRIVATE vorbisenc vorbisfile vorbis ogg libfluidsynth crypt32 advapi32 user32)
-target_compile_definitions(sfxchat-helper PRIVATE _CRT_SECURE_NO_WARNINGS)
+target_link_libraries(sfxchat-helper PRIVATE vorbisenc vorbisfile vorbis ogg libfluidsynth)
+if(WIN32)
+  # DPAPI discovery protection, private directory DACLs and the installer's PATH update are Windows-only.
+  target_link_libraries(sfxchat-helper PRIVATE crypt32 advapi32 user32)
+  target_compile_definitions(sfxchat-helper PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+  # Ship one self-contained Linux binary instead of depending on the distribution's C++ runtime version.
+  target_link_options(sfxchat-helper PRIVATE -static-libstdc++ -static-libgcc)
+endif()

@@ -33,3 +33,4 @@
 /resources/soundfonts/*-LICENSE.txt -text whitespace=-blank-at-eol
 /resources/soundfonts/*.sf2 -text
 *.svg text eol=lf
+*.sh text eol=lf

@@ -4,6 +4,8 @@ import { Exporter } from './exporter';
 import { startBridge, operationError } from './bridge';
 import { RendererPort } from './ui-port';
 import { installIntegration } from '../shared/install';
+import { helperName, runtimeName, windows } from '../shared/platform';
+import { WorkbenchError } from '../shared/workbench';
 import { randomUUID } from 'node:crypto';
 import { app, BrowserWindow, dialog, ipcMain, protocol, safeStorage, shell } from 'electron';
 import { join } from 'node:path';
@@ -228,9 +230,10 @@ void acquireInstanceLock().then(acquired => {
     store.recover(); store.ensureConversation(store.activeProjectId());
     const agentRoot = app.isPackaged ? join(process.resourcesPath, 'agent') : join(__dirname, '../agent');
     rendererPort = new RendererPort(() => window, store, browserMode ? { available: () => browserHost?.available() ?? false, send: command => browserHost?.send(command) } : undefined);
-    setOggDecoder(join(agentRoot, 'sfxchat-helper.exe'));
-    const exporter = new Exporter(media, store, join(agentRoot, 'sfxchat-helper.exe'));
-    const midiRenderer = new MidiRenderer(join(agentRoot, 'sfxchat-helper.exe'), join(root, 'midi-renders'));
+    const helper = join(agentRoot, helperName);
+    setOggDecoder(helper);
+    const exporter = new Exporter(media, store, helper);
+    const midiRenderer = new MidiRenderer(helper, join(root, 'midi-renders'));
     // The bundled General MIDI bank ships beside the app; a bank saved in Settings overrides it.
     const bundledSoundfont = app.isPackaged ? join(process.resourcesPath, 'soundfonts', 'GeneralUser-GS.sf2') : join(__dirname, '../../resources/soundfonts/GeneralUser-GS.sf2');
     const resolveSoundfont = async () => {
@@ -240,7 +243,7 @@ void acquireInstanceLock().then(acquired => {
     };
     operations = new Operations(service, rendererPort, exporter, () => loadSoundfont(store.setting('soundfont-path', '') || bundledSoundfont));
     service.operation = (name, args) => operations!.call(name, args);
-    bridge = await startBridge(root, join(agentRoot, 'sfxchat-helper.exe'), operations);
+    bridge = await startBridge(root, helper, operations);
     const context = (id: string) => ({ projectId: store.conversation(id).projectId, sessionId: id });
 
     const serveMedia = async (request: Request): Promise<Response> => {
@@ -277,7 +280,13 @@ void acquireInstanceLock().then(acquired => {
 
     const handlers: Record<string, (...args: any[]) => unknown> = {
       operation: async (name, args) => { try { return { ok: true, result: await operations!.call(name, args, 'user') }; } catch (e) { return operationError(e); } },
-      installIntegration: async input => { try { return { ok: true, result: await installIntegration(input, join(agentRoot, 'sfxchat-runtime.exe'), join(agentRoot, 'cli.cjs')) }; } catch (e) { return operationError(e); } },
+      installIntegration: async input => {
+        try {
+          // An AppImage mounts at a new temporary path on every launch, so agent configs would point nowhere.
+          if (process.env.APPIMAGE) throw new WorkbenchError('UNSUPPORTED_INSTALL', 'Agent integration needs a stable install path. Install the .deb package to connect agents.');
+          return { ok: true, result: await installIntegration(input, join(agentRoot, runtimeName), join(agentRoot, 'cli.cjs')) };
+        } catch (e) { return operationError(e); }
+      },
       chooseDirectory: async () => { const result = await dialog.showOpenDialog(window!, { properties: ['openDirectory'] }); return result.canceled ? null : result.filePaths[0]; },
       uiReady: () => rendererPort!.markReady(), uiAcknowledge: (id, error) => rendererPort!.acknowledge(id, error),
       playbackReport: (id, state) => { store.requireConversation(id); rendererPort!.report(id, state); },
@@ -360,7 +369,8 @@ void acquireInstanceLock().then(acquired => {
       process.stdout.write(`SfxChat browser: ${browserHost.url}\n`);
       service.pump(); return;
     }
-    const icon = app.isPackaged ? join(process.resourcesPath, 'icon.ico') : join(__dirname, '../../resources/icon.ico');
+    const iconName = windows ? 'icon.ico' : 'icon.png';
+    const icon = app.isPackaged ? join(process.resourcesPath, iconName) : join(__dirname, '../../resources', iconName);
     window = new BrowserWindow({ width: 1440, height: 940, minWidth: 1000, minHeight: 650, title: 'SfxChat', icon, backgroundColor: '#191b19', show: false, webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
     window.removeMenu();
     window.on('hide', () => rendererPort?.stopForVisibility());
