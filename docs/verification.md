@@ -1,3 +1,27 @@
+# Optional chat panel (2026-11-14)
+
+Renderer-only change; no provider calls or paid generation.
+
+- `npm run typecheck` passed after the final edits, and the production build passed
+  as part of `npm run dev:browser`.
+- Browser check through `npm run dev:browser` with Codex connected (after the user
+  closed the installed SfxChat); the host was stopped afterwards:
+  - Hide chat collapsed the shell to one column, removed the resize handle and
+    context meter, set the toggle to "Show chat" (`aria-expanded` false), put the
+    session switcher in the top bar, and stored `sfxchat.chatVisible` as `false`.
+    A reload kept chat hidden with the selected session intact.
+  - Show chat restored the sidebar, handle, and meter, stored `true`, and an unsent
+    composer draft survived hide and show with the history scrolled to the bottom.
+  - The unconfigured state was simulated in the page by filtering the snapshot to
+    `codexReady: false` with only built-in chat models, refreshed through an
+    unchanged `setActiveChat`. The panel hid while the stored preference stayed
+    `true`, the toggle read "Set up chat" and opened Settings on the Codex account
+    page, and a reload restored the real state. No console errors.
+  - The top-bar session rename opened an editor with the current title and Escape
+    cancelled it. New and Delete were not exercised.
+- Gaps: no native desktop check, so the desktop window's own stored preference was
+  not observed. A real account with no Codex login and no custom model was not used.
+
 # Loop making: seam, repeat length, hints, intro and Godot export (2026-11-04)
 
 Fixes from agent feedback on looping a song. Local DSP only; no provider calls.

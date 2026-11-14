@@ -5,6 +5,8 @@ button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .42; }
 .app-shell { display: grid; grid-template-columns: var(--sidebar-width) 5px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; background: var(--bg); overflow: hidden; }
+.app-shell.chat-hidden { grid-template-columns: minmax(0, 1fr); }
+.chat-sidebar[hidden] { display: none; }
 .chat-sidebar { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid var(--line); background: var(--sidebar); }
 .brand-row { display: flex; gap: 11px; align-items: center; height: 74px; padding: 0 24px; border-bottom: 1px solid var(--line); letter-spacing: .08em; }
 .brand-row strong { font-size: 14px; letter-spacing: .14em; display: block; }
@@ -160,6 +162,12 @@ body.resizing, body.resizing * { cursor: col-resize !important; user-select: non
 .project-switcher { display: inline-flex; align-items: center; gap: 4px; }
 .project-switcher select { max-width: 170px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--text); background: var(--surface); font-size: 12px; }
 .project-switcher .icon-button { width: 30px; height: 30px; font-size: 15px; border: 1px solid var(--line); background: var(--surface); }
+.session-switcher select { max-width: 240px; }
+.session-switcher .breadcrumb-title-edit { width: 30ch; }
+.breadcrumb .chat-toggle { flex-shrink: 0; width: 30px; height: 30px; font-size: 15px; border: 1px solid var(--line); background: var(--surface); }
+.breadcrumb .chat-toggle-active { border-color: var(--accent-line); }
+.breadcrumb .chat-toggle-active .icon { color: var(--accent); }
+.app-shell.chat-hidden .error-banner { left: 28px; }
 .breadcrumb-title { max-width: 40ch; padding: 2px 6px; overflow: hidden; border: 1px solid transparent; border-radius: 6px; color: var(--text); background: transparent; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
 .breadcrumb-title:hover { border-color: var(--line); background: var(--surface-2); }
 .breadcrumb-title-edit { width: 40ch; border-color: var(--accent-strong); background: var(--surface); }

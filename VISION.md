@@ -90,6 +90,6 @@ completion preserves whether the user or an agent performed it.
 
 SfxChat is a focused creative tool for building, testing, and managing audio. It should make iteration approachable while retaining enough provenance and control for serious production work. Library management is a core assistant responsibility.
 
-Chat lives alongside the audio workspace: a resizable left sidebar takes roughly one third of the window, while the right side switches between the library and a playground for comparing sounds. Users and the assistant can arrange candidates in the playground and carry useful feedback into the next iteration.
+Chat is optional and stays secondary to the audio workspace. Without a configured chat provider the chat panel stays hidden; once one is configured it opens as a resizable left sidebar of roughly one third of the window, and users can hide or show it from the top bar, a choice the app remembers. The right side switches between the library and a playground for comparing sounds. Users and the assistant can arrange candidates in the playground and carry useful feedback into the next iteration.
 
 PixelChat provides a useful precedent for creative iteration and asset review. Lorekeeper provides technical lessons for persistent chat, tool execution, and background work. Their product domains and .NET/Blazor implementations are not SfxChat requirements.

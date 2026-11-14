@@ -6,7 +6,10 @@ single-speaker voice with a chat assistant. [Public source](https://github.com/D
 
 ## v0.2
 
-Chat occupies a resizable left sidebar. Effects Library, Music Library, Voice Library, and
+Chat occupies a resizable left sidebar once a Codex account is connected or a chat model is
+added; until then it stays hidden. The chat button at the left of the top bar hides or shows it,
+and the choice is remembered on this device. While chat is hidden, the top bar also switches,
+creates, renames, and deletes sessions. Effects Library, Music Library, Voice Library, and
 project-wide Playground views share the right workspace. Generate sound
 effects through ElevenLabs, music through a configured music target, and voice
 through ElevenLabs or Gemini,

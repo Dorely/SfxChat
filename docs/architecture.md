@@ -42,6 +42,15 @@ Chat follows streamed output while the reader is at the bottom. Scrolling up pau
 following; returning to the bottom, sending a message, or selecting a conversation
 returns to the latest content. This follow state belongs only to the renderer.
 
+The chat panel appears only when chat is configured: Codex is connected or a custom
+model is saved (custom models save only after a live test). Without either, the panel
+is hidden and the top-bar chat button opens Settings. Otherwise that button hides or
+shows the panel, and the choice is a renderer-local preference in browser storage, like
+the theme, so the desktop window and the browser development host keep separate values.
+A hidden panel stays mounted so composer drafts survive, skips context estimates, and
+returns to the latest content when shown. While it is hidden, the top bar carries a
+session switcher for selecting, creating, renaming, and deleting sessions.
+
 The fixed `chatContext` IPC operation estimates selected-conversation context in
 the main process using bundled `js-tiktoken`/`o200k_base`. It shares the turn's
 instruction builder and uses repaired persisted history or active in-memory
