@@ -10,9 +10,9 @@
 ## Repository workflow
 
 - Inspect branch, working tree, index, and remotes before starting. Continue on the current branch.
-- Start new work from a clean commit. Review existing changes first; commit coherent completed work after verification. If changes are incomplete or ownership is unclear, ask for direction rather than overwriting or mixing them with new work.
-- Preserve unrelated user changes. Do not discard work, rewrite history, publish, or create remotes without authorization.
-- Finish each coherent task with a reviewed, focused commit and verify a clean working tree.
+- Start new work from a clean commit. When you find uncommitted work, analyze whether it is complete and coherent (code, contracts, docs, and checks agree). If it is and committing is safe, verify it, commit it on its own, and push it before beginning. If it is incomplete or ownership is unclear, ask for direction rather than overwriting or mixing it with new work.
+- Preserve unrelated user changes. Do not discard work, rewrite history, force-push, or create remotes without authorization. Pushing verified commits to the current branch on the existing `origin` is authorized.
+- Finish each feature with a reviewed, focused commit, push it to `origin`, and verify a clean working tree.
 
 ## Implementation practices
 
