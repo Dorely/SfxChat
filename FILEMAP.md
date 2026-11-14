@@ -32,6 +32,7 @@ is recorded in [verification](docs/verification.md).
 | [FILEMAP.md](FILEMAP.md) | This map of actual project files. |
 | [.gitignore](.gitignore) | Excludes credentials, local data, generated media, dependencies, build artifacts, and local agent state. |
 | [.gitattributes](.gitattributes) | LF conventions for authored text and byte-preserving vendored skill handling. |
+| [.github/FUNDING.yml](.github/FUNDING.yml) | GitHub Sponsor-button configuration for the Buy Me a Coffee page. |
 | [.vscode/launch.json](.vscode/launch.json) | VS Code F5 launch configuration for source-mapped Electron main and renderer debugging. |
 
 ## Documentation and API knowledge

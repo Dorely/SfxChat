@@ -1,5 +1,7 @@
 # SfxChat
 
+SfxChat is free to use. If it saves you time, you can [buy Dorely a coffee](https://buymeacoffee.com/dorely).
+
 A desktop workbench for Windows and Linux for creating, comparing, and organizing sound
 effects, music, and single-speaker voice with a chat assistant.
 [Public source](https://github.com/Dorely/SfxChat) · [MIT license](LICENSE) ·
