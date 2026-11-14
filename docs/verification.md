@@ -1,3 +1,26 @@
+# Local releases without hosted CI (2026-11-14)
+
+Removed the GitHub Actions workflow; `npm run release` now builds and publishes from the
+Windows host. No provider calls, paid generation, or new release.
+
+- `npm run typecheck` passed; `node --check scripts/release.mjs` and `sh -n
+  scripts/release-linux.sh` passed.
+- From committed `eee5c6c`, `npm run release -- --no-publish` built
+  `SfxChat-Setup-0.2.1.exe` on Windows and, in the default WSL Ubuntu 24.04 distro,
+  `SfxChat-0.2.1-x86_64.AppImage` and `SfxChat-0.2.1-amd64.deb` from a `git archive` of
+  that commit, in about three minutes with cached tools. The first run downloaded and
+  checksum-verified Node 24.21.0 and CMake 3.31.6 into `~/.cache/sfxchat-release/tools`
+  (382 MB). The temporary archive and WSL source tree were removed afterwards.
+- In the WSL-built .deb the helper needs `GLIBC_2.38` (`__isoc23_strtoul`; also
+  `arc4random` 2.36 and `_dl_find_object` 2.35), the Electron binary `GLIBC_2.25`, the
+  bundled better-sqlite3 `linux-x64.node` `GLIBC_2.34`, and the runtime reported v24.21.0.
+  README and architecture now state the 2.38 floor and the `SFXCHAT_WSL_DISTRO` route
+  back to 2.34 from an Ubuntu 22.04 distro, which was not exercised.
+- After pushing, `npm run release` stopped with "Release v0.2.1 already exists" without
+  building. The push started no workflow run. Publishing (`gh release create`) and
+  the unpushed/dirty-tree refusals were not exercised; no package was installed or
+  launched.
+
 # Windows and Linux release builds (2026-11-14)
 
 Packaging, native helper, bridge and CLI port; no provider calls or paid generation.
