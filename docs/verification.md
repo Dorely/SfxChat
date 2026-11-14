@@ -22,6 +22,22 @@ Renderer-only change; no provider calls or paid generation.
 - Gaps: no native desktop check, so the desktop window's own stored preference was
   not observed. A real account with no Codex login and no custom model was not used.
 
+Install and skill refresh (same day, at the user's request):
+
+- `npm run package` built `release/SfxChat Setup 0.2.0.exe` from `29ebbd2`. With the
+  user's authorization, 9 `sfxchat-runtime.exe` MCP servers held by open Claude Code
+  sessions were ended; no SfxChat window was open. The silent NSIS install exited 0,
+  and the installed `app.asar`, `SfxChat.exe`, `sfxchat-runtime.exe` and
+  `sfxchat-helper.exe` matched `release/win-unpacked` by SHA-256 (`app.asar`
+  `0F6A869893BAFCF281C9176BB242F97268DE839D069E70AC3133FC0AF1AC6A43`).
+- `sfxchat skill install --scope user --target claude --mcp` refused with
+  `INSTALL_CONFLICT` on `editing.md`. The installed `editing.md` and `workflow.md`
+  were exactly the `8f6603d` versions (stale, not customized), so it was rerun with
+  `--force`, which backed up those two files and `guidance.json`. All 17 skill files
+  then matched HEAD, a dry run reported 19 entries up to date, and the installed CLI
+  `status` returned `ready:true`. Open Claude Code sessions need an MCP reconnect.
+- The installed app's chat panel was not opened after installation.
+
 # Loop making: seam, repeat length, hints, intro and Godot export (2026-11-04)
 
 Fixes from agent feedback on looping a song. Local DSP only; no provider calls.
