@@ -135,7 +135,6 @@ is recorded in [verification](docs/verification.md).
 | [src/renderer/TrimEditor.tsx](src/renderer/TrimEditor.tsx) | Trim/Loop editor: waveform selection, fine-window zoom, fades, spectrogram panel, tempo/key/loudness chips, bar grid, loop-candidate search and brackets, seam preview, exact rendered preview, and derived-asset saving. |
 | [src/renderer/MidiStudio.tsx](src/renderer/MidiStudio.tsx) | MIDI workspace: clip rail, track lanes with sticky headers and key gutters on a shared ruler, note editing and keyboard nudging, transport with playhead audition, and derivative saving. |
 | [src/renderer/ChatContextMeter.tsx](src/renderer/ChatContextMeter.tsx) | Throttled composer context indicator, threshold styling, and estimate details. |
-| [.github/workflows/release.yml](.github/workflows/release.yml) | Credential-free Windows and Linux typecheck and package builds; publishes a GitHub release for each new `package.json` version pushed to `main`. |
 
 ## Agent workbench
 
@@ -166,6 +165,7 @@ is recorded in [verification](docs/verification.md).
 | [resources/skill/references/elevenlabs-music.md](resources/skill/references/elevenlabs-music.md), [gemini-lyria.md](resources/skill/references/gemini-lyria.md) | Complete supported-provider music guidance, controls and examples. |
 | [resources/skill/references/music-craft.md](resources/skill/references/music-craft.md), [midi-instruments.md](resources/skill/references/midi-instruments.md), [midi-workflow.md](resources/skill/references/midi-workflow.md) | Composing craft, arranging for the General MIDI bank, and the compose_midi workflow, bounds, and evidence limits. |
 | [scripts/build-agent.mjs](scripts/build-agent.mjs) | CLI/runtime/skill packaging, pinned source verification (encoding and synthesis archives) and native helper build. |
+| [scripts/release.mjs](scripts/release.mjs), [release-linux.sh](scripts/release-linux.sh) | Local release: builds the Windows installer on the host and the Linux packages in WSL from the pushed commit, then publishes GitHub release `v<version>` once. |
 | [native/helper.cpp](native/helper.cpp), [native/CMakeLists.txt](native/CMakeLists.txt) | Bounded Vorbis encoder and decoder and offline FluidSynth MIDI rendering for Windows and Linux, plus Windows-only DPAPI/ACL/PATH, linked against pinned sources. |
 | [installer/agent.nsh](installer/agent.nsh) | User command discovery installation/removal hooks. |
 | [installer/deb-after-install.sh](installer/deb-after-install.sh), [deb-after-remove.sh](installer/deb-after-remove.sh) | Debian package scripts: `/usr/bin/sfxchat` CLI link, Chromium sandbox mode, and AppArmor profile. |

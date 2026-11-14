@@ -19,13 +19,19 @@ the agent directory to the user PATH, and keeps electron-builder's Chromium sand
 AppArmor handling. An AppImage mounts at a new temporary path on each launch, so agent
 integration installation refuses there and points users to the .deb. The Linux helper
 statically links the C++ runtime and builds FluidSynth without OpenMP, so it needs only
-glibc; CI builds on Ubuntu 22.04, which keeps the released helper's floor at glibc 2.34.
+glibc. The build distro's glibc sets that floor: v0.2.1 was built on Ubuntu 22.04 and
+needs glibc 2.34, while the default Ubuntu 24.04 WSL release distro raises it to 2.38
+(C23 `strtoul`, `arc4random`, and the static unwinder's `_dl_find_object`). Releasing
+from an Ubuntu 22.04 distro through `SFXCHAT_WSL_DISTRO` keeps 2.34.
 
-The [Build and release](../.github/workflows/release.yml) workflow type-checks and
-packages both platforms on every push and pull request. On a push to `main` whose
-`package.json` version has no GitHub release, it publishes `v<version>` with the
-installer, AppImage, and .deb once both builds pass. Packages are unsigned and there is
-no auto-update; a published version is never rebuilt or replaced.
+Releases are built locally; the project uses no hosted CI. `npm run release`
+([release.mjs](../scripts/release.mjs)) requires a clean HEAD pushed to its upstream and
+an unpublished `v<version>`. It builds the installer on the Windows host and the Linux
+packages in WSL from a `git archive` of that commit
+([release-linux.sh](../scripts/release-linux.sh), with checksum-pinned Node 24.21.0 and
+CMake 3.31.6 cached in the distro), then publishes the three files with
+`gh release create`. Packages are unsigned and there is no auto-update; a published
+version is never rebuilt or replaced.
 
 The main process owns persistence, media, providers, credentials, jobs, and turns.
 React owns presentation, selection, forms, and audition controls. The sandboxed,

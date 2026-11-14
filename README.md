@@ -20,8 +20,8 @@ Your library stays in place.
   `--appimage-extract-and-run`. Agent CLI/MCP integration needs the .deb, because an
   AppImage's paths change on every launch.
 
-Linux packages are built on Ubuntu 22.04 and need glibc 2.34 or newer (for example
-Ubuntu 22.04, Debian 12, or Fedora 35 and later). Saving API keys or
+Linux packages need glibc 2.38 or newer (for example Ubuntu 24.04, Debian 13, or Fedora
+39 and later); v0.2.1 also runs on glibc 2.34 (Ubuntu 22.04, Debian 12). Saving API keys or
 a Codex login on Linux needs a running Secret Service keyring such as GNOME Keyring or
 KWallet; without one, SfxChat reports secure storage as unavailable instead of storing
 secrets in plain text.
@@ -168,12 +168,16 @@ Installation rebuilds SQLite for the pinned Electron runtime. Run `npm run rebui
 changing Electron/native dependencies. Unsigned packages are written to `release/`;
 local packaging does not publish them.
 
-The [Build and release](.github/workflows/release.yml) workflow runs `npm ci`, the type
-check, and the package build on Windows and Ubuntu 22.04 for every push and pull request,
-and keeps the packages as build artifacts. When a push to `main` carries a
-`package.json` version that has no GitHub release yet, it publishes release `v<version>`
-with the Windows installer, AppImage, and .deb, after both builds pass. Bump the version
-(`npm version patch --no-git-tag-version`) to publish; pushes without a bump only build.
+Releases are built and published locally; the project uses no hosted CI. After the
+version bump (`npm version patch --no-git-tag-version`) is committed and pushed, run
+`npm run release` on Windows with WSL and a signed-in GitHub CLI (`gh`). It builds the
+Windows installer, then the AppImage and .deb inside WSL from the same commit, and creates
+release `v<version>` with all three files. It refuses uncommitted or unpushed work and
+stops if that version is already published. The WSL distro needs `build-essential`,
+`curl`, and `xz-utils`; [release-linux.sh](scripts/release-linux.sh) caches
+checksum-pinned Node and CMake under `~/.cache/sfxchat-release` there. Set
+`SFXCHAT_WSL_DISTRO` to build in a distro other than the default.
+`npm run release -- --no-publish` builds the three packages without publishing.
 
 This project carries no automated tests. Verify changes with `typecheck`, the production
 build, and live/manual runs of the app, and record what was actually checked in

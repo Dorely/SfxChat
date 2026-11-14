@@ -49,7 +49,7 @@ plus explicit prompt guidance keep each session labeled as its scope evolves. De
 project deletion, cross-project copy or move of assets and conversations, per-project
 providers and keys, and assistant-side project creation or switching.
 
-Use focused reviewed commits and CI that runs the type check and package build without
-live credentials. Produce an unsigned installer locally. Preserve the ElevenLabs vendored
+Use focused reviewed commits, the type check, and local package builds without live
+credentials; the project uses no hosted CI. Produce unsigned packages locally. Preserve the ElevenLabs vendored
 license separately. Automated test suites of any kind are out of scope for this project;
 see [AGENTS.md](../AGENTS.md).

@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "rebuild": "electron-builder install-app-deps",
     "package": "npm run build && electron-builder --x64 --publish never",
+    "release": "node scripts/release.mjs",
     "postinstall": "electron-builder install-app-deps",
     "build:agent": "node scripts/build-agent.mjs",
     "predev": "node scripts/build-agent.mjs"
