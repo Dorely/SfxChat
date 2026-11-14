@@ -201,9 +201,12 @@ interval, fades, source hash, and decoder. Export the derivative through its ins
 The editor header shows estimated tempo, key, and integrated loudness; hover a chip
 for what it measures. **Bar grid** overlays the estimated bars on the waveform.
 Switch to **Loop** and click **Find loop points** to rank whole-bar loops for music,
-or texture loops for ambience. Optionally set the shortest and longest length or
-require the loop to start at the beginning first. Candidates appear as a list and
-as brackets on the waveform. Select one, adjust the seam crossfade if needed, click
+or texture loops for ambience. Optionally set the shortest and longest length,
+require the loop to start at the beginning, or tick **End as late as possible** so
+most of the track plays once as an intro. Candidates appear as a list and
+as brackets on the waveform. Select one, adjust the seam crossfade if needed (and the
+level match, which can ramp across the whole loop or only its last seconds when the
+ending winds down), click
 **Play seam** to hear the end of the loop wrap into its start, or **Play loop** for
 the whole loop once. Then choose **Save loop as new asset**. The assistant and MCP
 agents use the same search through `find_loop_points`. Match labels are

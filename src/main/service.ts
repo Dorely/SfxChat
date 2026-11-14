@@ -6,7 +6,7 @@ import { instructions, midiInstructions, musicInstructions, voiceInstructions, t
 import { parseMidi, writeMidi } from './midi';
 import { MIDI_TICKS_PER_QUARTER, midiCompositionProblem, midiDurationSeconds, midiSummary, type MidiComposition } from '../shared/midi';
 import { floatWav, renderClip, type ClipRender } from './audio';
-import type { Asset, AssetKind, AssetPatch, AssetUpdate, AudioAnalysisInput, LoopSearchInput, LoopSeamInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, MidiComposeInput, MusicProviderKind, SoundfontSummary, VoiceGenerationInput, VoiceListInput, VoicePage, VoiceModelListInput, VoiceModelCatalog, AudioModelListInput, AudioModelCatalog, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
+import type { Asset, AssetKind, AssetPatch, AssetUpdate, AudioAnalysisInput, LoopSearchInput, LoopSeamInput, AnyGenerationInput, GenerationInput, MusicGenerationInput, ImportEntry, MidiComposeInput, MusicProviderKind, SoundfontSummary, VoiceGenerationInput, VoiceListInput, VoicePage, VoiceModelListInput, VoiceModelCatalog, AudioModelListInput, AudioModelCatalog, SettingsStatus, Snapshot, SpectrogramInput, TrimInput } from '../shared/types';
 import type { DiagnosticLog } from './diagnostics';
 import { diagnosticError } from './providers/errors';
 import { readFile, unlink } from 'node:fs/promises';
@@ -281,11 +281,15 @@ export class WorkbenchService {
           this.diagnostics?.record('generation.invalid_audio', { conversationId: job.conversationId, jobId: job.id, assetId: asset.id, requestId: result.requestId });
           continue;
         }
+        // Providers treat a requested length as a target; record a clear miss on the job and the asset.
+        const asked = requestedSeconds(job.input);
+        const lengthCheck = asked !== null && Math.abs(asset.duration - asked) > 0.5 ? { requestedSeconds: asked, returnedSeconds: asset.duration, note: `Returned ${asset.duration.toFixed(2)} s; ${asked.toFixed(2)} s was requested. The provider treats length as a target; trim or loop the result, or regenerate deliberately.` } : null;
+        if (lengthCheck) asset.lengthCheck = lengthCheck;
         // A complete response that races cancellation is retained as a completed
         // original. Cancellation cannot unspend or unreceive a provider result.
-        this.store.completeJob(job, asset);
+        this.store.completeJob(lengthCheck ? { ...job, note: lengthCheck.note } : job, asset);
         this.diagnostics?.record('generation.completed', { conversationId: job.conversationId, jobId: job.id, assetId: asset.id, provider: result.provider, requestId: result.requestId, bytes: asset.bytes, hash: asset.hash });
-        this.store.addMessage(job.conversationId, 'tool', `Ready: ${asset.name}${asset.duration === null ? ' (audio metadata could not be read; audition before use)' : ''}`);
+        this.store.addMessage(job.conversationId, 'tool', `Ready: ${asset.name}${lengthCheck ? ` (${lengthCheck.note})` : ''}`);
       } catch (error) {
         const knownFailure = !!error && typeof error === 'object' && ('status' in error || 'statusCode' in error);
         const stopped = controller.signal.aborted;
@@ -316,13 +320,14 @@ export class WorkbenchService {
     }
     this.store.updateAsset(id, update, projectId, conversationId);
   }
-  async importFiles(conversationId: string, paths: string[], kind: AssetKind = 'effect') {
+  async importFiles(conversationId: string, entries: (string | ImportEntry)[], kind: AssetKind = 'effect') {
     this.requireOpen();
     this.store.requireConversation(conversationId);
     const projectId = this.store.conversation(conversationId).projectId;
     const imported: Asset[] = [];
-    for (const path of paths) {
-      const asset = await this.media.import(path, projectId, kind); this.requireOpen(); this.store.requireConversation(conversationId); this.store.insertAsset(asset); this.store.addToPlayground(conversationId, [asset.id]);
+    for (const entry of entries) {
+      const { path, ...fields } = typeof entry === 'string' ? { path: entry } : entry;
+      const asset = await this.media.import(path, projectId, kind, fields); this.requireOpen(); this.store.requireConversation(conversationId); this.store.insertAsset(asset); this.store.addToPlayground(conversationId, [asset.id]);
       this.store.addMessage(conversationId, 'tool', `Imported “${asset.name}”.`);
       imported.push(asset);
     }
@@ -379,7 +384,7 @@ export class WorkbenchService {
           this.store.insertAsset(asset);
           this.store.addToPlayground(conversationId, [asset.id]);
           this.store.addMessage(conversationId, 'tool', rendered.edit.loop
-            ? `Looped “${source.name}” from ${rendered.edit.startFrame / rendered.edit.sampleRate}–${rendered.edit.endFrame / rendered.edit.sampleRate}s with a ${rendered.edit.loop.crossfadeFrames}-frame ${rendered.edit.loop.crossfadeShape ?? 'linear'} seam crossfade${rendered.edit.loop.levelMatchDb ? `, level ramped ${(-rendered.edit.loop.levelMatchDb).toFixed(1)} dB across the loop` : ''}${rendered.edit.loop.loopStartFrame ? `, after a ${(rendered.edit.loop.loopStartFrame / rendered.edit.sampleRate).toFixed(3)} s intro (loop points embedded as a WAV smpl chunk)` : ''} as “${asset.name}”. Original preserved.`
+            ? `Looped “${source.name}” from ${rendered.edit.startFrame / rendered.edit.sampleRate}–${rendered.edit.endFrame / rendered.edit.sampleRate}s with a ${rendered.edit.loop.crossfadeFrames}-frame ${rendered.edit.loop.crossfadeShape ?? 'linear'} seam crossfade${rendered.edit.loop.levelMatchDb ? `, level ramped ${(-rendered.edit.loop.levelMatchDb).toFixed(1)} dB ${rendered.edit.loop.levelMatchFrames ? `over the loop's last ${(rendered.edit.loop.levelMatchFrames / rendered.edit.sampleRate).toFixed(1)} s` : 'across the loop'}` : ''}${rendered.edit.loop.loopStartFrame ? `, after a ${(rendered.edit.loop.loopStartFrame / rendered.edit.sampleRate).toFixed(3)} s intro (loop points embedded as a WAV smpl chunk)` : ''} as “${asset.name}”. Original preserved.`
             : `Trimmed “${source.name}” to ${rendered.edit.startFrame / rendered.edit.sampleRate}–${rendered.edit.endFrame / rendered.edit.sampleRate}s as “${asset.name}”. Original preserved.`);
           // Registration and durable tool result commit together: replay cannot create a second derivative.
           if (callId) this.store.finishTool(callId, JSON.stringify(asset));
@@ -591,6 +596,13 @@ export class WorkbenchService {
     this.stopped = true; for (const controller of this.turns.values()) controller.abort(); this.activeJob?.controller.abort();
     await this.idle();
   }
+}
+
+/** The whole-file length a generation asked for, in seconds, when it named one. */
+function requestedSeconds(input: AnyGenerationInput): number | null {
+  if (input.kind === 'music') return input.durationMs ? input.durationMs / 1000 : null;
+  if (input.kind === undefined || input.kind === 'effect') return input.duration ?? null;
+  return null;
 }
 
 function logReference(reference: string | null | undefined): string {

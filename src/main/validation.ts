@@ -18,7 +18,8 @@ export const trimSchema = z.object({
   crossfadeMs: z.number().finite().min(0).max(5000).optional().describe('Loop seam crossfade length in milliseconds (0-5000, default 0). A small value such as 5-20 ms usually removes the click at the seam; only used when loop is true.'),
   introStartSeconds: z.number().finite().min(0).optional().describe('Loop render only: also keep the source from this time up to startSeconds as an intro that plays once before the loop (0 keeps everything before the loop). The WAV carries the loop region in a smpl chunk, which Godot imports as a forward loop by default.'),
   crossfadeShape: z.enum(['linear', 'equal-power']).optional().describe('Loop render only: crossfade curve. linear (default) suits music, whose two sides are correlated; equal-power keeps uncorrelated texture or noise from dipping mid-blend. find_loop_points recommends one per candidate.'),
-  levelMatchDb: z.number().finite().min(-12).max(12).optional().describe('Loop render only: how many dB louder the loop end is than its start, usually a candidate\'s seam.levelDeltaDb. The loop ramps smoothly from 0 dB at its start to minus this at its end so the wrap does not jump in level. Omit (or 0) to keep the source level.')
+  levelMatchDb: z.number().finite().min(-12).max(12).optional().describe('Loop render only: how many dB louder the loop end is than its start, usually a candidate\'s seam.levelDeltaDb. The loop ramps smoothly from 0 dB at its start to minus this at its end so the wrap does not jump in level. Omit (or 0) to keep the source level.'),
+  levelMatchSeconds: z.number().finite().positive().max(900).optional().describe('Loop render only: ramp the level match over just the last this many seconds of the loop (0 dB before), for an end that winds down; omit to ramp across the whole loop. Needs levelMatchDb. find_loop_points recommends one (recommendedLevelMatchSeconds).')
 }).strict();
 const tempoHintSchema = z.number().finite().min(40).max(300).optional().describe('Musical analysis: the tempo you expect in BPM, for example the tempo requested from the music provider. It centers the tempo prior so half, double or two-thirds readings lose; the audio still decides the exact value, and providers often miss requested tempos.');
 export const analysisSchema = z.object({
@@ -31,7 +32,7 @@ export const analysisSchema = z.object({
   }).strict().optional().describe('Measure the loop seam where endSeconds wraps back to startSeconds: splice discontinuity, head/tail RMS, start/end correlation, and a suggested frame offset. Omit both fields to probe the whole asset as a loop.'),
   musical: z.boolean().optional().describe('Also estimate tempo, beat and bar grid, key and integrated loudness (LUFS) for the whole file, with beats/bars listed for the requested interval. Estimates with heuristic confidence, not listening evidence. Works on full-length tracks.'),
   tempoHint: tempoHintSchema,
-  keyHint: z.string().trim().min(1).max(20).optional().describe('Musical analysis: the key you expect, such as "A minor". Reported as how well it fits the measured harmony (rank among 24 keys); it does not replace the estimate.')
+  keyHint: z.string().trim().min(1).max(20).optional().describe('Musical analysis: the key or mode you expect, such as "A minor" or "E dorian" (for example the key requested from the music provider). Reported as how well its notes fit the measured note strengths (share in scale, weak scale notes, strong notes outside) and, for major/minor, its rank among 24 keys; it does not replace the estimate.')
 }).strict();
 export const loopSearchSchema = z.object({
   mode: z.enum(['auto', 'music', 'texture']).optional().describe('music: whole-bar loops on the detected beat grid; texture: grid-free loops for ambience, drones and noise beds; auto (default) uses music when a steady beat is found.'),
@@ -43,7 +44,9 @@ export const loopSearchSchema = z.object({
   maxBars: z.number().int().min(1).max(256).optional(),
   tempoHint: tempoHintSchema,
   barMultiple: z.number().int().min(1).max(64).optional().describe('Music mode: only offer lengths that are whole multiples of this many bars, for example 4 or 8 for phrase-length loops.'),
-  lengthSeconds: z.number().finite().positive().max(900).optional().describe('Exact loop length in seconds, for example a repeat spacing you measured. Candidates differ only in where the loop starts; the length is not re-measured. Do not combine with min/max limits.'),
+  lengthSeconds: z.number().finite().positive().max(900).optional().describe('Target loop length in seconds, for example a repeat spacing you measured. Candidates differ mainly in where the loop starts; each length is fine-tuned (within about a quarter beat) to where the audio actually repeats so seams stay clean, reported as lengthSource requested-tuned. Do not combine with min/max limits.'),
+  exactLength: z.boolean().optional().describe('With lengthSeconds: keep that length to the sample instead of fine-tuning it (seams may be rougher).'),
+  prefer: z.enum(['quality', 'late']).optional().describe('quality (default) ranks the best repeat first. late ranks loops that end as late as possible in the search region first (most of the track plays once as an intro), among candidates whose repeat is not weak and whose seam is not rough.'),
   allowIntro: z.boolean().optional().describe('true (default) lets the loop start after an intro that plays once; false requires the loop to start at the region start.'),
   count: z.number().int().min(1).max(12).optional().describe('Candidates to return (default 5, maximum 12).')
 }).strict();
@@ -52,6 +55,7 @@ export const loopSeamSchema = z.object({
   crossfadeMs: z.number().finite().min(0).max(5000).optional().describe('Crossfade used by the loop render (trim_asset loop:true crossfadeMs).'),
   crossfadeShape: z.enum(['linear', 'equal-power']).optional().describe('Crossfade curve used by the loop render (default linear).'),
   levelMatchDb: z.number().finite().min(-12).max(12).optional().describe('Level match used by the loop render (trim_asset levelMatchDb).'),
+  levelMatchSeconds: z.number().finite().positive().max(900).optional().describe('Level match ramp length used by the loop render (trim_asset levelMatchSeconds).'),
   contextSeconds: z.number().finite().min(0.25).max(10).optional().describe('Audio on each side of the seam (default 2 s, at most 10).')
 }).strict();
 export const spectrogramSchema = z.object({

@@ -26,12 +26,16 @@ export interface Asset {
   providerPrompt?: string | null; lyrics?: string; edit?: TrimEdit;
   /** Where the sound repeats when looped; wins over a loop render's recorded region. */
   loopPoint?: AssetLoopPoint | null;
+  /** Set when a generation's returned length missed its requested length by more than 0.5 s. */
+  lengthCheck?: { requestedSeconds: number; returnedSeconds: number; note: string };
   /** Present on MIDI assets: tempo, meter, per-track instrument summary, and musical length. */
   midi?: MidiSummary;
   /** Set on a MIDI clip derived from another clip by editing its notes. */
   midiEdit?: MidiEdit;
   arrangementRender?: { record: import('./arrangement').ArrangementRecord; input: import('./arrangement-operations').RenderInput; sourceHashes: Record<string, string>; seed: number; stem?: string; diagnostics: unknown };
 }
+/** One file for import_audio: its absolute path and optional library metadata. */
+export interface ImportEntry { path: string; name?: string; tags?: string[]; description?: string }
 /**
  * A loop region in seconds on an existing file: read at import from a WAV smpl chunk or
  * Ogg LOOPSTART/LOOPLENGTH tags ('file'), or set with update_asset ('user'). A null end
@@ -48,6 +52,8 @@ export interface TrimInput {
   crossfadeShape?: 'linear' | 'equal-power';
   /** Loop render only: dB the loop end is louder than its start; the loop ramps gain down by this much across its length. */
   levelMatchDb?: number;
+  /** Loop render only: ramp the level match over just the loop's last this many seconds instead of its whole length. */
+  levelMatchSeconds?: number;
 }
 export interface TrimEdit {
   /** 1: loop renders were shortened by the crossfade (superseded); 2: loops keep their exact length. */
@@ -55,7 +61,7 @@ export interface TrimEdit {
   startFrame: number; endFrame: number; fadeInFrames: number; fadeOutFrames: number;
   requested: TrimInput; decoder: string; outputEncoding: 'float32-wav';
   /** Version 2 adds the crossfade source, the kept intro's source frame, and the loop region [loopStartFrame, loopEndFrame) within the output. */
-  loop?: { crossfadeFrames: number; outputFrames: number; crossfadeSource?: 'before-start' | 'after-end' | null; crossfadeShape?: 'linear' | 'equal-power'; levelMatchDb?: number; introStartFrame?: number; loopStartFrame?: number; loopEndFrame?: number };
+  loop?: { crossfadeFrames: number; outputFrames: number; crossfadeSource?: 'before-start' | 'after-end' | null; crossfadeShape?: 'linear' | 'equal-power'; levelMatchDb?: number; levelMatchFrames?: number; introStartFrame?: number; loopStartFrame?: number; loopEndFrame?: number };
 }
 export interface AudioAnalysisInput { startSeconds?: number; endSeconds?: number; bins?: number; events?: boolean; seamProbe?: { startSeconds?: number; endSeconds?: number }; musical?: boolean; tempoHint?: number; keyHint?: string }
 export interface EventInterval {
@@ -75,6 +81,12 @@ export interface AudioAnalysis {
   totalFrames: number; duration: number; startFrame: number; endFrame: number;
   startSeconds: number; endSeconds: number; decoder: string;
   bins: { startFrame: number; endFrame: number; startSeconds: number; endSeconds: number; min: number; max: number; peak: number; rms: number }[];
+  /** Onset/decay landmarks relative to the loudest 5 ms RMS window of the interval. */
+  envelope?: {
+    windowMs: number; peakSeconds: number | null; peakRmsDbfs: number | null; samplePeakDbfs: number | null;
+    onset: { minus60Seconds: number | null; minus40Seconds: number | null; minus20Seconds: number | null };
+    decay: { minus20Seconds: number | null; minus40Seconds: number | null; minus60Seconds: number | null };
+  };
   events?: EventInterval[];
   seam?: SeamProbe;
   musical?: MusicalAnalysis;
@@ -84,7 +96,13 @@ export interface MusicalAnalysis {
   version: 1;
   tempo: { bpm: number; confidence: number; steady: boolean; beatResidualMs: number; hint?: number; hintDeviationPercent?: number } | null;
   meter: { beatsPerBar: number; assumed: true; downbeatConfidence: number };
-  key: { label: string; tonic: string; mode: 'major' | 'minor'; correlation: number; confidence: number; alternatives: { label: string; correlation: number }[]; hint?: { label: string; correlation: number; rank: number; ofKeys: number; matchesEstimate: boolean } } | null;
+  key: {
+    label: string; tonic: string; mode: 'major' | 'minor'; correlation: number; confidence: number; alternatives: { label: string; correlation: number }[];
+    /** The estimate's seven notes, the modes that share exactly those notes, and each note's relative strength (loudest 1). */
+    scale: string[]; sameNotes: string[]; pitchClasses: { note: string; strength: number }[];
+    /** How a keyHint key or mode fits the note strengths; rank and correlation only for major/minor hints. */
+    hint?: { label: string; scale: string[]; correlation: number | null; rank: number | null; ofKeys: number; matchesEstimate: boolean; sameNotesAsEstimate: boolean; inScaleShare: number; estimateInScaleShare: number; weakScaleNotes: string[]; strongOutsideNotes: string[] };
+  } | null;
   loudness: { integratedLufs: number | null; samplePeakDbfs: number | null };
   beats: number[]; bars: { number: number; seconds: number }[]; truncated: boolean;
   note: string;
@@ -99,8 +117,10 @@ export interface LoopSearchInput {
   tempoHint?: number;
   /** Music mode: only lengths that are whole multiples of this many bars (e.g. 4 or 8). */
   barMultiple?: number;
-  /** Exact loop length; replaces the min/max limits and keeps the length unchanged through refinement. */
-  lengthSeconds?: number;
+  /** Target loop length; replaces the min/max limits. Fine-tuned to the measured repeat unless exactLength. */
+  lengthSeconds?: number; exactLength?: boolean;
+  /** late ranks loops that end latest in the region first (among non-weak, non-rough candidates). */
+  prefer?: 'quality' | 'late';
   /** false requires the loop to start at the beginning of the search region. */
   allowIntro?: boolean;
   count?: number;
@@ -108,8 +128,10 @@ export interface LoopSearchInput {
 export interface LoopCandidate {
   rank: number;
   startSeconds: number; endSeconds: number; startFrame: number; endFrame: number; lengthSeconds: number;
-  /** What set the length: the bar grid, the measured repeat spacing near it, the caller, or 100 ms texture units. */
-  lengthSource: 'beat-grid' | 'repeat-spacing' | 'requested' | 'texture-units';
+  /** What set the length: the bar grid, the measured repeat spacing near it, the caller (exact, or fine-tuned to the repeat), or 100 ms texture units. */
+  lengthSource: 'beat-grid' | 'repeat-spacing' | 'requested' | 'requested-tuned' | 'texture-units';
+  /** The caller's lengthSeconds, when given. */
+  requestedLengthSeconds: number | null;
   /** Music mode: the length the bar grid alone gave. */
   gridLengthSeconds: number | null;
   /** Music mode: onset-envelope correlation between the context around the start and the same context one loop length later. */
@@ -126,7 +148,13 @@ export interface LoopCandidate {
   seamMatch: 'smooth' | 'fair' | 'rough';
   similarity: { harmony: number | null; timbre: number; level: number; contextUnits: number };
   /** Frames the start moved from its grid position and the end from the planned end (start + set length); already included in startFrame/endFrame. */
-  seam: { correlation: number; step: number; naturalStep: number; levelDeltaDb: number; startShiftFrames: number; endShiftFrames: number };
+  seam: {
+    correlation: number; step: number; naturalStep: number; levelDeltaDb: number; startShiftFrames: number; endShiftFrames: number;
+    /** Where a level difference of 1 dB or more sits: a local step at the seam, a wind-down over the loop's last levelChangeSeconds, or a gradual drift across the loop. */
+    levelTrend: 'step' | 'wind-down' | 'gradual' | null; levelChangeSeconds: number | null;
+  };
+  /** Level match to render with (trim_asset levelMatchDb/levelMatchSeconds), or null when the ends already match within 1 dB; seconds null ramps across the whole loop. */
+  recommendedLevelMatchDb: number | null; recommendedLevelMatchSeconds: number | null;
   recommendedCrossfadeMs: number;
   /** linear for music (correlated across the blend), equal-power for texture. */
   recommendedCrossfadeShape: 'linear' | 'equal-power';
@@ -139,7 +167,7 @@ export interface LoopSearchResult {
   candidates: LoopCandidate[];
   note: string;
 }
-export interface LoopSeamInput { startSeconds: number; endSeconds: number; crossfadeMs?: number; crossfadeShape?: 'linear' | 'equal-power'; levelMatchDb?: number; contextSeconds?: number }
+export interface LoopSeamInput { startSeconds: number; endSeconds: number; crossfadeMs?: number; crossfadeShape?: 'linear' | 'equal-power'; levelMatchDb?: number; levelMatchSeconds?: number; contextSeconds?: number }
 export interface SpectrogramInput { startSeconds?: number; endSeconds?: number; width?: number; height?: number; freqScale?: 'log' | 'linear' }
 export interface GenerationInput {
   kind?: 'effect'; prompt: string; count?: number; duration?: number | null; loop?: boolean;
@@ -209,7 +237,7 @@ export interface AudioModelCatalog {
   models: AudioModelOption[]; latestModel: string;
 }
 export interface ProviderKeyStatus { id: AudioProviderId; ready: boolean; candidates: { id: string; label: string }[] }
-export interface Job { id: string; conversationId: string; kind: AssetKind; status: JobStatus; input: AnyGenerationInput; assetId: string | null; error: string | null; createdAt: string }
+export interface Job { id: string; conversationId: string; kind: AssetKind; status: JobStatus; input: AnyGenerationInput; assetId: string | null; error: string | null; createdAt: string; /** A completed result's caveat, such as a missed requested length. */ note?: string | null }
 export type GenericProviderKind = 'chat-completions' | 'responses' | 'anthropic';
 export interface ChatProviderEntry { id: string; label: string; baseUrl: string; kind: GenericProviderKind }
 export type CapabilityFlag = true | false | 'unknown';

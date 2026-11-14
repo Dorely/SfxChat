@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile, rename, stat } from 'node:fs/promises';
 import { join, extname, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { parseBuffer } from 'music-metadata';
-import type { Asset, AssetKind, AssetLoopPoint, AudioAnalysis, AudioAnalysisInput, AnyGenerationInput, LoopSearchInput, LoopSeamInput, SpectrogramInput, TrimInput } from '../shared/types';
+import type { Asset, AssetKind, AssetLoopPoint, AudioAnalysis, AudioAnalysisInput, AnyGenerationInput, ImportEntry, LoopSearchInput, LoopSeamInput, SpectrogramInput, TrimInput } from '../shared/types';
 import { analyzeAudio, decodeAudio, interval, renderClip, renderTrim, smplChunk, MAX_AUDIO_BYTES, type ClipRender, type DecodedAudio } from './audio';
 import { renderSpectrogram, type SpectrogramRender } from './spectrogram';
 import { midiFileDurationSeconds } from './midi';
@@ -160,12 +160,12 @@ export class MediaLibrary {
     } catch { /* originals still preserved */ }
     return { id, name: 'Untitled sound', description: '', tags: [], collections: [], review: 'unreviewed', feedback: '', source: 'imported', kind: 'effect', format, hash: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length, duration, prompt: '', provider: null, model: null, requestId: null, request: null, usage: null, parentId: null, createdAt: new Date().toISOString(), ...fields };
   }
-  async import(path: string, projectId: string, kind: AssetKind = 'effect'): Promise<Asset> {
+  async import(path: string, projectId: string, kind: AssetKind = 'effect', fields: Omit<ImportEntry, 'path'> = {}): Promise<Asset> {
     const extension = extname(path).toLowerCase();
     if (extension === '.mid' || extension === '.midi') {
       const bytes = await readFile(path);
       midiFileDurationSeconds(bytes);
-      return this.save(bytes, 'mid', { projectId, name: basename(path, extension), source: 'imported', kind: 'midi' });
+      return this.save(bytes, 'mid', { projectId, name: fields.name ?? basename(path, extension), tags: fields.tags ?? [], description: fields.description ?? '', source: 'imported', kind: 'midi' });
     }
     if (extension !== '.mp3' && extension !== '.wav' && extension !== '.ogg') throw new Error('Import a WAV, MP3, Ogg Vorbis, or MIDI file.');
     const format = extension.slice(1) as 'mp3' | 'wav' | 'ogg', bytes = await readFile(path);
@@ -173,7 +173,9 @@ export class MediaLibrary {
     if (!metadata.format.codec || !metadata.format.duration) throw new Error('The file does not contain playable audio.');
     if (format === 'ogg' && !/vorbis/i.test(metadata.format.codec)) throw new Error(`This Ogg file holds ${metadata.format.codec}; import Ogg Vorbis, WAV, or MP3.`);
     const loopPoint = fileLoopPoint(bytes, format, metadata.format.sampleRate, metadata.format.duration, metadata.native.vorbis ?? []);
-    return this.save(bytes, format, { projectId, name: basename(path, extension), source: 'imported', kind, ...(loopPoint ? { loopPoint } : {}) });
+    // A caller's name wins, then the file's own title tag (data, not instructions), then the filename.
+    const name = fields.name ?? (metadata.common.title?.trim().slice(0, 200) || basename(path, extension));
+    return this.save(bytes, format, { projectId, name, tags: fields.tags ?? [], description: fields.description ?? '', source: 'imported', kind, ...(loopPoint ? { loopPoint } : {}) });
   }
 
 }

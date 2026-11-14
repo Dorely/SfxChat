@@ -152,8 +152,8 @@ export async function analyzeAudio(audio: DecodedAudio, asset: Pick<Asset, 'id' 
   }
   const analysis: AudioAnalysis = { version: 1, assetId: asset.id, sourceHash: asset.hash, sampleRate: audio.sampleRate, channels: audio.channels.length,
     totalFrames, duration, startFrame, endFrame, startSeconds: startFrame / audio.sampleRate, endSeconds: endFrame / audio.sampleRate,
-    decoder: audio.decoder, bins,
-    note: 'Absolute seconds in decoded source; frame intervals are [start,end). Linear full-scale amplitudes, no normalization. Min/max/peak span all channels; RMS includes every channel without downmix cancellation. Quiet bins do not establish silence or event identity. Zoom by requesting a smaller absolute interval. Measurements are not listening evidence.' };
+    decoder: audio.decoder, envelope: await envelopeSummary(audio, startFrame, endFrame, Math.max(0, ...bins.map(bin => bin.peak))), bins,
+    note: 'Absolute seconds in decoded source; frame intervals are [start,end). envelope summarizes the interval from 5 ms RMS windows relative to the loudest one: onset times are when the level first comes within 60/40/20 dB of that peak, decay times when it finally stays more than 20/40/60 dB below it (null: still above at the interval end), so tails can be trimmed from them without reading every bin; pass bins:1 when only the summary is needed. Linear full-scale amplitudes, no normalization. Min/max/peak span all channels; RMS includes every channel without downmix cancellation. Quiet bins do not establish silence or event identity. Zoom by requesting a smaller absolute interval. Measurements are not listening evidence.' };
   if (input.events) {
     const detected = await detectEvents(audio, startFrame, endFrame);
     analysis.events = detected.events;
@@ -165,17 +165,11 @@ export async function analyzeAudio(audio: DecodedAudio, asset: Pick<Asset, 'id' 
   return analysis;
 }
 
-const EVENT_MIN_SECONDS = 0.03;
-const EVENT_GAP_SECONDS = 0.05;
-const EVENT_MAX = 64;
-
-/** Energy-based segmentation: exact-frame candidate regions, never semantic identity. */
-async function detectEvents(audio: DecodedAudio, startFrame: number, endFrame: number): Promise<{ events: EventInterval[]; total: number }> {
-  const rate = audio.sampleRate;
-  const envelopeFrames = Math.max(1, Math.round(rate * 0.005));
+/** 5 ms RMS levels (dBFS, all channels without downmix) from startFrame, one per window. */
+async function rmsLevels(audio: DecodedAudio, startFrame: number, endFrame: number, windowFrames: number) {
   const levels: number[] = [];
-  for (let start = startFrame; start < endFrame; start += envelopeFrames) {
-    const end = Math.min(endFrame, start + envelopeFrames);
+  for (let start = startFrame; start < endFrame; start += windowFrames) {
+    const end = Math.min(endFrame, start + windowFrames);
     let sum = 0, count = 0;
     for (const channel of audio.channels) {
       for (let i = start; i < end; i++) sum += channel[i] * channel[i];
@@ -184,6 +178,38 @@ async function detectEvents(audio: DecodedAudio, startFrame: number, endFrame: n
     levels.push(20 * Math.log10(Math.sqrt(sum / Math.max(1, count)) + 1e-12));
     if (levels.length % 64 === 0) await yieldWork();
   }
+  return levels;
+}
+
+/**
+ * Onset and decay landmarks relative to the loudest 5 ms window: when the sound first
+ * comes within 60/40/20 dB of that peak, and the time after which it stays more than
+ * 20/40/60 dB below it (null when it is still above at the interval end).
+ */
+async function envelopeSummary(audio: DecodedAudio, startFrame: number, endFrame: number, samplePeak: number): Promise<NonNullable<AudioAnalysis['envelope']>> {
+  const rate = audio.sampleRate, windowFrames = Math.max(1, Math.round(rate * 0.005));
+  const levels = await rmsLevels(audio, startFrame, endFrame, windowFrames);
+  let peak = 0;
+  for (let k = 1; k < levels.length; k++) if (levels[k] > levels[peak]) peak = k;
+  const peakDb = levels[peak], silent = peakDb < -120, time = (k: number) => Math.min(endFrame, startFrame + k * windowFrames) / rate;
+  const onset = (drop: number) => { if (silent) return null; for (let k = 0; k <= peak; k++) if (levels[k] >= peakDb - drop) return time(k); return null; };
+  const decay = (drop: number) => { if (silent) return null; for (let k = levels.length - 1; k >= peak; k--) if (levels[k] >= peakDb - drop) return k === levels.length - 1 ? null : time(k + 1); return null; };
+  return {
+    windowMs: 5, peakSeconds: silent ? null : time(peak) + windowFrames / rate / 2, peakRmsDbfs: silent ? null : peakDb, samplePeakDbfs: samplePeak > 0 ? 20 * Math.log10(samplePeak) : null,
+    onset: { minus60Seconds: onset(60), minus40Seconds: onset(40), minus20Seconds: onset(20) },
+    decay: { minus20Seconds: decay(20), minus40Seconds: decay(40), minus60Seconds: decay(60) }
+  };
+}
+
+const EVENT_MIN_SECONDS = 0.03;
+const EVENT_GAP_SECONDS = 0.05;
+const EVENT_MAX = 64;
+
+/** Energy-based segmentation: exact-frame candidate regions, never semantic identity. */
+async function detectEvents(audio: DecodedAudio, startFrame: number, endFrame: number): Promise<{ events: EventInterval[]; total: number }> {
+  const rate = audio.sampleRate;
+  const envelopeFrames = Math.max(1, Math.round(rate * 0.005));
+  const levels = await rmsLevels(audio, startFrame, endFrame, envelopeFrames);
   if (!levels.length) return { events: [], total: 0 };
   const sorted = [...levels].sort((a, b) => a - b);
   const noiseFloor = sorted[Math.floor(sorted.length * 0.2)];
@@ -391,10 +417,13 @@ export function loopCrossfadeSource(startFrame: number, endFrame: number, totalF
  * from dipping mid-blend. `levelMatchDb` is how much louder the loop end is than its
  * start (a candidate's seam.levelDeltaDb): the loop body ramps smoothly from 0 dB at
  * the start to -levelMatchDb at the end, so the wrap does not jump in level.
+ * `levelMatchFrames` confines that ramp to the loop's last frames (0: the whole loop),
+ * for an end that winds down rather than one that is uniformly off.
  */
-export interface LoopBlend { crossfadeFrames: number; source: 'before-start' | 'after-end' | null; shape: 'linear' | 'equal-power'; levelMatchDb: number }
-export function loopBlend(crossfadeFrames: number, source: LoopBlend['source'], input: { crossfadeShape?: LoopBlend['shape']; levelMatchDb?: number }): LoopBlend {
-  return { crossfadeFrames, source, shape: input.crossfadeShape ?? 'linear', levelMatchDb: input.levelMatchDb ?? 0 };
+export interface LoopBlend { crossfadeFrames: number; source: 'before-start' | 'after-end' | null; shape: 'linear' | 'equal-power'; levelMatchDb: number; levelMatchFrames: number }
+export function loopBlend(crossfadeFrames: number, source: LoopBlend['source'], input: { crossfadeShape?: LoopBlend['shape']; levelMatchDb?: number; levelMatchSeconds?: number }, sampleRate: number): LoopBlend {
+  if (input.levelMatchSeconds !== undefined && !input.levelMatchDb) throw new Error('levelMatchSeconds sets how long the level match ramps; it needs a non-zero levelMatchDb.');
+  return { crossfadeFrames, source, shape: input.crossfadeShape ?? 'linear', levelMatchDb: input.levelMatchDb ?? 0, levelMatchFrames: input.levelMatchSeconds === undefined ? 0 : Math.max(1, Math.round(input.levelMatchSeconds * sampleRate)) };
 }
 const fadeGains = (mix: number, shape: LoopBlend['shape']): [number, number] => shape === 'equal-power' ? [Math.cos(mix * Math.PI / 2), Math.sin(mix * Math.PI / 2)] : [1 - mix, mix];
 
@@ -406,7 +435,8 @@ export function loopSample(at: (frame: number) => number, i: number, startFrame:
   const length = endFrame - startFrame, { crossfadeFrames, source } = blend;
   // The ramp applies to the loop body; blend material from before the start already
   // sits at the start's level, and material after the end gets the end's gain.
-  const ramp = blend.levelMatchDb ? Math.pow(10, -blend.levelMatchDb * (i / length) / 20) : 1;
+  const rampFrames = blend.levelMatchFrames > 0 && blend.levelMatchFrames < length ? blend.levelMatchFrames : length;
+  const ramp = blend.levelMatchDb ? Math.pow(10, -blend.levelMatchDb * (Math.max(0, i - (length - rampFrames)) / rampFrames) / 20) : 1;
   const value = at(startFrame + i) * ramp;
   if (source === 'before-start' && i >= length - crossfadeFrames) {
     const k = i - (length - crossfadeFrames), [out, into] = fadeGains((k + 1) / crossfadeFrames, blend.shape);
@@ -450,8 +480,8 @@ export async function renderTrim(audio: DecodedAudio, asset: Asset, input: TrimI
   if (!loop && fadeInFrames + fadeOutFrames > frames) throw new Error('Combined fades cannot exceed the selection duration.');
   if (crossfadeFrames >= frames) throw new Error('The loop crossfade must be shorter than the selection.');
   const crossfadeSource = loop ? loopCrossfadeSource(startFrame, endFrame, total, crossfadeFrames) : null;
-  if (!loop && (input.crossfadeShape !== undefined || input.levelMatchDb !== undefined)) throw new Error('crossfadeShape and levelMatchDb shape a loop render; they need loop:true.');
-  const blend = loopBlend(crossfadeFrames, crossfadeSource, input);
+  if (!loop && (input.crossfadeShape !== undefined || input.levelMatchDb !== undefined || input.levelMatchSeconds !== undefined)) throw new Error('crossfadeShape and level matching shape a loop render; they need loop:true.');
+  const blend = loopBlend(crossfadeFrames, crossfadeSource, input, audio.sampleRate);
   // A loop render plays [introStart, start) once, then repeats [start, end).
   const intro = startFrame - introStartFrame, outputFrames = intro + frames;
   const smpl = loop ? smplChunk(audio.sampleRate, intro, outputFrames) : Buffer.alloc(0), data = 56 + smpl.length;
@@ -478,5 +508,5 @@ export async function renderTrim(audio: DecodedAudio, asset: Asset, input: TrimI
   return { bytes, edit: { kind: 'trim', version: 2, sourceHash: asset.hash, sampleRate: audio.sampleRate,
     startFrame, endFrame, fadeInFrames: loop ? 0 : fadeInFrames, fadeOutFrames: loop ? 0 : fadeOutFrames,
     requested: { ...input }, decoder: audio.decoder, outputEncoding: 'float32-wav',
-    ...(loop ? { loop: { crossfadeFrames, crossfadeSource, crossfadeShape: blend.shape, levelMatchDb: blend.levelMatchDb, outputFrames, introStartFrame, loopStartFrame: intro, loopEndFrame: outputFrames } } : {}) } };
+    ...(loop ? { loop: { crossfadeFrames, crossfadeSource, crossfadeShape: blend.shape, levelMatchDb: blend.levelMatchDb, ...(blend.levelMatchFrames ? { levelMatchFrames: Math.min(blend.levelMatchFrames, frames) } : {}), outputFrames, introStartFrame, loopStartFrame: intro, loopEndFrame: outputFrames } } : {}) } };
 }

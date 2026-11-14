@@ -28,6 +28,20 @@ const HINT_PRIOR_OCTAVES = 0.15;
 // Krumhansl-Kessler key profiles (C major / C minor), tonic first.
 const MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
 const MINOR_PROFILE = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
+/** Church modes by the major-scale degree they start on (ionian is major, aeolian natural minor). */
+const MODES = ['ionian', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'locrian'] as const;
+export type ScaleMode = 'major' | 'minor' | typeof MODES[number];
+/** The seven pitch classes of a key or mode, tonic first. */
+function scaleNotes(tonic: number, mode: ScaleMode): number[] {
+  const degree = MODES.indexOf(mode === 'major' ? 'ionian' : mode === 'minor' ? 'aeolian' : mode);
+  return Array.from({ length: 7 }, (_, n) => (tonic + MAJOR_STEPS[(degree + n) % 7] - MAJOR_STEPS[degree] + 12) % 12);
+}
+/** Every mode that uses exactly the notes of this key, e.g. B major = C# dorian = E lydian. */
+function sameNoteModes(tonic: number, mode: 'major' | 'minor') {
+  const parent = mode === 'major' ? tonic : (tonic + 3) % 12;
+  return MODES.map((name, degree) => `${PITCH_NAMES[(parent + MAJOR_STEPS[degree]) % 12]} ${name}`);
+}
 
 export interface MusicFeatures {
   version: number;
@@ -45,7 +59,7 @@ export interface MusicFeatures {
   /** Tracked beat times in seconds, and the estimated bar phase within them. */
   beats: Float64Array;
   beatsPerBar: number; downbeatPhase: number; downbeatConfidence: number;
-  key: { tonic: number; mode: 'major' | 'minor'; correlation: number; confidence: number; ranked: { tonic: number; mode: 'major' | 'minor'; correlation: number }[]; all: { tonic: number; mode: 'major' | 'minor'; correlation: number }[] } | null;
+  key: { tonic: number; mode: 'major' | 'minor'; correlation: number; confidence: number; profile: number[]; ranked: { tonic: number; mode: 'major' | 'minor'; correlation: number }[]; all: { tonic: number; mode: 'major' | 'minor'; correlation: number }[] } | null;
 }
 
 export const keyLabel = (tonic: number, mode: 'major' | 'minor') => `${PITCH_NAMES[tonic]} ${mode}`;
@@ -304,26 +318,43 @@ function estimateKey(chroma: Float32Array, count: number): MusicFeatures['key'] 
     ranked.push({ tonic, mode, correlation: pearson(total, rotated) });
   }
   ranked.sort((a, b) => b.correlation - a.correlation);
-  const [best, second] = ranked;
-  return { ...best, confidence: clamp01((best.correlation - 0.4) / 0.4) * clamp01((best.correlation - second.correlation) / 0.1), ranked: ranked.slice(0, 4), all: ranked };
+  const [best, second] = ranked, loudest = Math.max(...total);
+  // Relative note strengths (loudest 1), so a caller can check which of two candidate scales is sounding.
+  const profile = Array.from(total, value => Math.round(value / loudest * 100) / 100);
+  return { ...best, confidence: clamp01((best.correlation - 0.4) / 0.4) * clamp01((best.correlation - second.correlation) / 0.1), profile, ranked: ranked.slice(0, 4), all: ranked };
 }
 
-/** How the caller's expected key ranks against the measured chroma; it never replaces the estimate. */
-function keyHintFit(all: { tonic: number; mode: 'major' | 'minor'; correlation: number }[], hinted: { tonic: number; mode: 'major' | 'minor' }) {
-  const rank = all.findIndex(k => k.tonic === hinted.tonic && k.mode === hinted.mode);
-  return { label: keyLabel(hinted.tonic, hinted.mode), correlation: all[rank].correlation, rank: rank + 1, ofKeys: all.length, matchesEstimate: rank === 0 };
+/**
+ * How the caller's expected key or mode fits the measured note strengths: the share of
+ * chroma on its seven notes beside the estimate's share, its weak scale notes and strong
+ * notes outside it, and (major/minor only) its rank among the 24 profile keys. It never
+ * replaces the estimate.
+ */
+function keyHintFit(key: NonNullable<MusicFeatures['key']>, hinted: { tonic: number; mode: ScaleMode }) {
+  const sum = key.profile.reduce((a, b) => a + b, 0), share = (notes: number[]) => Math.round(notes.reduce((a, p) => a + key.profile[p], 0) / sum * 1000) / 1000;
+  const notes = scaleNotes(hinted.tonic, hinted.mode), estimate = scaleNotes(key.tonic, key.mode);
+  const rank = hinted.mode === 'major' || hinted.mode === 'minor' ? key.all.findIndex(k => k.tonic === hinted.tonic && k.mode === hinted.mode) : -1;
+  return {
+    label: `${PITCH_NAMES[hinted.tonic]} ${hinted.mode}`, scale: notes.map(p => PITCH_NAMES[p]),
+    correlation: rank >= 0 ? key.all[rank].correlation : null, rank: rank >= 0 ? rank + 1 : null, ofKeys: key.all.length,
+    matchesEstimate: rank === 0, sameNotesAsEstimate: notes.every(p => estimate.includes(p)),
+    inScaleShare: share(notes), estimateInScaleShare: share(estimate),
+    weakScaleNotes: notes.filter(p => key.profile[p] < 0.25).map(p => PITCH_NAMES[p]),
+    strongOutsideNotes: key.profile.flatMap((strength, p) => !notes.includes(p) && strength >= 0.5 ? [PITCH_NAMES[p]] : [])
+  };
 }
 
 const clamp01 = (value: number) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
 
 /** Agent/UI view of the cached features, with beat and bar lists bounded to an interval. */
-/** Parses "A minor", "Am", "F# major" or "Bb" (major when no mode is given). */
-export function parseKey(label: string): { tonic: number; mode: 'major' | 'minor' } | null {
-  const match = /^\s*([A-Ga-g])\s*([#b♯♭]?)\s*(major|minor|maj|min|m)?\s*$/i.exec(label);
+/** Parses "A minor", "Am", "F# major", "E dorian" or "Bb" (major when no mode is given). */
+export function parseKey(label: string): { tonic: number; mode: ScaleMode } | null {
+  const match = /^\s*([A-Ga-g])\s*([#b♯♭]?)\s*(major|minor|maj|min|m|ionian|dorian|phrygian|lydian|mixolydian|aeolian|locrian)?\s*$/i.exec(label);
   if (!match) return null;
   const base = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }[match[1].toUpperCase() as 'C'];
   const accidental = match[2] === '#' || match[2] === '♯' ? 1 : match[2] === 'b' || match[2] === '♭' ? -1 : 0;
-  const mode = match[3] && /^(minor|min|m)$/i.test(match[3]) && match[3] !== 'M' ? 'minor' : 'major';
+  const word = match[3]?.toLowerCase() ?? '';
+  const mode: ScaleMode = (MODES as readonly string[]).includes(word) ? word as ScaleMode : match[3] && /^(minor|min|m)$/i.test(match[3]) && match[3] !== 'M' ? 'minor' : 'major';
   return { tonic: (base + accidental + 12) % 12, mode };
 }
 
@@ -339,15 +370,15 @@ export function musicalSummary(features: MusicFeatures, startSeconds = 0, endSec
     }
   });
   const key = features.key, hinted = keyHint === undefined ? null : parseKey(keyHint);
-  if (keyHint !== undefined && !hinted) throw new Error('keyHint must name a key such as "A minor", "Am" or "F# major".');
+  if (keyHint !== undefined && !hinted) throw new Error('keyHint must name a key or mode such as "A minor", "Am", "F# major" or "E dorian".');
   const tempoHint = features.tempoHint;
   return {
     version: MUSIC_ANALYSIS_VERSION,
     tempo: features.tempo ? { bpm: features.tempo.bpm, confidence: features.tempo.confidence, steady: features.tempo.steady, beatResidualMs: features.tempo.residualMs, ...(tempoHint ? { hint: tempoHint, hintDeviationPercent: (features.tempo.bpm / tempoHint - 1) * 100 } : {}) } : null,
     meter: { beatsPerBar: features.beatsPerBar, assumed: true, downbeatConfidence: features.downbeatConfidence },
-    key: key ? { label: keyLabel(key.tonic, key.mode), tonic: PITCH_NAMES[key.tonic], mode: key.mode, correlation: key.correlation, confidence: key.confidence, alternatives: key.ranked.slice(1).map(k => ({ label: keyLabel(k.tonic, k.mode), correlation: k.correlation })), ...(hinted ? { hint: keyHintFit(key.all, hinted) } : {}) } : null,
+    key: key ? { label: keyLabel(key.tonic, key.mode), tonic: PITCH_NAMES[key.tonic], mode: key.mode, correlation: key.correlation, confidence: key.confidence, alternatives: key.ranked.slice(1).map(k => ({ label: keyLabel(k.tonic, k.mode), correlation: k.correlation })), scale: scaleNotes(key.tonic, key.mode).map(p => PITCH_NAMES[p]), sameNotes: sameNoteModes(key.tonic, key.mode), pitchClasses: key.profile.map((strength, p) => ({ note: PITCH_NAMES[p], strength })), ...(hinted ? { hint: keyHintFit(key, hinted) } : {}) } : null,
     loudness: { integratedLufs: features.loudness.integratedLufs, samplePeakDbfs: features.loudness.samplePeak > 0 ? 20 * Math.log10(features.loudness.samplePeak) : null },
     beats, bars, truncated,
-    note: 'Whole-file estimates from a mono analysis signal: tempo from onset autocorrelation and dynamic-programming beat tracking (it may read at half or double the felt tempo); bars assume 4 beats with a statistically estimated downbeat; key from Krumhansl-Kessler profile correlation with summed chroma (no tuning correction; relative major/minor is often ambiguous); loudness is ITU-R BS.1770 gated integrated loudness and sample (not true) peak. Beat and bar lists cover only the requested interval. Confidence values are heuristics, not probabilities, and none of this is listening evidence.'
+    note: 'Whole-file estimates from a mono analysis signal: tempo from onset autocorrelation and dynamic-programming beat tracking (it may read at half or double the felt tempo); bars assume 4 beats with a statistically estimated downbeat; key from Krumhansl-Kessler profile correlation with summed chroma (no tuning correction; relative major/minor is often ambiguous; only major and minor are scored, so a modal piece reads as a key sharing its notes, listed in sameNotes; pitchClasses gives the relative strength of each note, and a keyHint key or mode is checked against them note by note); loudness is ITU-R BS.1770 gated integrated loudness and sample (not true) peak. Beat and bar lists cover only the requested interval. Confidence values are heuristics, not probabilities, and none of this is listening evidence.'
   };
 }

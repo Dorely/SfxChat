@@ -163,7 +163,7 @@ Generation input has this envelope (replace IDs with real IDs):
 ```
 
 Generation returns admission status and durable job IDs without waiting for provider
-completion. Preserve the request ID. Exact replay returns the original admission
+completion. Generate a new random request ID for each new request and preserve it. Exact replay returns the original admission
 and jobs; altered arguments or scope return `REQUEST_CONFLICT`. Admission can be
 `admitting`, `admitted`, `incomplete`, or `interrupted`, with partial IDs and error
 details retained. `incomplete` is an operation result, not permission to buy another
@@ -176,7 +176,10 @@ is pinned at admission; changing the active provider cannot redirect queued work
 Stable errors include `INVALID_ARGUMENTS`, `INVALID_PATH`, `REQUEST_CONFLICT`,
 `REVISION_CONFLICT`, `DESTINATION_EXISTS`, `EXPORT_INCOMPLETE`, `INSTALL_CONFLICT`,
 `UI_BUSY`, `UI_UNAVAILABLE`, `UI_TIMEOUT`, `PLAYBACK_FAILED`, `CLOSING`, and transport
-errors. Existing lower-level failures use `OPERATION_FAILED`; inspect the message.
+errors, plus `AMBIGUOUS_ASSET` when an asset ID prefix or name matches several assets.
+Existing lower-level failures use `OPERATION_FAILED`; inspect the message.
+Validation messages name the field and, for `requestId`, `sessionId` and `projectId`,
+how to obtain a valid value; unknown fields list the fields the operation accepts.
 Neither readiness nor successful compilation proves that a provider account works.
 
 ## MIDI composition
@@ -258,8 +261,9 @@ See [Chimera migration](chimera-integration.md), [encoder/runtime provenance](re
 [architecture](architecture.md), and [verification evidence](verification.md).
 
 Reviews and the regular Playground are project-scoped and shared across conversations.
-Do not supply sessionId to review operations, export_review, or set_playground.
-Conversation attribution remains required for generation and jobs.
+Review operations, export_review and set_playground need no sessionId; project-scoped
+operations ignore one that belongs to the same project. Conversation attribution remains
+required for generation, jobs, imports, trims and asset updates.
 `session_delete` permanently removes a conversation's messages and job/tool history while
 retaining project audio, reviews and Playground. `project_delete` removes its workspace
 records, including reviews/history and library records. Original media files remain on

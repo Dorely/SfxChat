@@ -9,6 +9,7 @@ import type { Exporter } from './exporter';
 import { arrangementOperationDefinitions } from '../shared/arrangement-operations';
 import { Arrangements } from './arrangements';
 import type { SoundfontInfo } from './soundfont';
+import type { Asset } from '../shared/types';
 
 const project = { projectId: idSchema };
 const session = { ...project, sessionId: idSchema };
@@ -16,6 +17,16 @@ const board = { ...project, reviewId: idSchema };
 const wait = { timeoutMs: z.number().int().min(0).max(30000).default(10000) };
 const generation = { ...session, requestId: z.string().uuid().describe('Keep this ID to recover the same request without purchasing another batch.') };
 const obj = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
+const assetId = idSchema.describe('Asset ID. A unique ID prefix of at least 8 characters or an exact asset name also resolves.');
+const importEntry = z.union([z.string().min(1), z.object({ path: z.string().min(1), name: z.string().trim().min(1).max(200).optional(), tags: z.array(z.string().trim().min(1)).max(64).optional(), description: z.string().max(10000).optional() }).strict()]);
+/** Operations whose `id` names an asset; their asset arguments accept ID prefixes and exact names. */
+const ASSET_ID_OPERATIONS = new Set(['inspect_asset', 'update_asset', 'analyze_audio', 'find_loop_points', 'trim_asset', 'spectrogram_view', 'audio_listen', 'export_asset']);
+/** Appended to validation errors on these top-level fields, which callers most often get wrong. */
+const FIELD_HINTS: Record<string, string> = {
+  requestId: 'generate a new random UUID (for example crypto.randomUUID()) for each new request; reuse an earlier requestId only to recover that same request',
+  sessionId: 'this operation records session attribution; pass a session ID from sessions_list, or create one with session_create',
+  projectId: 'pass a project ID from projects_list'
+};
 const exportFields = { destination: z.string().min(1), format: z.enum(['original', 'wav', 'ogg']).default('original'), oggQuality: z.number().finite().min(0).max(10).default(5).describe('Ogg Vorbis VBR quality on the usual 0-10 scale (oggenc -q); default 5, higher is larger and more transparent. Ignored for other formats.') };
 export const operationDefinitions = {
   ...arrangementOperationDefinitions,
@@ -42,15 +53,15 @@ export const operationDefinitions = {
   jobs_wait: { schema: obj({ ...session, jobIds: z.array(idSchema).min(1), ...wait }), description: 'Bounded wait for specified jobs; timeout does not cancel generation.' },
   cancel_job: { schema: obj({ ...session, id: idSchema }), description: 'Cancel queued work or stop a running request with uncertain provider outcome.' },
   search_assets: { schema: obj({ ...project, query: z.string().default('') }), description: 'Search assets, prompts, traits and feedback in a project.' },
-  inspect_asset: { schema: obj({ ...project, id: idSchema }), description: 'Read immutable provenance and current asset metadata, plus filePath: the stored original file. Read it, never modify, move or delete it; use export_asset for copies.' },
-  update_asset: { schema: obj({ ...session, id: idSchema, patch: patchSchema }), description: 'Name, tag, organize, and review an asset, or set its loopPoint (where it repeats when looped, e.g. the in-game loop offset of an imported track), without changing its bytes.' },
-  import_audio: { schema: obj({ ...session, paths: z.array(z.string().min(1)).min(1).max(128), kind: assetKindSchema.default('effect') }), description: 'Import WAV, MP3, Ogg Vorbis, or MIDI files using absolute paths into this project/session. A WAV smpl loop or Ogg LOOPSTART/LOOPLENGTH tags become the asset loopPoint.' },
-  set_playground: { schema: obj({ ...project, assetIds: z.array(idSchema) }), description: 'Arrange the project’s shared comparison board.' },
-  analyze_audio: { schema: obj({ ...project, id: idSchema, input: analysisSchema.default({}) }), description: 'Measure exact sample-frame amplitude, events and seam data; musical:true adds tempo, beat/bar grid, key and LUFS estimates. Not semantic listening.' },
-  find_loop_points: { schema: obj({ ...project, id: idSchema, input: loopSearchSchema.default({}) }), description: 'Rank loop-point candidates for music (whole bars on the beat grid, optional intro) or ambience/texture, refined to exact frames with seam metrics and a recommended crossfade. Heuristic ranking; audition with audio_listen loopSeam, save with trim_asset loop:true.' },
-  trim_asset: { schema: obj({ ...session, id: idSchema, input: trimSchema }), description: 'Save a trim or loop derivative with exact lineage; original unchanged.' },
-  spectrogram_view: { schema: obj({ ...project, id: idSchema, input: spectrogramSchema.default({}) }), description: 'Return a PNG spectrogram and exact mapping. Cut points must come from sample measurements.' },
-  audio_listen: { schema: obj({ ...project, id: idSchema, input: clipSchema.default({}) }), description: 'Return a bounded WAV clip, or with input.loopSeam the wrap of a loop exactly as a loop render plays it. Hearing requires a capable calling model/harness; playback is not hearing.' },
+  inspect_asset: { schema: obj({ ...project, id: assetId }), description: 'Read immutable provenance and current asset metadata, plus filePath: the stored original file. Read it, never modify, move or delete it; use export_asset for copies.' },
+  update_asset: { schema: obj({ ...session, id: assetId, patch: patchSchema }), description: 'Name, tag, organize, and review an asset, or set its loopPoint (where it repeats when looped, e.g. the in-game loop offset of an imported track), without changing its bytes.' },
+  import_audio: { schema: obj({ ...session, paths: z.array(importEntry).min(1).max(128), kind: assetKindSchema.default('effect') }), description: 'Import WAV, MP3, Ogg Vorbis, or MIDI files into this project/session. Each entry is an absolute path, or { path, name, tags, description } to name and tag the asset on import; without a name the file\'s own title tag is used, then the filename. A WAV smpl loop or Ogg LOOPSTART/LOOPLENGTH tags become the asset loopPoint.' },
+  set_playground: { schema: obj({ ...project, assetIds: z.array(assetId) }), description: 'Arrange the project’s shared comparison board.' },
+  analyze_audio: { schema: obj({ ...project, id: assetId, input: analysisSchema.default({}) }), description: 'Measure exact sample-frame amplitude, events and seam data; musical:true adds tempo, beat/bar grid, key and LUFS estimates. Not semantic listening.' },
+  find_loop_points: { schema: obj({ ...project, id: assetId, input: loopSearchSchema.default({}) }), description: 'Rank loop-point candidates for music (whole bars on the beat grid, optional intro) or ambience/texture, refined to exact frames with seam metrics and a recommended crossfade. Heuristic ranking; audition with audio_listen loopSeam, save with trim_asset loop:true.' },
+  trim_asset: { schema: obj({ ...session, id: assetId, input: trimSchema }), description: 'Save a trim or loop derivative with exact lineage; original unchanged.' },
+  spectrogram_view: { schema: obj({ ...project, id: assetId, input: spectrogramSchema.default({}) }), description: 'Return a PNG spectrogram and exact mapping. Cut points must come from sample measurements.' },
+  audio_listen: { schema: obj({ ...project, id: assetId, input: clipSchema.default({}) }), description: 'Return a bounded WAV clip, or with input.loopSeam the wrap of a loop exactly as a loop render plays it. Hearing requires a capable calling model/harness; playback is not hearing.' },
   review_list: { schema: obj({ ...project, status: z.enum(['active', 'completed', 'all']).default('active') }), description: 'List review boards. Defaults to active; completed finds archived reviews, all includes both.' },
   review_create: { schema: obj({ ...project, content: boardInputSchema, open: z.boolean().default(true) }), description: 'Create a cue sheet and open it in the UI without autoplay. Use open:false while preparing a draft, then review_open when ready. Returns the saved review plus ui.status (opened, skipped, or failed). If opening fails, retry review_open with the returned ID, never recreate the saved sheet.' },
   review_get: { schema: obj(board), description: 'Read a review revision, selections, rejected cues and notes.' },
@@ -61,7 +72,7 @@ export const operationDefinitions = {
   review_wait: { schema: obj({ ...board, afterRevision: z.number().int().min(0).optional(), until: z.enum(['change', 'completed']).default('change'), from: z.enum(['user', 'any']).default('user'), wait: z.number().int().min(0).max(1800).default(50) }), description: 'Block until the user acts on a review: a saved draft, a cue decision or note, Done (completion), or reopening (from any includes agents). until completed waits for the review to be completed. Returns the saved revisions after afterRevision (default: now) as events with origin, kind and changed cue keys, the review as it is now, a cursor to pass as afterRevision next time, and timedOut. wait is seconds (default 50, under common client tool timeouts; raise it only when your client allows longer calls). Completion does not imply all cues were accepted. For one streaming connection run sfxchat watch-review.' },
   review_open: { schema: obj(board), description: 'Show and focus this review in SfxChat without autoplay.' },
   playback_status: { schema: obj(session), description: 'Read actual renderer playback status. Does not imply listening approval.' },
-  export_asset: { schema: obj({ ...project, id: idSchema, ...exportFields, overwrite: z.boolean().default(false).describe('Replace an existing file and its .json manifest (never a directory). Default false refuses existing files.') }), description: 'Export an original, PCM WAV or Ogg Vorbis plus a .json provenance manifest, creating missing parent folders. Loop renders record their loop points and Godot import guidance. Refuses existing files unless overwrite is true.' },
+  export_asset: { schema: obj({ ...project, id: assetId, ...exportFields, overwrite: z.boolean().default(false).describe('Replace an existing file and its .json manifest (never a directory). Default false refuses existing files.') }), description: 'Export an original, PCM WAV or Ogg Vorbis plus a .json provenance manifest, creating missing parent folders. Loop renders record their loop points and Godot import guidance. Refuses existing files unless overwrite is true. id may be a full ID, a unique 8+ character prefix, or an exact name.' },
   export_review: { schema: obj({ ...board, expectedRevision: z.number().int().positive(), ...exportFields }), description: 'Export selected cues and a manifest of choices, unresolved cues, feedback and provenance into a new directory (missing parent folders are created).' }
 };
 export type OperationName = keyof typeof operationDefinitions;
@@ -82,10 +93,56 @@ export class Operations {
     const promise = this.execute(name as OperationName, raw, origin);
     this.pending.add(promise); void promise.finally(() => this.pending.delete(promise)).catch(() => {}); return promise;
   }
+  /** Project-scoped operations accept and ignore a sessionId from the same project, so callers need not track which tools take one. */
+  private projectSession(schema: z.ZodType, raw: unknown): unknown {
+    const shape = (schema as { shape?: Record<string, unknown> }).shape;
+    if (!shape || 'sessionId' in shape || !raw || typeof raw !== 'object' || Array.isArray(raw) || !('sessionId' in raw)) return raw;
+    const { sessionId, ...rest } = raw as Record<string, unknown>;
+    if (sessionId === undefined || sessionId === null) return rest;
+    if (!idSchema.safeParse(sessionId).success) throw new WorkbenchError('INVALID_ARGUMENTS', 'sessionId: this operation is project-scoped and needs no session; omit it or pass a session ID from this project.');
+    if (idSchema.safeParse(rest.projectId).success && this.service.store.conversation(sessionId as string).projectId !== rest.projectId) throw new WorkbenchError('NOT_FOUND', 'Session not found in project.');
+    return rest;
+  }
+  /** Resolves asset arguments given as a unique ID prefix (8+ characters) or an exact asset name to full IDs before validation. */
+  private resolveAssetRefs(name: OperationName, raw: unknown): unknown {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+    const input = raw as Record<string, any>;
+    if (!idSchema.safeParse(input.projectId).success) return raw;
+    let assets: Asset[] | null = null;
+    const resolve = (ref: unknown) => {
+      if (typeof ref !== 'string' || !ref.trim() || idSchema.safeParse(ref).success) return ref;
+      if (!assets) { this.service.store.project(input.projectId); assets = this.service.store.assets(input.projectId); }
+      const text = ref.trim(), lower = text.toLowerCase();
+      let matches = /^[0-9a-f-]{8,35}$/i.test(text) ? assets.filter(a => a.id.toLowerCase().startsWith(lower)) : [];
+      if (!matches.length) matches = assets.filter(a => a.name.trim().toLowerCase() === lower);
+      if (matches.length === 1) return matches[0].id;
+      if (!matches.length) throw new WorkbenchError('NOT_FOUND', `No asset in this project matches “${text}”. Use a full asset ID, a unique ID prefix of at least 8 characters, or an exact asset name (search_assets lists them).`);
+      throw new WorkbenchError('AMBIGUOUS_ASSET', `“${text}” matches ${matches.length} assets; use a full ID: ${matches.slice(0, 6).map(a => `${a.id} (${a.name})`).join(', ')}.`);
+    };
+    if (ASSET_ID_OPERATIONS.has(name)) return { ...input, id: resolve(input.id) };
+    if (name === 'set_playground' && Array.isArray(input.assetIds)) return { ...input, assetIds: input.assetIds.map(resolve) };
+    if ((name === 'review_create' || name === 'review_update' || name === 'review_complete') && input.content && typeof input.content === 'object' && Array.isArray(input.content.cues)) {
+      const cue = (c: any) => !c || typeof c !== 'object' ? c : {
+        ...c,
+        ...(Array.isArray(c.candidates) ? { candidates: c.candidates.map((k: any) => k && typeof k === 'object' ? { ...k, assetId: resolve(k.assetId) } : k) } : {}),
+        ...(c.referenceId != null ? { referenceId: resolve(c.referenceId) } : {}),
+        ...(c.selectedAssetId != null ? { selectedAssetId: resolve(c.selectedAssetId) } : {})
+      };
+      return { ...input, content: { ...input.content, cues: input.content.cues.map(cue) } };
+    }
+    return raw;
+  }
   private async execute(name: OperationName, raw: unknown, origin: 'user' | 'agent'): Promise<unknown> {
     const definition = operationDefinitions[name];
-    const parsed = definition.schema.safeParse(raw);
-    if (!parsed.success) throw new WorkbenchError('INVALID_ARGUMENTS', parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; '));
+    const parsed = definition.schema.safeParse(this.resolveAssetRefs(name, this.projectSession(definition.schema, raw)));
+    if (!parsed.success) {
+      const shape = (definition.schema as { shape?: Record<string, unknown> }).shape;
+      throw new WorkbenchError('INVALID_ARGUMENTS', parsed.error.issues.map(i => {
+        const path = i.path.join('.'), hint = i.path.length === 1 ? FIELD_HINTS[String(i.path[0])] : undefined;
+        const accepted = i.code === 'unrecognized_keys' && !i.path.length && shape ? `; ${name} accepts ${Object.keys(shape).join(', ')}` : '';
+        return `${path ? `${path}: ` : ''}${i.message}${hint ? ` (${hint})` : ''}${accepted}`;
+      }).join('; '));
+    }
     const a = parsed.data as Record<string, any>;
     const s = this.service, store = s.store;
     if (a.projectId) store.project(a.projectId);
@@ -130,7 +187,7 @@ export class Operations {
       case 'search_assets': return store.search(a.query, a.projectId);
       case 'inspect_asset': { const asset = store.asset(a.id, a.projectId); return { ...asset, filePath: s.media.path(asset) }; }
       case 'update_asset': s.updateAsset(a.id, a.patch, a.sessionId); return store.asset(a.id, a.projectId);
-      case 'import_audio': { if (a.paths.some((path: string) => !isAbsolute(path))) throw new WorkbenchError('INVALID_PATH', 'Import paths must be absolute.'); return s.importFiles(a.sessionId, a.paths, a.kind); }
+      case 'import_audio': { if (a.paths.some((entry: string | { path: string }) => !isAbsolute(typeof entry === 'string' ? entry : entry.path))) throw new WorkbenchError('INVALID_PATH', 'Import paths must be absolute.'); return s.importFiles(a.sessionId, a.paths, a.kind); }
       case 'set_playground': store.setProjectPlayground(a.projectId, a.assetIds); return { assetIds: store.playground(a.projectId)[a.projectId] };
       case 'analyze_audio': return s.analyzeAudio(a.id, a.input, a.projectId);
       case 'find_loop_points': return s.findLoopPoints(a.id, a.input, a.projectId);

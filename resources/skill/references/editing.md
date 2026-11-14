@@ -16,7 +16,10 @@ candidates; their ears decide, not your observations.
 Use analyze_audio before trimming: its decoded duration and sample-frame timeline are
 authoritative, and may differ from compressed file metadata. Read a coarse overview,
 then zoom near cut boundaries by requesting smaller ABSOLUTE second intervals with
-more bins. Peak/RMS locate activity and quiet tails; they do not identify sound
+more bins. Every result also carries an envelope summary for the interval: the peak,
+when the level first comes within 60/40/20 dB of it (onset) and when it finally stays
+more than 20/40/60 dB below it (decay, null if still above at the end) - use it for
+attack and tail cut points, and pass bins:1 when that is all you need. Peak/RMS locate activity and quiet tails; they do not identify sound
 events or prove perceptual silence. events:true returns energy-based candidate
 intervals with exact frames - good clip spots to inspect, not names of sounds; zoom
 across each boundary and, when available, listen to the interval to confirm what it
@@ -29,8 +32,13 @@ integrated loudness estimates, each with a confidence. Treat them as estimates:
 tempo can read at half, double or two-thirds of the felt tempo, and a low-confidence
 downbeat means bar numbers may be offset. Pass tempoHint with the tempo you expect
 (for example the one you asked the provider for) to resolve that ambiguity; the audio
-still sets the exact value, and providers often miss requested tempos. keyHint only
-reports how well an expected key fits. Do not present them as heard facts.
+still sets the exact value, and providers often miss requested tempos. Key scoring knows
+only major and minor: a modal piece reads as a key with the same notes (key.sameNotes
+lists those modes, e.g. B major = C# dorian = E lydian), and key.pitchClasses gives each
+note's relative strength. keyHint accepts modes ("E dorian") and reports how its notes
+fit: inScaleShare beside the estimate's, weak scale notes, and strong notes outside it.
+Compare the notes where two candidate scales differ before saying which is right. Do not
+present any of this as heard fact.
 
 To loop a track, start with find_loop_points. It ranks candidates (whole bars on
 the beat grid for music, texture and level continuity for ambience) with exact
@@ -39,9 +47,12 @@ a recommended crossfade. Music mode also compares the track with itself without 
 grid and re-measures every length as the source's actual repeat spacing, so a misread
 tempo does not set the loop period; returned times already include those adjustments.
 Optional limits: mode, a search region, a length range in seconds or bars,
-barMultiple (4 or 8 for phrase-length loops), lengthSeconds for an exact length you
-already know, allowIntro:false to require starting at the region start, tempoHint,
-and count. Short whole-bar loops often rank first; for a game track that should
+barMultiple (4 or 8 for phrase-length loops), lengthSeconds for a length you already
+measured (each candidate fine-tunes it within about a quarter beat to where the audio
+really repeats, lengthSource requested-tuned; exactLength:true keeps it to the sample),
+prefer:"late" to rank loops that end as late as possible first (for a game track whose
+loop should start near the end, with most of the song as intro), allowIntro:false to
+require starting at the region start, tempoHint, and count. Short whole-bar loops often rank first; for a game track that should
 repeat its main section, set minSeconds near that section's length (for example the
 spacing where the music repeats) rather than settling for a 4-bar loop. Candidate
 fields say where each length came from (lengthSource, gridLengthSeconds,
@@ -54,8 +65,11 @@ the music repeats one loop length later; seamMatch separately says how cleanly t
 waveform joins, which the crossfade can smooth. Present the top few candidates in plain
 words (length, intro, repeat and seam labels), save the one the user picks with trim_asset
 loop:true and its recommended crossfadeMs and crossfadeShape (linear for music,
-equal-power for texture; add levelMatchDb set to seam.levelDeltaDb when the end is
-audibly louder, about 1 dB or more, to ramp the loop level so the wrap does not jump) (add introStartSeconds:0 when the song
+equal-power for texture; when recommendedLevelMatchDb is set - the ends differ by 1 dB or
+more - pass it as levelMatchDb with recommendedLevelMatchSeconds as levelMatchSeconds.
+seam.levelTrend says why: step (a local jump at the seam) and gradual ramp across the
+whole loop, while wind-down ramps only the loop's last seconds, where the song gets
+quieter) (add introStartSeconds:0 when the song
 before the loop should play once, as in game music), and ask the user to audition it. Scores
 rank what to audition; they are not musical judgment.
 

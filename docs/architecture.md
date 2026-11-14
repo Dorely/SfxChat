@@ -88,8 +88,12 @@ it or regenerate. Imports validate WAV/MP3/Ogg Vorbis/MIDI before copying. Ogg V
 originals decode through the bundled helper (`decode`, libvorbisfile, to 32-bit float
 WAV within the editing bounds), so they edit, analyze and convert like other audio.
 Import reads a file's own loop (the first WAV `smpl` loop, or Ogg `LOOPSTART` with
-`LOOPLENGTH`/`LOOPEND` sample tags) into the asset's `loopPoint`. Export verifies hashes
-and refuses existing destinations. Playback gain never changes files.
+`LOOPLENGTH`/`LOOPEND` sample tags) into the asset's `loopPoint`. An import entry may
+carry a name, tags and description; otherwise the asset takes the file's title tag, then
+its filename. When a generation's returned length misses its requested length (effect
+`duration`, music `durationMs`) by more than 0.5 s, the asset records `lengthCheck` and
+the completed job a `note`. Export verifies hashes and refuses existing destinations
+unless `overwrite` is set. Playback gain never changes files.
 
 The `sfx-media://asset/<uuid>` protocol resolves only known assets and supports byte
 ranges. The UI never supplies arbitrary local paths for media access.
@@ -132,7 +136,10 @@ Analysis returns versioned absolute second/frame intervals, sample rate, channel
 decoded duration, source hash, and 1–512 min/max/peak/RMS bins (96 default). Smaller
 requested windows measure the samples again at finer resolution. Amplitudes are
 linear full-scale values without normalization; extrema span all channels and RMS
-counts each channel independently, avoiding cancellation from downmixing. No event
+counts each channel independently, avoiding cancellation from downmixing. An `envelope`
+summary from 5 ms RMS windows gives the loudest window and, relative to it, the first
+times within 60/40/20 dB (onset) and the times after which the level stays more than
+20/40/60 dB below (decay; null while still above at the interval end). No event
 labels, perceptual-silence claims, or hearing are inferred. The assistant is instructed
 to inspect an overview, zoom near boundaries, and ask for timing hints if semantic
 identity is needed. See the [research note](research/agentic-audio-editing.md).
@@ -174,10 +181,12 @@ find_loop_points recommends linear for music and equal-power for texture. Option
 `levelMatchDb` (±12 dB, usually a candidate's `seam.levelDeltaDb`) ramps the loop body
 from 0 dB at its start to minus that at its end, so a loop whose end is louder does
 not jump in level at the wrap; blend material after the end takes the end gain.
+`levelMatchSeconds` confines the ramp to the loop's last seconds (0 dB before), for an
+end that winds down rather than one that is uniformly off.
 `loopCrossfadeSource`/`loopBlend`/`loopSample` in `audio.ts` define this once for the
 render and the seam preview (`renderSeam`). Fades are rejected with a loop. `TrimEdit`
 version 2 records `crossfadeFrames`, `crossfadeSource`, `crossfadeShape`,
-`levelMatchDb`, `outputFrames` and the loop region; version 1 loop records describe the superseded
+`levelMatchDb`, `levelMatchFrames` (when the ramp is confined), `outputFrames` and the loop region; version 1 loop records describe the superseded
 render that dropped the crossfade length (shortening the period by it). The interval
 fields keep naming the source selection, and records without `loop` stay readable.
 
@@ -215,10 +224,14 @@ prior around 120 BPM), a beat grid (Ellis 2007 dynamic programming), a bar phase
 key (Krumhansl–Kessler profile correlation on mean chroma) and integrated loudness
 (BS.1770 K-weighting with absolute/relative gating) plus sample peak. Each estimate
 carries a confidence. Tempo may read at half, double or two-thirds of the felt tempo;
+Key scoring covers the 24 major/minor keys; the summary adds the estimate's scale, the
+seven modes sharing its notes (`sameNotes`) and each pitch class's relative strength.
 `tempoHint` (analysis and loop search) recenters the prior narrowly (0.15 octave) on
 an expected BPM, so it picks among the envelope's own periodicity peaks without
-setting the exact value, and features are cached per hash and hint. `keyHint` only
-reports the expected key's correlation and rank among the 24 keys. `analyze_audio`
+setting the exact value, and features are cached per hash and hint. `keyHint`
+(a key or church mode) reports how its scale fits the pitch-class strengths: its share
+of chroma beside the estimate's, weak scale notes, strong notes outside it, and for
+major/minor its correlation and rank among the 24 keys. `analyze_audio`
 with `musical:true` adds this summary, with beat and bar lists bounded to the
 requested interval. None of it is listening evidence.
 
@@ -234,20 +247,28 @@ steps, then single-unit refinement) and keeps the best grid-free seeds alongside
 grid seeds. Each music length is then re-measured as the source's repeat spacing:
 the lag within ±0.6 beat whose onset envelope, over ±2 bars around the start, best
 correlates with the envelope one loop length later (quarter-frame steps; kept only
-when it beats the seed length by 0.03 and reaches 0.2). `lengthSeconds` instead fixes
-the length exactly: every seed uses it and alignment only slides both points
-together. Texture mode uses 100 ms units smoothed over ±3 units, with no grid. Both
+when it beats the seed length by 0.03 and reaches 0.2). `lengthSeconds` instead sets a
+target: every seed uses it, and the same spacing search within ±0.25 beat plus the
+end alignment fine-tune it (`requested-tuned`); `exactLength` keeps it to the sample,
+so alignment only slides both points together. `prefer: "late"` steers which coarse
+pairs survive toward later ends (up to +0.3 score by position in the region) and then
+ranks candidates whose repeat is not weak and seam not rough first, by rank value plus
+0.5 times the end's position. Texture mode uses 100 ms units smoothed over ±3 units, with no grid. Both
 penalize seams inside fades, suppress near-duplicate candidates, and then refine each
 survivor to the sample. The end is aligned to the start by waveform correlation
-(±30 ms music, ±60 ms texture; skipped for a requested length), then both points
+(±30 ms music, ±60 ms texture; skipped for an exact requested length), then both points
 slide together by up to 1 ms to minimize the wrap step. Each candidate reports exact
 final frames, `lengthSource` (`beat-grid`, `repeat-spacing`, `requested`,
-`texture-units`), the grid length, `rhythmCorrelation`, the implied tempo for whole
+`requested-tuned`, `texture-units`), the grid length, `rhythmCorrelation`, the implied tempo for whole
 bars, start/end shifts already applied, a similarity score, a `close`/`partial`/
 `weak` repeat label (`match`: context similarity, or rhythm and harmony agreement one
 loop length later; texture similarity for textures), a separate `smooth`/`fair`/`rough`
 `seamMatch` (seam correlation for music, the level step for textures), seam correlation, wrap step vs the source's natural step, a
-like-for-like level delta, and a recommended crossfade (5–60 ms music, 50–500 ms
+like-for-like level delta with its `levelTrend` (walking back from the end in 0.5 s
+blocks while the level stays nearer the end's than the start's: up to 1.5 s is a
+`step`, a span under 30% of the loop a `wind-down`, otherwise `gradual`), a recommended
+level match (the delta, ramped over twice the wind-down span or the whole loop; none
+under 1 dB), and a recommended crossfade (5–60 ms music, 50–500 ms
 texture, at most a quarter of the loop). Texture crossfades also stay within half
 the median gap between sharp attacks (still-rising jumps of 4 dB or more) in the two
 seconds before the start and end, so a long blend never doubles separate hits. Music ranking weighs context similarity,

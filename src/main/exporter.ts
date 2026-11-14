@@ -58,10 +58,10 @@ export class Exporter {
     });
     return { bytes, format, smpl: format === 'wav', conversion: { encoding: format === 'wav' ? 'pcm-s16le' : 'vorbis', quality: format === 'ogg' ? oggQuality : null, encoder: format === 'ogg' ? 'libvorbis-1.3.7/libogg-1.3.6' : 'SfxChat wav16 v1', sampleRate: wav.readUInt32LE(24), channels: wav.readUInt16LE(22), previewGainApplied: false }, decoded: { sampleRate: wav.readUInt32LE(24), frames: pcmFrames(wav) } };
   }
-  private async absent(path: string) {
+  private async absent(path: string, remedy: string) {
     if (!isAbsolute(path)) throw new WorkbenchError('INVALID_PATH', 'Export destination must be absolute.');
     try { await access(path); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return; throw e; }
-    throw new WorkbenchError('DESTINATION_EXISTS', `Destination already exists: ${path}`);
+    throw new WorkbenchError('DESTINATION_EXISTS', `Destination already exists: ${path}. ${remedy}`);
   }
   /** An overwrite may replace an existing file, never a directory. */
   private async replaceable(path: string) {
@@ -75,7 +75,7 @@ export class Exporter {
     return { path, hash: hash(rendered.bytes), bytes: rendered.bytes.length, format: rendered.format, conversion: rendered.conversion, ...loopRecord(asset, rendered.smpl, rendered.decoded), source: asset, ancestors };
   }
   async asset(asset: Asset, destination: string, format: Format, overwrite = false, oggQuality = 5) {
-    const manifestPath = destination + '.json', check = (path: string) => overwrite ? this.replaceable(path) : this.absent(path);
+    const manifestPath = destination + '.json', check = (path: string) => overwrite ? this.replaceable(path) : this.absent(path, 'Pass overwrite:true to replace it and its .json manifest, or choose another path.');
     await check(destination); await check(manifestPath);
     const rendered = await this.render(asset, format, oggQuality), record = this.record(asset, destination, rendered);
     const manifest = JSON.stringify({ version: 1, ...record }, null, 2) + '\n';
@@ -94,7 +94,7 @@ export class Exporter {
     return { ...record, manifestPath };
   }
   async review(board: ReviewBoard, destination: string, format: Format, oggQuality = 5) {
-    await this.absent(destination);
+    await this.absent(destination, 'A cue pack needs a new directory; choose another path.');
     const selected = board.cues.filter(c => c.decision === 'selected').map(cue => ({ cue, asset: this.store.asset(cue.selectedAssetId!, board.projectId) }));
     // Verify all sources and names before creating the output directory; render serially to keep memory bounded.
     for (const { cue, asset } of selected) { if (/^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i.test(cue.key)) throw new WorkbenchError('INVALID_PATH', 'Cue key is a reserved Windows filename.'); const bytes = await readFile(this.media.path(asset)); if (hash(bytes) !== asset.hash) throw new WorkbenchError('INTEGRITY_ERROR', `Integrity check failed: ${asset.id}`); }
